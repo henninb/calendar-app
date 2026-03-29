@@ -1,0 +1,23 @@
+database:
+  host: postgresql.bhenning.com
+  port: 5432
+  name: calendar_db
+  gopass_username_path: postgresql.bhenning.com/username
+  gopass_password_path: postgresql.bhenning.com/password
+
+google:
+  token_file: token.json
+  redirect_uri: http://localhost:8000/api/sync/auth/callback
+  gopass_client_id_path: gmail/brian.henning/client_id
+  gopass_client_secret_path: gmail/brian.henning/client_secret
+
+scheduler:
+  occurrence_lookahead_days: 365
+  interval_hours: 24
+
+server:
+  host: 127.0.0.1
+  port: 8000
+  workers: 1
+
+timezone: America/New_York

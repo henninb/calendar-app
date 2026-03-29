@@ -1,0 +1,154 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f1f5f9;
+  color: #1e293b;
+  min-height: 100vh;
+}
+
+/* ── Layout ── */
+.app { display: flex; flex-direction: column; min-height: 100vh; }
+
+header {
+  background: #1e293b;
+  color: #fff;
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  height: 56px;
+  box-shadow: 0 2px 4px rgba(0,0,0,.3);
+}
+header h1 { font-size: 1.1rem; font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
+
+nav { display: flex; gap: .25rem; }
+nav button {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  padding: .4rem .85rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: .9rem;
+  transition: background .15s, color .15s;
+}
+nav button:hover { background: #334155; color: #fff; }
+nav button.active { background: #3b82f6; color: #fff; }
+
+main { flex: 1; padding: 1.5rem; max-width: 1400px; margin: 0 auto; width: 100%; }
+
+/* ── Cards ── */
+.card {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  padding: 1.25rem;
+}
+
+/* ── Category badge ── */
+.badge {
+  display: inline-block;
+  padding: .2rem .55rem;
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+
+/* ── Status badge ── */
+.status {
+  display: inline-block;
+  padding: .15rem .5rem;
+  border-radius: 4px;
+  font-size: .75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.status.upcoming  { background: #dbeafe; color: #1d4ed8; }
+.status.overdue   { background: #fee2e2; color: #b91c1c; }
+.status.completed { background: #dcfce7; color: #15803d; }
+.status.skipped   { background: #f1f5f9; color: #64748b; }
+
+/* ── Tables ── */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+th {
+  background: #f8fafc;
+  text-align: left;
+  padding: .6rem .75rem;
+  font-weight: 600;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+td { padding: .55rem .75rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #f8fafc; }
+
+/* ── Buttons ── */
+.btn {
+  border: none;
+  border-radius: 5px;
+  padding: .3rem .7rem;
+  font-size: .8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.btn:hover { opacity: .85; }
+.btn-green  { background: #22c55e; color: #fff; }
+.btn-gray   { background: #e2e8f0; color: #475569; }
+.btn-blue   { background: #3b82f6; color: #fff; }
+.btn-red    { background: #ef4444; color: #fff; }
+
+/* ── Toolbar row ── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.toolbar select, .toolbar input {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: .35rem .65rem;
+  font-size: .875rem;
+  background: #fff;
+}
+.toolbar label { font-size: .875rem; color: #475569; }
+
+/* ── FullCalendar overrides ── */
+.fc { font-size: .85rem; }
+.fc .fc-button { background: #3b82f6 !important; border-color: #3b82f6 !important; }
+.fc .fc-button:hover { background: #2563eb !important; }
+.fc .fc-button-active { background: #1d4ed8 !important; border-color: #1d4ed8 !important; }
+.fc .fc-today-button { background: #64748b !important; border-color: #64748b !important; }
+.fc .fc-daygrid-day.fc-day-today { background: #eff6ff; }
+.fc-event { cursor: pointer; font-size: .78rem !important; border: none !important; }
+
+/* ── Credit card table highlights ── */
+.cc-overdue { color: #dc2626; font-weight: 600; }
+.cc-soon    { color: #d97706; font-weight: 600; }
+
+/* ── Detail panel ── */
+.detail-panel {
+  position: fixed; top: 0; right: 0; width: 340px; height: 100vh;
+  background: #fff; box-shadow: -4px 0 16px rgba(0,0,0,.12);
+  padding: 1.5rem; overflow-y: auto; z-index: 1000;
+  display: flex; flex-direction: column; gap: .75rem;
+}
+.detail-panel h2 { font-size: 1rem; font-weight: 700; }
+.detail-panel .close {
+  position: absolute; top: 1rem; right: 1rem;
+  background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #64748b;
+}
+.detail-row { display: flex; flex-direction: column; gap: .2rem; }
+.detail-row span:first-child { font-size: .75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; }
+.detail-row span:last-child { font-size: .9rem; }
+
+/* ── Loading / empty ── */
+.loading { text-align: center; color: #94a3b8; padding: 3rem; }
+.empty   { text-align: center; color: #cbd5e1; padding: 2rem; font-style: italic; }
