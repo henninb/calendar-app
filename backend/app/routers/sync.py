@@ -68,16 +68,19 @@ def _run_gcal_sync(days_ahead: int, force: bool = False):
             q = q.filter(Occurrence.synced_at.is_(None))
         occs = q.all()
         print(f"[gcal sync] {len(occs)} occurrences to sync…")
-        synced, failed = 0, 0
+        synced, skipped, failed = 0, 0, 0
         for i, occ in enumerate(occs, 1):
             try:
-                gcal.sync_occurrence(db, occ)
-                synced += 1
-                print(f"[gcal sync] {i}/{len(occs)} synced occ {occ.id} ({occ.occurrence_date})")
+                inserted = gcal.sync_occurrence(db, occ)
+                if inserted:
+                    synced += 1
+                    print(f"[gcal sync] {i}/{len(occs)} synced occ {occ.id} ({occ.occurrence_date})")
+                else:
+                    skipped += 1
             except Exception as exc:
                 failed += 1
                 print(f"[gcal sync] {i}/{len(occs)} FAILED occ {occ.id} ({occ.occurrence_date}): {exc}")
-        print(f"[gcal sync] done — synced={synced} failed={failed}")
+        print(f"[gcal sync] done — synced={synced} skipped={skipped} failed={failed}")
     finally:
         db.close()
 

@@ -129,14 +129,34 @@ def sync_occurrence(db: Session, occurrence: Occurrence) -> bool:
 
     try:
         if occurrence.gcal_event_id:
-            # Update existing
+            # Update existing tracked event
             service.events().update(
                 calendarId=calendar_id,
                 eventId=occurrence.gcal_event_id,
                 body=body,
             ).execute()
         else:
-            # Create new
+            # Check Google Calendar for a pre-existing event with our occurrence ID
+            # before inserting, to prevent duplicates across re-seeds or force syncs.
+            search = service.events().list(
+                calendarId=calendar_id,
+                privateExtendedProperty=f"calendarAppId={occurrence.id}",
+            ).execute()
+            existing = search.get("items", [])
+            if existing:
+                gcal_id = existing[0]["id"]
+                summary = existing[0].get("summary", "—")
+                print(
+                    f"[gcal sync] SKIP occ {occurrence.id} ({occurrence.occurrence_date}) "
+                    f"— already exists in Google Calendar as event {gcal_id} ({summary!r})"
+                )
+                # Persist the gcal_event_id so future syncs use the update path
+                occurrence.gcal_event_id = gcal_id
+                occurrence.synced_at = datetime.utcnow()
+                db.commit()
+                return False
+
+            # No duplicate found — safe to insert
             result = service.events().insert(
                 calendarId=calendar_id, body=body
             ).execute()
