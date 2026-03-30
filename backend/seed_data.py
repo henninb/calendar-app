@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Seed the database with default categories and example events.
 
@@ -6,13 +7,149 @@ Run once after the DB is created:
 
 Requires DATABASE_URL in .env or environment.
 """
-from datetime import date
+import urllib.request
+import json
+from datetime import date, datetime, timezone, timedelta
 from app.database import SessionLocal, Base, engine
 from app.models import Category, CreditCard, Event, Occurrence, Priority, WeekendShift
 from app.services.recurrence import generate_all_occurrences
 from app.services.credit_card import ensure_card_events, generate_credit_card_occurrences
 
 Base.metadata.create_all(bind=engine)
+
+
+def _to_ct(dt: datetime) -> str:
+    """Convert a UTC-aware datetime to a Central Time string."""
+    year = dt.year
+    # DST starts 2nd Sunday of March at 2am, ends 1st Sunday of November at 2am
+    # Approximate using fixed offsets (close enough for display purposes)
+    mar_second_sun = date(year, 3, 8 + (6 - date(year, 3, 1).weekday()) % 7)
+    nov_first_sun  = date(year, 11, 1 + (6 - date(year, 11, 1).weekday()) % 7)
+    dst_start = datetime(year, mar_second_sun.month, mar_second_sun.day, 8, 0, tzinfo=timezone.utc)
+    dst_end   = datetime(year, nov_first_sun.month,  nov_first_sun.day,  7, 0, tzinfo=timezone.utc)
+    offset = timedelta(hours=-5) if dst_start <= dt < dst_end else timedelta(hours=-6)
+    return (dt + offset).strftime('%I:%M %p CT')
+
+
+def fetch_mlb_schedule(year: int) -> list[tuple]:
+    """Fetch the Twins regular-season schedule for the given year from the MLB Stats API."""
+    url = (
+        f"https://statsapi.mlb.com/api/v1/schedule"
+        f"?startDate=01/01/{year}&endDate=12/31/{year}"
+        f"&gameTypes=R&sportId=1&teamId=142&hydrate=decisions"
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=15) as r:
+            data = json.loads(r.read())
+    except Exception as e:
+        print(f"WARNING: Could not fetch MLB schedule ({e}) — skipping Twins games.")
+        return []
+
+    games = []
+    for day in data.get("dates", []):
+        for game in day.get("games", []):
+            game_date = game.get("officialDate") or game.get("gameDate", "")[:10]
+            dt = datetime.fromisoformat(game["gameDate"].replace("Z", "+00:00"))
+            ct_time = _to_ct(dt)
+            home = game["teams"]["home"]["team"]
+            away = game["teams"]["away"]["team"]
+            is_home = home["id"] == 142
+            opp   = away["name"] if is_home else home["name"]
+            venue = game.get("venue", {}).get("name", "")
+            y, m, d = map(int, game_date.split("-"))
+            if is_home:
+                title = f"Twins vs {opp}"
+                desc  = f"Minnesota Twins vs {opp} at {venue} — {ct_time}"
+            else:
+                title = f"Twins @ {opp}"
+                desc  = f"Minnesota Twins at {opp} ({venue}) — {ct_time}"
+            games.append((title, "sports", None, date(y, m, d), desc, Priority.low, [], None))
+
+    print(f"Fetched {len(games)} Twins games ({year} season).")
+    return games
+
+
+def fetch_nba_schedule(season_year: int) -> list[tuple]:
+    """Fetch the Timberwolves schedule for the given season start year from fixturedownload.com.
+
+    season_year=2025 → the 2025-26 NBA season.
+    """
+    url = f"https://fixturedownload.com/feed/json/nba-{season_year}/minnesota-timberwolves"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read())
+    except Exception as e:
+        print(f"WARNING: Could not fetch NBA schedule ({e}) — skipping Wolves games.")
+        return []
+
+    games = []
+    for g in data:
+        dt = datetime.strptime(g["DateUtc"], "%Y-%m-%d %H:%M:%SZ").replace(tzinfo=timezone.utc)
+        ct_time = _to_ct(dt)
+        year = dt.year
+        mar_second_sun = date(year, 3, 8 + (6 - date(year, 3, 1).weekday()) % 7)
+        nov_first_sun  = date(year, 11, 1 + (6 - date(year, 11, 1).weekday()) % 7)
+        dst_start = datetime(year, mar_second_sun.month, mar_second_sun.day, 8, 0, tzinfo=timezone.utc)
+        dst_end   = datetime(year, nov_first_sun.month,  nov_first_sun.day,  7, 0, tzinfo=timezone.utc)
+        offset = timedelta(hours=-5) if dst_start <= dt < dst_end else timedelta(hours=-6)
+        local_dt = dt + offset
+        is_home = g["HomeTeam"] == "Minnesota Timberwolves"
+        opp   = g["AwayTeam"] if is_home else g["HomeTeam"]
+        venue = g["Location"]
+        y, m, d = local_dt.year, local_dt.month, local_dt.day
+        if is_home:
+            title = f"Wolves vs {opp}"
+            desc  = f"Minnesota Timberwolves vs {opp} at {venue} — {ct_time}"
+        else:
+            title = f"Wolves @ {opp}"
+            desc  = f"Minnesota Timberwolves at {opp} ({venue}) — {ct_time}"
+        games.append((title, "sports", None, date(y, m, d), desc, Priority.low, [], None))
+
+    print(f"Fetched {len(games)} Wolves games ({season_year}-{str(season_year + 1)[-2:]} season).")
+    return games
+
+
+def fetch_nhl_schedule(season_year: int) -> list[tuple]:
+    """Fetch the Wild schedule for the given season start year from fixturedownload.com.
+
+    season_year=2025 → the 2025-26 NHL season.
+    """
+    url = f"https://fixturedownload.com/feed/json/nhl-{season_year}/minnesota-wild"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read())
+    except Exception as e:
+        print(f"WARNING: Could not fetch NHL schedule ({e}) — skipping Wild games.")
+        return []
+
+    games = []
+    for g in data:
+        dt = datetime.strptime(g["DateUtc"], "%Y-%m-%d %H:%M:%SZ").replace(tzinfo=timezone.utc)
+        ct_time = _to_ct(dt)
+        year = dt.year
+        mar_second_sun = date(year, 3, 8 + (6 - date(year, 3, 1).weekday()) % 7)
+        nov_first_sun  = date(year, 11, 1 + (6 - date(year, 11, 1).weekday()) % 7)
+        dst_start = datetime(year, mar_second_sun.month, mar_second_sun.day, 8, 0, tzinfo=timezone.utc)
+        dst_end   = datetime(year, nov_first_sun.month,  nov_first_sun.day,  7, 0, tzinfo=timezone.utc)
+        offset = timedelta(hours=-5) if dst_start <= dt < dst_end else timedelta(hours=-6)
+        local_dt = dt + offset
+        is_home = g["HomeTeam"] == "Minnesota Wild"
+        opp   = g["AwayTeam"] if is_home else g["HomeTeam"]
+        venue = g["Location"]
+        y, m, d = local_dt.year, local_dt.month, local_dt.day
+        if is_home:
+            title = f"Wild vs {opp}"
+            desc  = f"Minnesota Wild vs {opp} at {venue} — {ct_time}"
+        else:
+            title = f"Wild @ {opp}"
+            desc  = f"Minnesota Wild at {opp} ({venue}) — {ct_time}"
+        games.append((title, "sports", None, date(y, m, d), desc, Priority.low, [], None))
+
+    print(f"Fetched {len(games)} Wild games ({season_year}-{str(season_year + 1)[-2:]} season).")
+    return games
+
 
 CATEGORIES = [
     {"name": "birthday",           "color": "#ef4444", "icon": "🎂", "description": "Birthdays and anniversaries"},
@@ -28,6 +165,7 @@ CATEGORIES = [
     {"name": "credit_card",        "color": "#6366f1", "icon": "💳", "description": "Credit card statement and payment dates"},
     {"name": "software",           "color": "#6b7280", "icon": "💻", "description": "Software updates, license renewals, domain renewals"},
     {"name": "other",              "color": "#9ca3af", "icon": "📅", "description": "Miscellaneous reminders"},
+    {"name": "sports",             "color": "#c62633", "icon": "⚾", "description": "Sports events and games"},
 ]
 
 # (title, category_name, rrule, dtstart, description, priority, reminder_days, amount)
@@ -376,8 +514,18 @@ def seed(reseed: bool = False):
         db.commit()
         print(f"Inserted {len(CATEGORIES)} categories.")
 
-        # Insert events
-        for title, cat_name, rrule, dtstart, desc, priority, reminder_days, amount in EXAMPLE_EVENTS:
+        # Insert events (static + dynamically fetched sports schedules)
+        today = date.today()
+        mlb_year = today.year
+        # NBA season: if before July the current season started last year
+        nba_season_year = today.year if today.month >= 7 else today.year - 1
+        # NHL season: same cadence as NBA — starts in October
+        nhl_season_year = today.year if today.month >= 7 else today.year - 1
+        all_events = (EXAMPLE_EVENTS
+                      + fetch_mlb_schedule(mlb_year)
+                      + fetch_nba_schedule(nba_season_year)
+                      + fetch_nhl_schedule(nhl_season_year))
+        for title, cat_name, rrule, dtstart, desc, priority, reminder_days, amount in all_events:
             ev = Event(
                 title=title,
                 category_id=cat_map[cat_name],
@@ -390,7 +538,7 @@ def seed(reseed: bool = False):
             )
             db.add(ev)
         db.commit()
-        print(f"Inserted {len(EXAMPLE_EVENTS)} events.")
+        print(f"Inserted {len(all_events)} events ({len(EXAMPLE_EVENTS)} static + sports schedules).")
 
         # Insert credit cards + auto-create their close/due/fee events
         cc_cat_id = cat_map["credit_card"]
@@ -445,9 +593,26 @@ def seed_cards():
 if __name__ == "__main__":
     import sys
     args = sys.argv[1:]
+    if not args or "--help" in args or "-h" in args:
+        print("Usage: seed_data.py [command]")
+        print()
+        print("Commands:")
+        print("  seed      Seed the database (default — skips if already seeded)")
+        print("  reseed    Clear all data and re-seed from scratch")
+        print("  cards     Seed credit cards only (requires categories to exist)")
+        print()
+        print("Examples:")
+        print("  ./seed_data.py")
+        print("  ./seed_data.py reseed")
+        print("  ./seed_data.py cards")
+        sys.exit(0)
     if "cards" in args:
         seed_cards()
     elif "reseed" in args:
         seed(reseed=True)
-    else:
+    elif "seed" in args:
         seed()
+    else:
+        print(f"Unknown command: {args[0]}")
+        print("Run ./seed_data.py --help for usage.")
+        sys.exit(1)
