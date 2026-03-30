@@ -40,7 +40,7 @@ def auth_callback(code: str, db: Session = Depends(get_db)):
         gcal.exchange_code(code)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"message": "Google Calendar authenticated successfully"}
+    return RedirectResponse(url="/")
 
 
 @router.get("/auth/status", response_model=AuthStatus)
@@ -130,6 +130,33 @@ def delete_all_gcal_events(background_tasks: BackgroundTasks):
     """
     background_tasks.add_task(_run_gcal_delete_all)
     return SyncResult(synced=0, failed=0, errors=[], message="Google Calendar wipe started in background — check server logs for progress.")
+
+
+def _run_gcal_wipe_all():
+    """Background worker — deletes ALL events from Google Calendar and clears DB sync state."""
+    db = SessionLocal()
+    try:
+        print("[gcal wipe] Starting full Google Calendar wipe…")
+        deleted = gcal.wipe_all_gcal_events()
+        updated = (
+            db.query(Occurrence)
+            .filter(Occurrence.gcal_event_id.isnot(None))
+            .update({Occurrence.gcal_event_id: None, Occurrence.synced_at: None},
+                    synchronize_session=False)
+        )
+        db.commit()
+        print(f"[gcal wipe] done — deleted={deleted} from Google Calendar, cleared={updated} DB records")
+    except Exception as exc:
+        print(f"[gcal wipe] ERROR: {exc}")
+    finally:
+        db.close()
+
+
+@router.delete("/gcal/wipe-all", response_model=SyncResult)
+def wipe_all_gcal_events(background_tasks: BackgroundTasks):
+    """Delete ALL events from the primary Google Calendar, including non-app events."""
+    background_tasks.add_task(_run_gcal_wipe_all)
+    return SyncResult(synced=0, failed=0, errors=[], message="Full Google Calendar wipe started — check server logs.")
 
 
 @router.post("/gcal/{occurrence_id}", response_model=SyncResult)

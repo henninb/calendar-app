@@ -33,3 +33,6 @@ export const syncToGcal = (daysAhead = 365, force = false) =>
 
 export const deleteAllGcalEvents = () =>
   request('/sync/gcal', { method: 'DELETE' })
+
+export const wipeAllGcalEvents = () =>
+  request('/sync/gcal/wipe-all', { method: 'DELETE' })

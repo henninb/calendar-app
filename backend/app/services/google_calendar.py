@@ -150,22 +150,48 @@ def sync_occurrence(db: Session, occurrence: Occurrence) -> bool:
         raise RuntimeError(f"Google Calendar API error: {e}") from e
 
 
-def delete_gcal_event(occurrence: Occurrence) -> bool:
+def delete_gcal_event(occurrence: Occurrence) -> None:
     """Delete the Google Calendar event for an occurrence (if it exists)."""
     if not occurrence.gcal_event_id:
-        return False
+        return
     creds = get_credentials()
     if not creds:
-        return False
+        raise RuntimeError("Not authenticated with Google Calendar")
     service = build("calendar", "v3", credentials=creds)
     calendar_id = occurrence.event.gcal_calendar_id or "primary"
     try:
         service.events().delete(
             calendarId=calendar_id, eventId=occurrence.gcal_event_id
         ).execute()
-        return True
-    except HttpError:
-        return False
+    except HttpError as e:
+        raise RuntimeError(f"Google Calendar API error: {e}") from e
+
+
+def wipe_all_gcal_events() -> int:
+    """Delete every event from the primary Google Calendar, regardless of DB tracking."""
+    creds = get_credentials()
+    if not creds:
+        raise RuntimeError("Not authenticated with Google Calendar")
+    service = build("calendar", "v3", credentials=creds)
+    deleted = 0
+    page_token = None
+    while True:
+        response = service.events().list(
+            calendarId="primary",
+            pageToken=page_token,
+            maxResults=250,
+        ).execute()
+        for event in response.get("items", []):
+            try:
+                service.events().delete(calendarId="primary", eventId=event["id"]).execute()
+                deleted += 1
+                print(f"[gcal wipe] deleted event {event['id']} ({event.get('summary', '—')})")
+            except HttpError as e:
+                print(f"[gcal wipe] FAILED to delete event {event['id']}: {e}")
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
+    return deleted
 
 
 # ── Internals ────────────────────────────────────────────────────────────────

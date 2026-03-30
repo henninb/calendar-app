@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import CalendarView from './components/CalendarView'
 import OccurrenceList from './components/OccurrenceList'
 import CreditCardTracker from './components/CreditCardTracker'
-import { generateAll, gcalAuthStatus, syncToGcal, deleteAllGcalEvents } from './api'
+import { generateAll, gcalAuthStatus, syncToGcal, deleteAllGcalEvents, wipeAllGcalEvents } from './api'
 
 const TABS = [
   { id: 'calendar',  label: '📅 Calendar' },
@@ -10,62 +10,95 @@ const TABS = [
   { id: 'cards',     label: '💳 Credit Cards' },
 ]
 
+function timestamp() {
+  return new Date().toLocaleTimeString('en-US', { hour12: false })
+}
+
 export default function App() {
-  const [tab, setTab]         = useState('calendar')
-  const [syncing, setSyncing]   = useState(false)
-  const [gcalSyncing, setGcalSyncing] = useState(false)
+  const [tab, setTab]                   = useState('calendar')
+  const [syncing, setSyncing]           = useState(false)
+  const [gcalSyncing, setGcalSyncing]   = useState(false)
   const [gcalDeleting, setGcalDeleting] = useState(false)
-  const [gcalAuth, setGcalAuth] = useState(null)   // null=unknown, true/false
-  const [msg, setMsg]           = useState('')
+  const [gcalWiping, setGcalWiping]     = useState(false)
+  const [gcalAuth, setGcalAuth]         = useState(null)
+  const [logs, setLogs]                 = useState([])
+  const logEndRef                       = useRef(null)
 
   useEffect(() => {
     gcalAuthStatus()
-      .then(s => setGcalAuth(s.authenticated))
+      .then(s => {
+        setGcalAuth(s.authenticated)
+        addLog('info', `Google auth status: ${s.authenticated ? `authenticated (${s.email || 'no email'})` : 'not authenticated'}`)
+      })
       .catch(() => setGcalAuth(false))
   }, [])
 
-  const showMsg = (text) => {
-    setMsg(text)
-    setTimeout(() => setMsg(''), 5000)
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [logs])
+
+  const addLog = (level, text) => {
+    setLogs(prev => [...prev, { id: Date.now() + Math.random(), level, text, time: timestamp() }])
   }
 
   const handleGenerate = async () => {
     setSyncing(true)
-    setMsg('')
-    const res = await generateAll()
-    showMsg(`Generated ${res.occurrences_created} new occurrences across ${res.events_processed} events.`)
-    setSyncing(false)
-  }
-
-  const handleGcalDelete = async () => {
-    if (!gcalAuth) return
-    if (!window.confirm('Delete ALL events from Google Calendar? This cannot be undone.')) return
-    setGcalDeleting(true)
-    setMsg('')
+    addLog('info', 'Generating occurrences…')
     try {
-      const res = await deleteAllGcalEvents()
-      showMsg(res.message || 'Google Calendar wipe started — check server logs.')
+      const res = await generateAll()
+      addLog('ok', `Generated ${res.occurrences_created} new occurrences across ${res.events_processed} events.`)
     } catch (e) {
-      showMsg(`Delete failed: ${e.message}`)
+      addLog('error', `Generate failed: ${e.message}`)
     }
-    setGcalDeleting(false)
+    setSyncing(false)
   }
 
   const handleGcalSync = async () => {
     if (!gcalAuth) {
+      addLog('info', 'Redirecting to Google OAuth…')
       window.location.href = '/api/sync/auth'
       return
     }
     setGcalSyncing(true)
-    setMsg('')
+    addLog('info', 'Starting Google Calendar sync (force=true, 365 days)…')
     try {
       const res = await syncToGcal(365, true)
-      showMsg(res.message || `Google Calendar: synced ${res.synced} events${res.failed ? `, ${res.failed} failed` : ''}.`)
+      addLog('ok', res.message || `Synced ${res.synced} events${res.failed ? `, ${res.failed} failed` : ''}.`)
     } catch (e) {
-      showMsg(`Sync failed: ${e.message}`)
+      addLog('error', `Sync failed: ${e.message}`)
     }
     setGcalSyncing(false)
   }
+
+  const handleGcalDelete = async () => {
+    if (!gcalAuth) return
+    if (!window.confirm('Delete all app-synced events from Google Calendar?')) return
+    setGcalDeleting(true)
+    addLog('info', 'Deleting app-synced Google Calendar events…')
+    try {
+      const res = await deleteAllGcalEvents()
+      addLog('ok', res.message || 'Delete started in background.')
+    } catch (e) {
+      addLog('error', `Delete failed: ${e.message}`)
+    }
+    setGcalDeleting(false)
+  }
+
+  const handleGcalWipe = async () => {
+    if (!gcalAuth) return
+    if (!window.confirm('Delete ALL events from your primary Google Calendar? This includes events not created by this app and cannot be undone.')) return
+    setGcalWiping(true)
+    addLog('warn', 'Wiping ALL events from primary Google Calendar…')
+    try {
+      const res = await wipeAllGcalEvents()
+      addLog('ok', res.message || 'Full wipe started in background.')
+    } catch (e) {
+      addLog('error', `Wipe failed: ${e.message}`)
+    }
+    setGcalWiping(false)
+  }
+
+  const logColor = { info: '#93c5fd', ok: '#86efac', warn: '#fde68a', error: '#fca5a5' }
 
   return (
     <div className="app">
@@ -83,7 +116,6 @@ export default function App() {
           ))}
         </nav>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '.75rem' }}>
-          {msg && <span style={{ fontSize: '.8rem', color: '#86efac' }}>{msg}</span>}
           <button
             className="btn btn-blue"
             style={{ fontSize: '.8rem' }}
@@ -110,8 +142,43 @@ export default function App() {
               {gcalDeleting ? 'Deleting…' : '🗑 Clear Google Cal'}
             </button>
           )}
+          {gcalAuth && (
+            <button
+              className="btn btn-blue"
+              style={{ fontSize: '.8rem', background: '#7f1d1d' }}
+              disabled={gcalWiping}
+              onClick={handleGcalWipe}
+            >
+              {gcalWiping ? 'Wiping…' : '💣 Wipe Google Cal'}
+            </button>
+          )}
+          {logs.length > 0 && (
+            <button
+              className="btn btn-gray"
+              style={{ fontSize: '.75rem' }}
+              onClick={() => setLogs([])}
+            >
+              Clear Log
+            </button>
+          )}
         </div>
       </header>
+
+      {logs.length > 0 && (
+        <div style={{
+          background: '#0f172a', borderBottom: '1px solid #1e293b',
+          padding: '.5rem 1rem', maxHeight: '10rem', overflowY: 'auto',
+          fontFamily: 'monospace', fontSize: '.78rem',
+        }}>
+          {logs.map(entry => (
+            <div key={entry.id} style={{ color: logColor[entry.level], lineHeight: '1.6' }}>
+              <span style={{ opacity: 0.5, marginRight: '.75rem' }}>{entry.time}</span>
+              {entry.text}
+            </div>
+          ))}
+          <div ref={logEndRef} />
+        </div>
+      )}
 
       <main>
         {tab === 'calendar' && <CalendarView />}
