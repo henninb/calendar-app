@@ -38,6 +38,9 @@ CATEGORY_COLOR_MAP = {
     "credit_card": "1",        # Lavender
     "software": "8",           # Graphite
     "other": "8",
+    "mlb":  "11",              # Tomato  (Twins red)
+    "nba":  "9",               # Blueberry (Wolves blue)
+    "nhl":  "10",              # Basil (Wild green)
 }
 
 

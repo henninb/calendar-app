@@ -63,7 +63,7 @@ def fetch_mlb_schedule(year: int) -> list[tuple]:
             else:
                 title = f"Twins @ {opp}"
                 desc  = f"Minnesota Twins at {opp} ({venue}) — {ct_time}"
-            games.append((title, "sports", None, date(y, m, d), desc, Priority.low, [], None))
+            games.append((title, "mlb", None, date(y, m, d), desc, Priority.low, [], None))
 
     print(f"Fetched {len(games)} Twins games ({year} season).")
     return games
@@ -104,7 +104,7 @@ def fetch_nba_schedule(season_year: int) -> list[tuple]:
         else:
             title = f"Wolves @ {opp}"
             desc  = f"Minnesota Timberwolves at {opp} ({venue}) — {ct_time}"
-        games.append((title, "sports", None, date(y, m, d), desc, Priority.low, [], None))
+        games.append((title, "nba", None, date(y, m, d), desc, Priority.low, [], None))
 
     print(f"Fetched {len(games)} Wolves games ({season_year}-{str(season_year + 1)[-2:]} season).")
     return games
@@ -145,7 +145,7 @@ def fetch_nhl_schedule(season_year: int) -> list[tuple]:
         else:
             title = f"Wild @ {opp}"
             desc  = f"Minnesota Wild at {opp} ({venue}) — {ct_time}"
-        games.append((title, "sports", None, date(y, m, d), desc, Priority.low, [], None))
+        games.append((title, "nhl", None, date(y, m, d), desc, Priority.low, [], None))
 
     print(f"Fetched {len(games)} Wild games ({season_year}-{str(season_year + 1)[-2:]} season).")
     return games
@@ -165,7 +165,9 @@ CATEGORIES = [
     {"name": "credit_card",        "color": "#6366f1", "icon": "💳", "description": "Credit card statement and payment dates"},
     {"name": "software",           "color": "#6b7280", "icon": "💻", "description": "Software updates, license renewals, domain renewals"},
     {"name": "other",              "color": "#9ca3af", "icon": "📅", "description": "Miscellaneous reminders"},
-    {"name": "sports",             "color": "#c62633", "icon": "⚾", "description": "Sports events and games"},
+    {"name": "mlb",                "color": "#c62633", "icon": "⚾", "description": "Minnesota Twins MLB games"},
+    {"name": "nba",                "color": "#236192", "icon": "🏀", "description": "Minnesota Timberwolves NBA games"},
+    {"name": "nhl",                "color": "#154734", "icon": "🏒", "description": "Minnesota Wild NHL games"},
 ]
 
 # (title, category_name, rrule, dtstart, description, priority, reminder_days, amount)
