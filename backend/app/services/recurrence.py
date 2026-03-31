@@ -362,9 +362,7 @@ def mark_overdue(db: Session) -> int:
             Occurrence.status == OccurrenceStatus.upcoming,
             Occurrence.occurrence_date < today,
         )
-        .all()
+        .update({Occurrence.status: OccurrenceStatus.overdue}, synchronize_session=False)
     )
-    for occ in updated:
-        occ.status = OccurrenceStatus.overdue
     db.commit()
-    return len(updated)
+    return updated

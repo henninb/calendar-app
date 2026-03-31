@@ -186,8 +186,6 @@ EXAMPLE_EVENTS = [
      date(2026, 4, 30),   "Hyundai Sonata registration tabs expire",    Priority.high, [30], None),
     ("Tabs — Hyundai Entourage",     "car_maintenance",   "FREQ=YEARLY;BYMONTH=5;BYMONTHDAY=-1",
      date(2026, 5, 31),   "Hyundai Entourage registration tabs expire", Priority.high, [30], None),
-    ("Tire Rotation",                "car_maintenance",   "FREQ=MONTHLY;INTERVAL=6",
-     date(2026, 3, 1),    "Rotate tires every 6 months",       Priority.low,    [7],     None),
 
     # ── House Maintenance ────────────────────────────────────────────────────
     ("Homeowners Insurance Renewal", "house_maintenance", "FREQ=YEARLY;BYMONTH=6;BYMONTHDAY=28",
@@ -473,6 +471,15 @@ CREDIT_CARDS = [
 
 def clear(db):
     """Delete all seeded data in dependency order."""
+    synced = db.query(Occurrence).filter(Occurrence.gcal_event_id.isnot(None)).count()
+    if synced:
+        raise RuntimeError(
+            f"{synced} occurrence(s) are still linked to Google Calendar events "
+            f"(gcal_event_id is set). Wipe Google Calendar first using the "
+            f"'💣 Wipe Google Cal' button in the UI, then re-run seed_data.py. "
+            f"Re-seeding without wiping GCal first creates orphaned GCal events "
+            f"and breaks all sync linkage."
+        )
     db.query(Occurrence).delete()
     db.query(Event).delete()
     db.query(CreditCard).delete()

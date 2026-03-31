@@ -20,7 +20,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Node dependencies
 COPY frontend/package*.json ./frontend/
-RUN cd frontend && npm install
+RUN npm install -g npm@11.12.1 && \
+    cd frontend && npm install
 
 # Application source
 COPY backend/ ./backend/

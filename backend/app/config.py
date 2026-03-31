@@ -37,10 +37,10 @@ class Settings:
         self.google_client_id         = os.environ.get("GOOGLE_CLIENT_ID", "")
         self.google_client_secret     = os.environ.get("GOOGLE_CLIENT_SECRET", "")
         self.google_token_file        = os.environ.get("GOOGLE_TOKEN_FILE", "token.json")
-        self.google_redirect_uri      = os.environ["GOOGLE_REDIRECT_URI"]
+        self.google_redirect_uri      = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/sync/auth/callback")
         self.occurrence_lookahead_days = int(os.environ.get("OCCURRENCE_LOOKAHEAD_DAYS", "365"))
         self.scheduler_interval_hours  = int(os.environ.get("SCHEDULER_INTERVAL_HOURS", "24"))
-        self.timezone                  = os.environ.get("TIMEZONE", "America/New_York")
+        self.timezone                  = os.environ.get("TIMEZONE", "America/Chicago")
         origins_raw                    = os.environ.get("ALLOWED_ORIGINS", "")
         self.allowed_origins           = [o.strip() for o in origins_raw.split(",") if o.strip()]
         self.gcal_max_results          = int(os.environ.get("GCAL_MAX_RESULTS", "250"))

@@ -95,6 +95,15 @@ def sync_occurrence(db: Session, occurrence: Occurrence) -> bool:
     Push a single Occurrence to Google Calendar as an all-day event.
     Updates occurrence.gcal_event_id and occurrence.synced_at on success.
     Returns True on success.
+
+    Duplicate-safe decision tree (see _resolve_gcal_id):
+      1. gcal_event_id set in DB → attempt update directly
+         2xx → done
+         404 → event deleted from GCal; fall through to step 2
+      2. Search GCal by privateExtendedProperty calendarAppId={id}
+         found + date matches → update in-place (content may be stale)
+         found + date wrong   → stale/reused ID; delete it, insert fresh
+         not found            → insert fresh
     """
     creds = get_credentials()
     if not creds:
@@ -106,22 +115,17 @@ def sync_occurrence(db: Session, occurrence: Occurrence) -> bool:
 
     end_date = occurrence.occurrence_date + timedelta(days=event.duration_days)
     color_id = CATEGORY_COLOR_MAP.get(event.category.name, "8")
-
     reminder_overrides = [
         {"method": "popup", "minutes": days * 24 * 60}
         for days in (event.reminder_days or [1])
     ]
-
     body = {
         "summary": event.title,
         "description": event.description or "",
         "start": {"date": occurrence.occurrence_date.isoformat()},
         "end": {"date": end_date.isoformat()},
         "colorId": color_id,
-        "reminders": {
-            "useDefault": False,
-            "overrides": reminder_overrides,
-        },
+        "reminders": {"useDefault": False, "overrides": reminder_overrides},
         "extendedProperties": {
             "private": {
                 "calendarAppId": str(occurrence.id),
@@ -131,40 +135,8 @@ def sync_occurrence(db: Session, occurrence: Occurrence) -> bool:
     }
 
     try:
-        if occurrence.gcal_event_id:
-            # Update existing tracked event
-            service.events().update(
-                calendarId=calendar_id,
-                eventId=occurrence.gcal_event_id,
-                body=body,
-            ).execute()
-        else:
-            # Check Google Calendar for a pre-existing event with our occurrence ID
-            # before inserting, to prevent duplicates across re-seeds or force syncs.
-            search = service.events().list(
-                calendarId=calendar_id,
-                privateExtendedProperty=f"calendarAppId={occurrence.id}",
-            ).execute()
-            existing = search.get("items", [])
-            if existing:
-                gcal_id = existing[0]["id"]
-                summary = existing[0].get("summary", "—")
-                print(
-                    f"[gcal sync] SKIP occ {occurrence.id} ({occurrence.occurrence_date}) "
-                    f"— already exists in Google Calendar as event {gcal_id} ({summary!r})"
-                )
-                # Persist the gcal_event_id so future syncs use the update path
-                occurrence.gcal_event_id = gcal_id
-                occurrence.synced_at = datetime.utcnow()
-                db.commit()
-                return False
-
-            # No duplicate found — safe to insert
-            result = service.events().insert(
-                calendarId=calendar_id, body=body
-            ).execute()
-            occurrence.gcal_event_id = result["id"]
-
+        gcal_id = _resolve_gcal_id(service, occurrence, calendar_id, body)
+        occurrence.gcal_event_id = gcal_id
         occurrence.synced_at = datetime.utcnow()
         occurrence.status = OccurrenceStatus.upcoming
         db.commit()
@@ -218,6 +190,78 @@ def wipe_all_gcal_events() -> int:
 
 
 # ── Internals ────────────────────────────────────────────────────────────────
+
+def _resolve_gcal_id(service, occurrence: Occurrence, calendar_id: str, body: dict) -> str:
+    """
+    Ensure exactly one GCal event exists for this occurrence with current content.
+    Returns the canonical gcal_event_id.
+
+    Step 1 — gcal_event_id set in DB:
+      Attempt events().update() directly (one API call, immediately consistent).
+      Success → return same ID.
+      404     → event was deleted from GCal; fall through to step 2.
+
+    Step 2 — No confirmed GCal ID:
+      Search by privateExtendedProperty calendarAppId={occurrence.id}.
+      Found + date matches → update in-place, return its ID.
+      Found + date wrong   → stale/reused DB ID; delete it, insert fresh.
+      Not found            → insert fresh.
+    """
+    gcal_id = occurrence.gcal_event_id
+
+    if gcal_id:
+        try:
+            service.events().update(
+                calendarId=calendar_id, eventId=gcal_id, body=body
+            ).execute()
+            print(f"[gcal sync] occ {occurrence.id} ({occurrence.occurrence_date}): updated {gcal_id}")
+            return gcal_id
+        except HttpError as e:
+            if e.resp.status != 404:
+                raise
+            print(
+                f"[gcal sync] occ {occurrence.id}: stored event {gcal_id} not found in GCal (404) — re-resolving"
+            )
+
+    # gcal_event_id was None or just confirmed missing — search by private tag
+    expected_date = occurrence.occurrence_date.isoformat()
+    search = service.events().list(
+        calendarId=calendar_id,
+        privateExtendedProperty=f"calendarAppId={occurrence.id}",
+    ).execute()
+    existing = search.get("items", [])
+
+    if existing:
+        found = existing[0]
+        found_id = found["id"]
+        found_date = found.get("start", {}).get("date", "")
+
+        if found_date == expected_date:
+            # Correct event — update to ensure content is current
+            service.events().update(
+                calendarId=calendar_id, eventId=found_id, body=body
+            ).execute()
+            print(
+                f"[gcal sync] occ {occurrence.id} ({occurrence.occurrence_date}): "
+                f"adopted existing event {found_id}"
+            )
+            return found_id
+
+        # Date mismatch → stale event from a previous DB lifecycle; replace it
+        print(
+            f"[gcal sync] occ {occurrence.id}: stale event {found_id} "
+            f"(GCal date={found_date!r}, expected={expected_date!r}) — replacing"
+        )
+        try:
+            service.events().delete(calendarId=calendar_id, eventId=found_id).execute()
+        except HttpError:
+            pass  # already gone from GCal — safe to proceed
+
+    result = service.events().insert(calendarId=calendar_id, body=body).execute()
+    new_id = result["id"]
+    print(f"[gcal sync] occ {occurrence.id} ({occurrence.occurrence_date}): inserted {new_id}")
+    return new_id
+
 
 def _build_flow() -> Flow:
     client_config = {

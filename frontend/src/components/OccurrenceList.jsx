@@ -1,21 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchOccurrences, fetchCategories, updateOccurrence } from '../api'
 
-const CATEGORY_COLORS = {
-  birthday:          '#ef4444',
-  car_maintenance:   '#f97316',
-  house_maintenance: '#eab308',
-  holiday:           '#22c55e',
-  finance:           '#3b82f6',
-  medical:           '#ec4899',
-  dental:            '#06b6d4',
-  payment:           '#a855f7',
-  property_tax:      '#f59e0b',
-  tax:               '#1d4ed8',
-  credit_card:       '#6366f1',
-  software:          '#6b7280',
-  other:             '#9ca3af',
-}
 
 function today() { return new Date().toISOString().slice(0, 10) }
 function daysOut(n) {
@@ -124,7 +109,7 @@ export default function OccurrenceList() {
                   <td>
                     <span
                       className="badge"
-                      style={{ background: CATEGORY_COLORS[occ.event?.category?.name] ?? '#9ca3af' }}
+                      style={{ background: cats.find(c => c.name === occ.event?.category?.name)?.color ?? '#9ca3af' }}
                     >
                       {occ.event?.category?.name?.replace(/_/g, ' ')}
                     </span>

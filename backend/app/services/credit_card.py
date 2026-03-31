@@ -68,6 +68,11 @@ def due_date_for_close(close: date, card: CreditCard) -> date:
             return date(close.year + 1, 1, card.due_day_next_month)
         last_day = cal_mod.monthrange(close.year, close.month + 1)[1]
         return date(close.year, close.month + 1, min(card.due_day_next_month, last_day))
+    if card.grace_period_days is None:
+        raise ValueError(
+            f"Card '{card.name}' has no due_day_same_month, due_day_next_month, "
+            "or grace_period_days configured — cannot compute due date."
+        )
     return close + timedelta(days=card.grace_period_days)
 
 
@@ -83,6 +88,10 @@ def next_statement_close(card: CreditCard, ref_date: Optional[date] = None) -> d
             m += 1
             if m > 12:
                 m, y = 1, y + 1
+        raise ValueError(
+            f"Card '{card.name}' (cycle={card.cycle_days} days): could not find a "
+            f"rolling close date on or after {ref_date} within 3 months."
+        )
     close_day = card.statement_close_day
     ws = card.weekend_shift
     d = close_date_for_month(ref_date.year, ref_date.month, close_day, ws)

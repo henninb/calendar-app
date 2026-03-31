@@ -1,25 +1,9 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import listPlugin from '@fullcalendar/list'
 import interactionPlugin from '@fullcalendar/interaction'
-import { fetchOccurrences, updateOccurrence } from '../api'
-
-const CATEGORY_COLORS = {
-  birthday:          '#ef4444',
-  car_maintenance:   '#f97316',
-  house_maintenance: '#eab308',
-  holiday:           '#22c55e',
-  finance:           '#3b82f6',
-  medical:           '#ec4899',
-  dental:            '#06b6d4',
-  payment:           '#a855f7',
-  property_tax:      '#f59e0b',
-  tax:               '#1d4ed8',
-  credit_card:       '#6366f1',
-  software:          '#6b7280',
-  other:             '#9ca3af',
-}
+import { fetchOccurrences, fetchCategories, updateOccurrence } from '../api'
 
 function fmt(dateStr) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
@@ -28,23 +12,32 @@ function fmt(dateStr) {
 }
 
 export default function CalendarView() {
-  const [events, setEvents] = useState([])
+  const [occs, setOccs]       = useState([])
+  const [cats, setCats]       = useState([])
   const [selected, setSelected] = useState(null)
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving]   = useState(false)
+
+  useEffect(() => { fetchCategories().then(setCats) }, [])
+
+  const events = useMemo(() =>
+    occs.map(occ => {
+      const color = cats.find(c => c.name === occ.event.category.name)?.color ?? '#9ca3af'
+      return {
+        id: String(occ.id),
+        title: occ.event.title,
+        date: occ.occurrence_date,
+        backgroundColor: color,
+        borderColor:     color,
+        textColor: '#fff',
+        extendedProps: { occ },
+      }
+    }), [occs, cats])
 
   const handleDatesSet = useCallback(async ({ startStr, endStr }) => {
     const start = startStr.slice(0, 10)
     const end   = endStr.slice(0, 10)
-    const occs  = await fetchOccurrences({ start_date: start, end_date: end })
-    setEvents(occs.map(occ => ({
-      id: String(occ.id),
-      title: occ.event.title,
-      date: occ.occurrence_date,
-      backgroundColor: CATEGORY_COLORS[occ.event.category.name] ?? '#9ca3af',
-      borderColor:     CATEGORY_COLORS[occ.event.category.name] ?? '#9ca3af',
-      textColor: '#fff',
-      extendedProps: { occ },
-    })))
+    const data  = await fetchOccurrences({ start_date: start, end_date: end })
+    setOccs(data)
   }, [])
 
   const handleEventClick = ({ event }) => setSelected(event.extendedProps.occ)
@@ -55,12 +48,7 @@ export default function CalendarView() {
     const updated = await updateOccurrence(selected.id, { status })
     setSelected(updated)
     setSaving(false)
-    // refresh the event color
-    setEvents(prev => prev.map(e =>
-      e.id === String(updated.id)
-        ? { ...e, extendedProps: { occ: updated } }
-        : e
-    ))
+    setOccs(prev => prev.map(o => o.id === updated.id ? updated : o))
   }
 
   return (
@@ -79,9 +67,9 @@ export default function CalendarView() {
 
       {/* Category legend */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem', marginTop: '1rem' }}>
-        {Object.entries(CATEGORY_COLORS).map(([cat, color]) => (
-          <span key={cat} className="badge" style={{ background: color }}>
-            {cat.replace(/_/g, ' ')}
+        {cats.map(cat => (
+          <span key={cat.name} className="badge" style={{ background: cat.color }}>
+            {cat.name.replace(/_/g, ' ')}
           </span>
         ))}
       </div>
@@ -101,7 +89,7 @@ export default function CalendarView() {
             <span>
               <span
                 className="badge"
-                style={{ background: CATEGORY_COLORS[selected.event?.category?.name] ?? '#9ca3af' }}
+                style={{ background: cats.find(c => c.name === selected.event?.category?.name)?.color ?? '#9ca3af' }}
               >
                 {selected.event?.category?.name?.replace(/_/g, ' ')}
               </span>
