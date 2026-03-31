@@ -202,7 +202,7 @@ def wipe_all_gcal_events() -> int:
         response = service.events().list(
             calendarId="primary",
             pageToken=page_token,
-            maxResults=250,
+            maxResults=settings.gcal_max_results,
         ).execute()
         for event in response.get("items", []):
             try:

@@ -16,6 +16,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..models import CreditCard, Event, Occurrence, OccurrenceStatus, WeekendShift
 
 
@@ -178,7 +179,7 @@ def _upsert_occurrence(db: Session, event_id: int, occ_date: date, today: date) 
 
 
 def generate_credit_card_occurrences(
-    db: Session, card: CreditCard, lookahead_days: int = 365
+    db: Session, card: CreditCard, lookahead_days: int | None = None
 ) -> int:
     """
     Generate statement close, payment due, and annual fee Occurrence rows
@@ -186,7 +187,7 @@ def generate_credit_card_occurrences(
     Returns the count of new rows inserted.
     """
     today = date.today()
-    until = today + timedelta(days=lookahead_days)
+    until = today + timedelta(days=lookahead_days or settings.occurrence_lookahead_days)
 
     events = db.query(Event).filter(Event.credit_card_id == card.id).all()
     close_event = next((e for e in events if "Statement Close" in e.title), None)
@@ -202,7 +203,7 @@ def generate_credit_card_occurrences(
             break
         due = due_date_for_close(close, card)
 
-        if close_event and close >= today - timedelta(days=31):
+        if close_event and close >= today - timedelta(days=settings.cc_history_days):
             new_count += _upsert_occurrence(db, close_event.id, close, today)
         if due_event:
             new_count += _upsert_occurrence(db, due_event.id, due, today)

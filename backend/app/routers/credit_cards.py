@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..database import get_db
 from ..models import Category, CreditCard
 from ..schemas import (
@@ -83,7 +84,7 @@ def delete_card(card_id: int, db: Session = Depends(get_db)):
 @router.post("/{card_id}/generate", response_model=GenerateResult)
 def generate_occurrences(
     card_id: int,
-    lookahead_days: int = Query(365, ge=1, le=1825),
+    lookahead_days: int = Query(settings.occurrence_lookahead_days, ge=1, le=1825),
     db: Session = Depends(get_db),
 ):
     card = db.query(CreditCard).get(card_id)
@@ -95,7 +96,7 @@ def generate_occurrences(
 
 @router.post("/generate-all", response_model=GenerateResult)
 def generate_all(
-    lookahead_days: int = Query(365, ge=1, le=1825),
+    lookahead_days: int = Query(settings.occurrence_lookahead_days, ge=1, le=1825),
     db: Session = Depends(get_db),
 ):
     """Generate occurrences for all active credit cards."""

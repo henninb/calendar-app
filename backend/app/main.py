@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database import Base, engine, SessionLocal
 from .models import CreditCard
+from .config import settings
 from .routers import categories, events, occurrences, sync, credit_cards
 from .services.recurrence import generate_all_occurrences, mark_overdue
 from .services.credit_card import generate_credit_card_occurrences
@@ -42,7 +43,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

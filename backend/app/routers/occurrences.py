@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
+from ..config import settings
 from ..database import get_db
 from ..models import Event, Occurrence, OccurrenceStatus
 from ..schemas import GenerateResult, OccurrenceOut, OccurrenceUpdate
@@ -71,7 +72,7 @@ def update_occurrence(
 
 @router.post("/generate-all", response_model=GenerateResult)
 def generate_all(
-    lookahead_days: int = Query(365, ge=1, le=1825),
+    lookahead_days: int = Query(settings.occurrence_lookahead_days, ge=1, le=1825),
     db: Session = Depends(get_db),
 ):
     """Generate occurrences for all active events and mark overdue ones."""

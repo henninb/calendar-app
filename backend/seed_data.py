@@ -10,6 +10,7 @@ Requires DATABASE_URL in .env or environment.
 import urllib.request
 import json
 from datetime import date, datetime, timezone, timedelta
+from app.config import settings
 from app.database import SessionLocal, Base, engine
 from app.models import Category, CreditCard, Event, Occurrence, Priority, WeekendShift
 from app.services.recurrence import generate_all_occurrences
@@ -151,24 +152,7 @@ def fetch_nhl_schedule(season_year: int) -> list[tuple]:
     return games
 
 
-CATEGORIES = [
-    {"name": "birthday",           "color": "#ef4444", "icon": "🎂", "description": "Birthdays and anniversaries"},
-    {"name": "car_maintenance",    "color": "#f97316", "icon": "🚗", "description": "Oil changes, inspections, registration"},
-    {"name": "house_maintenance",  "color": "#eab308", "icon": "🏠", "description": "HVAC filters, smoke detectors, inspections"},
-    {"name": "holiday",            "color": "#22c55e", "icon": "🎉", "description": "Public holidays and personal days off"},
-    {"name": "finance",            "color": "#3b82f6", "icon": "💰", "description": "Finance reviews and account updates"},
-    {"name": "medical",            "color": "#ec4899", "icon": "🏥", "description": "Doctor appointments and health checks"},
-    {"name": "dental",             "color": "#06b6d4", "icon": "🦷", "description": "Dental cleanings and checkups"},
-    {"name": "payment",            "color": "#a855f7", "icon": "💸", "description": "Bills and recurring payments due"},
-    {"name": "property_tax",       "color": "#f59e0b", "icon": "🏡", "description": "Property tax installments"},
-    {"name": "tax",                "color": "#1d4ed8", "icon": "📋", "description": "Federal and state tax deadlines"},
-    {"name": "credit_card",        "color": "#6366f1", "icon": "💳", "description": "Credit card statement and payment dates"},
-    {"name": "software",           "color": "#6b7280", "icon": "💻", "description": "Software updates, license renewals, domain renewals"},
-    {"name": "other",              "color": "#9ca3af", "icon": "📅", "description": "Miscellaneous reminders"},
-    {"name": "mlb",                "color": "#c62633", "icon": "⚾", "description": "Minnesota Twins MLB games"},
-    {"name": "nba",                "color": "#236192", "icon": "🏀", "description": "Minnesota Timberwolves NBA games"},
-    {"name": "nhl",                "color": "#154734", "icon": "🏒", "description": "Minnesota Wild NHL games"},
-]
+CATEGORIES = settings.categories
 
 # (title, category_name, rrule, dtstart, description, priority, reminder_days, amount)
 # RRULE reference:

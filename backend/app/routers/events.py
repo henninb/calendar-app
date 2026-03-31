@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..database import get_db
 from ..models import Category, Event
 from ..schemas import EventCreate, EventOut, EventUpdate, EventWithOccurrences, GenerateResult
@@ -84,7 +85,7 @@ def delete_event(event_id: int, db: Session = Depends(get_db)):
 @router.post("/{event_id}/generate", response_model=GenerateResult)
 def generate_event_occurrences(
     event_id: int,
-    lookahead_days: int = Query(365, ge=1, le=1825),
+    lookahead_days: int = Query(settings.occurrence_lookahead_days, ge=1, le=1825),
     db: Session = Depends(get_db),
 ):
     """Manually trigger occurrence generation for a single event."""

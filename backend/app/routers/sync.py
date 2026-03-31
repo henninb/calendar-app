@@ -16,6 +16,7 @@ from fastapi.responses import RedirectResponse
 from icalendar import Calendar, Event as ICalEvent
 from sqlalchemy.orm import Session, joinedload
 
+from ..config import settings
 from ..database import SessionLocal, get_db
 from ..models import Event, Occurrence, OccurrenceStatus
 from ..schemas import AuthStatus, SyncResult
@@ -88,7 +89,7 @@ def _run_gcal_sync(days_ahead: int, force: bool = False):
 @router.post("/gcal", response_model=SyncResult)
 def sync_to_gcal(
     background_tasks: BackgroundTasks,
-    days_ahead: int = Query(365, ge=1, le=730),
+    days_ahead: int = Query(settings.occurrence_lookahead_days, ge=1, le=730),
     force: bool = Query(False, description="Re-sync all occurrences, overwriting existing Google Calendar events"),
 ):
     """
@@ -194,7 +195,7 @@ def export_ics(
     """
     today = date.today()
     start = start_date or today
-    end = end_date or (today + timedelta(days=365))
+    end = end_date or (today + timedelta(days=settings.occurrence_lookahead_days))
 
     occs = (
         db.query(Occurrence)
