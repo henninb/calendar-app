@@ -320,6 +320,15 @@ EXAMPLE_EVENTS = [
      date(2026, 5, 30),  "Kathryn's graduation at 5pm",           Priority.high, [14, 7, 1], None),
     ("Maggie — Cancel Spotify",           "other",         None,
      date(2026, 4, 1),    "Maggie to cancel Spotify subscription",     Priority.high,   [1],     None),
+
+    # ── NCAA Frozen Four ─────────────────────────────────────────────────────
+    # Semifinals: first Thursday on or after April 6
+    # Championship: first Saturday on or after April 8 (2 days after semis)
+    ("NCAA Frozen Four — Semifinals",   "other", "FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=6,7,8,9,10,11,12;BYDAY=TH",
+     date(2023, 4, 6),   "NCAA Men's Ice Hockey Frozen Four — Semifinal games (two games, evening ET)", Priority.high, [7, 1], None),
+    ("NCAA Frozen Four — Championship", "other", "FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=8,9,10,11,12,13,14;BYDAY=SA",
+     date(2023, 4, 8),   "NCAA Men's Ice Hockey Frozen Four — Championship game (evening ET)",          Priority.high, [7, 1], None),
+
     ("Maggie — Associates Degree Graduation", "other",      None,
      date(2026, 5, 15),  "Maggie graduates with Associates degree from community college", Priority.high, [14, 7, 1], None),
     ("Maggie — Graduation Ceremony",      "other",         None,
