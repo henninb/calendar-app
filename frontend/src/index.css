@@ -134,6 +134,9 @@ tr:hover td { background: #f8fafc; }
 .cc-soon    { color: #d97706; font-weight: 600; }
 
 /* ── Detail panel ── */
+.detail-overlay {
+  position: fixed; inset: 0; z-index: 999;
+}
 .detail-panel {
   position: fixed; top: 0; right: 0; width: 340px; height: 100vh;
   background: #fff; box-shadow: -4px 0 16px rgba(0,0,0,.12);

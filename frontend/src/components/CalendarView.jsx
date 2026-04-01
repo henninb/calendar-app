@@ -42,6 +42,13 @@ export default function CalendarView() {
 
   const handleEventClick = ({ event }) => setSelected(event.extendedProps.occ)
 
+  useEffect(() => {
+    if (!selected) return
+    const onKey = (e) => { if (e.key === 'Escape') setSelected(null) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [selected])
+
   const markStatus = async (status) => {
     if (!selected) return
     setSaving(true)
@@ -76,7 +83,8 @@ export default function CalendarView() {
 
       {/* Detail side panel */}
       {selected && (
-        <div className="detail-panel">
+        <div className="detail-overlay" onClick={() => setSelected(null)}>
+        <div className="detail-panel" onClick={(e) => e.stopPropagation()}>
           <button className="close" onClick={() => setSelected(null)}>✕</button>
           <h2>{selected.event?.title}</h2>
 
@@ -143,6 +151,7 @@ export default function CalendarView() {
               </button>
             )}
           </div>
+        </div>
         </div>
       )}
     </div>
