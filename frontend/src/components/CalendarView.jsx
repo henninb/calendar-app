@@ -12,26 +12,29 @@ function fmt(dateStr) {
 }
 
 export default function CalendarView() {
-  const [occs, setOccs]       = useState([])
-  const [cats, setCats]       = useState([])
-  const [selected, setSelected] = useState(null)
-  const [saving, setSaving]   = useState(false)
+  const [occs, setOccs]           = useState([])
+  const [cats, setCats]           = useState([])
+  const [selected, setSelected]   = useState(null)
+  const [saving, setSaving]       = useState(false)
+  const [activeFilter, setFilter] = useState(null)
 
   useEffect(() => { fetchCategories().then(setCats) }, [])
 
   const events = useMemo(() =>
-    occs.map(occ => {
-      const color = cats.find(c => c.name === occ.event.category.name)?.color ?? '#9ca3af'
-      return {
-        id: String(occ.id),
-        title: occ.event.title,
-        date: occ.occurrence_date,
-        backgroundColor: color,
-        borderColor:     color,
-        textColor: '#fff',
-        extendedProps: { occ },
-      }
-    }), [occs, cats])
+    occs
+      .filter(occ => !activeFilter || occ.event.category.name === activeFilter)
+      .map(occ => {
+        const color = cats.find(c => c.name === occ.event.category.name)?.color ?? '#9ca3af'
+        return {
+          id: String(occ.id),
+          title: occ.event.title,
+          date: occ.occurrence_date,
+          backgroundColor: color,
+          borderColor:     color,
+          textColor: '#fff',
+          extendedProps: { occ },
+        }
+      }), [occs, cats, activeFilter])
 
   const handleDatesSet = useCallback(async ({ startStr, endStr }) => {
     const start = startStr.slice(0, 10)
@@ -72,12 +75,43 @@ export default function CalendarView() {
         />
       </div>
 
-      {/* Category legend */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem', marginTop: '1rem' }}>
+      {/* Category filter legend */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem', marginTop: '1rem', alignItems: 'center' }}>
+        <button
+          onClick={() => setFilter(null)}
+          style={{
+            padding: '.25rem .6rem',
+            borderRadius: '9999px',
+            border: '2px solid',
+            borderColor: activeFilter === null ? '#fff' : 'transparent',
+            background: '#374151',
+            color: '#fff',
+            cursor: 'pointer',
+            fontSize: '.8rem',
+            fontWeight: activeFilter === null ? 700 : 400,
+          }}
+        >
+          all
+        </button>
         {cats.map(cat => (
-          <span key={cat.name} className="badge" style={{ background: cat.color }}>
+          <button
+            key={cat.name}
+            onClick={() => setFilter(activeFilter === cat.name ? null : cat.name)}
+            style={{
+              padding: '.25rem .6rem',
+              borderRadius: '9999px',
+              border: '2px solid',
+              borderColor: activeFilter === cat.name ? '#fff' : 'transparent',
+              background: cat.color,
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: '.8rem',
+              fontWeight: activeFilter === cat.name ? 700 : 400,
+              opacity: activeFilter && activeFilter !== cat.name ? 0.45 : 1,
+            }}
+          >
             {cat.name.replace(/_/g, ' ')}
-          </span>
+          </button>
         ))}
       </div>
 

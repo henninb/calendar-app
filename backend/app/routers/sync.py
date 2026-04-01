@@ -8,6 +8,7 @@ OAuth flow:
   4. POST /api/sync/gcal            → push unsynced occurrences to Google Calendar
   5. GET  /api/sync/export/ics      → download all upcoming events as .ics
 """
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from typing import Optional
 
@@ -21,6 +22,8 @@ from ..database import SessionLocal, get_db
 from ..models import Event, Occurrence, OccurrenceStatus
 from ..schemas import AuthStatus, SyncResult
 from ..services import google_calendar as gcal
+
+_SYNC_WORKERS = 10
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
@@ -52,14 +55,43 @@ def auth_status():
 
 # ── Sync ──────────────────────────────────────────────────────────────────────
 
+def _sync_one(occ_id: int) -> tuple[int, str, str]:
+    """
+    Per-thread worker — owns its own DB session and GCal service instance.
+    Returns (occ_id, action, occ_date_str) where action is one of:
+      "inserted" | "updated" | "skipped" | "failed:<message>"
+    Never raises — all exceptions are captured in the action string.
+    """
+    db = SessionLocal()
+    try:
+        occ = (
+            db.query(Occurrence)
+            .options(joinedload(Occurrence.event).joinedload(Event.category))
+            .filter(Occurrence.id == occ_id)
+            .first()
+        )
+        if occ is None:
+            return occ_id, "skipped", ""
+        occ_date = str(occ.occurrence_date)
+        action = gcal.sync_occurrence(db, occ)
+        return occ_id, action, occ_date
+    except Exception as exc:
+        return occ_id, f"failed:{exc}", ""
+    finally:
+        db.close()
+
+
 def _run_gcal_sync(days_ahead: int, force: bool = False):
-    """Background worker — opens its own DB session so it outlives the request."""
+    """
+    Background worker — collects occurrence IDs in one session, then fans out
+    to _SYNC_WORKERS threads each owning their own session and GCal service.
+    """
+    # Phase 1: collect IDs in a short-lived session
     db = SessionLocal()
     try:
         until = date.today() + timedelta(days=days_ahead)
         q = (
             db.query(Occurrence)
-            .options(joinedload(Occurrence.event).joinedload(Event.category))
             .filter(
                 Occurrence.occurrence_date <= until,
                 Occurrence.status.in_([OccurrenceStatus.upcoming, OccurrenceStatus.overdue]),
@@ -68,37 +100,30 @@ def _run_gcal_sync(days_ahead: int, force: bool = False):
         if not force:
             q = q.filter(Occurrence.synced_at.is_(None))
         occ_ids = [occ.id for occ in q.all()]
-        total = len(occ_ids)
-        print(f"[gcal sync] {total} occurrences to sync…")
-        synced, skipped, failed = 0, 0, 0
-        for i, occ_id in enumerate(occ_ids, 1):
-            # Reload each occurrence fresh — a rollback in a prior iteration expires
-            # all session objects, so referencing the original list triggers a DB
-            # refresh that raises ObjectDeletedError if the row was deleted.
-            occ = (
-                db.query(Occurrence)
-                .options(joinedload(Occurrence.event).joinedload(Event.category))
-                .filter(Occurrence.id == occ_id)
-                .first()
-            )
-            if occ is None:
-                skipped += 1
-                continue
-            occ_date = occ.occurrence_date
-            try:
-                inserted = gcal.sync_occurrence(db, occ)
-                if inserted:
-                    synced += 1
-                    print(f"[gcal sync] {i}/{total} synced occ {occ_id} ({occ_date})")
-                else:
-                    skipped += 1
-            except Exception as exc:
-                failed += 1
-                db.rollback()
-                print(f"[gcal sync] {i}/{total} FAILED occ {occ_id} ({occ_date}): {exc}")
-        print(f"[gcal sync] done — synced={synced} skipped={skipped} failed={failed}")
     finally:
         db.close()
+
+    total = len(occ_ids)
+    print(f"[gcal sync] {total} occurrences to sync across {_SYNC_WORKERS} workers…")
+    inserted, updated, skipped, failed = 0, 0, 0, 0
+
+    # Phase 2: fan out — each worker owns its session and GCal service
+    with ThreadPoolExecutor(max_workers=_SYNC_WORKERS) as pool:
+        futures = {pool.submit(_sync_one, occ_id): occ_id for occ_id in occ_ids}
+        for i, future in enumerate(as_completed(futures), 1):
+            occ_id, action, occ_date = future.result()
+            if action == "inserted":
+                inserted += 1
+                print(f"[gcal sync] {i}/{total} inserted occ {occ_id} ({occ_date})")
+            elif action == "updated":
+                updated += 1
+            elif action == "skipped":
+                skipped += 1
+            else:
+                failed += 1
+                print(f"[gcal sync] {i}/{total} FAILED occ {occ_id}: {action[7:]}")
+
+    print(f"[gcal sync] done — inserted={inserted} updated={updated} skipped={skipped} failed={failed}")
 
 
 @router.post("/gcal", response_model=SyncResult)
@@ -238,6 +263,8 @@ def export_ics(
         )
         if ev.description:
             vevent.add("description", ev.description)
+        if ev.location:
+            vevent.add("location", ev.location)
         vevent.add("categories", [ev.category.name.replace("_", " ").title()])
         if ev.amount:
             vevent.add("comment", f"Amount: ${ev.amount}")

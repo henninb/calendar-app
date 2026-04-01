@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import os
+import random
+import time
 from datetime import date, timedelta, datetime
 from typing import Optional
 
@@ -90,11 +92,11 @@ def is_authenticated() -> tuple[bool, Optional[str]]:
         return True, None
 
 
-def sync_occurrence(db: Session, occurrence: Occurrence) -> bool:
+def sync_occurrence(db: Session, occurrence: Occurrence) -> str:
     """
     Push a single Occurrence to Google Calendar as an all-day event.
     Updates occurrence.gcal_event_id and occurrence.synced_at on success.
-    Returns True on success.
+    Returns "inserted" or "updated".
 
     Duplicate-safe decision tree (see _resolve_gcal_id):
       1. gcal_event_id set in DB → attempt update directly
@@ -133,14 +135,16 @@ def sync_occurrence(db: Session, occurrence: Occurrence) -> bool:
             }
         },
     }
+    if event.location:
+        body["location"] = event.location
 
     try:
-        gcal_id = _resolve_gcal_id(service, occurrence, calendar_id, body)
+        gcal_id, action = _resolve_gcal_id(service, occurrence, calendar_id, body)
         occurrence.gcal_event_id = gcal_id
         occurrence.synced_at = datetime.utcnow()
         occurrence.status = OccurrenceStatus.upcoming
         db.commit()
-        return True
+        return action
     except HttpError as e:
         raise RuntimeError(f"Google Calendar API error: {e}") from e
 
@@ -191,10 +195,34 @@ def wipe_all_gcal_events() -> int:
 
 # ── Internals ────────────────────────────────────────────────────────────────
 
-def _resolve_gcal_id(service, occurrence: Occurrence, calendar_id: str, body: dict) -> str:
+_MAX_RETRIES = 6
+_RETRY_BASE_DELAY = 2.0  # seconds; doubles each attempt, capped at 60s
+
+
+def _execute(request) -> dict:
+    """
+    Call request.execute() with exponential backoff + jitter on rate-limit errors.
+    Retries up to _MAX_RETRIES times on HTTP 429 or 403 rateLimitExceeded.
+    All other HttpErrors propagate immediately.
+    """
+    delay = _RETRY_BASE_DELAY
+    for attempt in range(_MAX_RETRIES):
+        try:
+            return request.execute()
+        except HttpError as e:
+            is_rate_limit = e.resp.status in (429, 403) and "rateLimitExceeded" in str(e)
+            if not is_rate_limit or attempt == _MAX_RETRIES - 1:
+                raise
+            sleep_time = delay + random.uniform(0, delay * 0.5)
+            print(f"[gcal] rate limit hit, backing off {sleep_time:.1f}s (attempt {attempt + 1}/{_MAX_RETRIES})…")
+            time.sleep(sleep_time)
+            delay = min(delay * 2, 60)
+
+
+def _resolve_gcal_id(service, occurrence: Occurrence, calendar_id: str, body: dict) -> tuple[str, str]:
     """
     Ensure exactly one GCal event exists for this occurrence with current content.
-    Returns the canonical gcal_event_id.
+    Returns (gcal_event_id, action) where action is "inserted" or "updated".
 
     Step 1 — gcal_event_id set in DB:
       Attempt events().update() directly (one API call, immediately consistent).
@@ -211,11 +239,11 @@ def _resolve_gcal_id(service, occurrence: Occurrence, calendar_id: str, body: di
 
     if gcal_id:
         try:
-            service.events().update(
+            _execute(service.events().update(
                 calendarId=calendar_id, eventId=gcal_id, body=body
-            ).execute()
+            ))
             print(f"[gcal sync] occ {occurrence.id} ({occurrence.occurrence_date}): updated {gcal_id}")
-            return gcal_id
+            return gcal_id, "updated"
         except HttpError as e:
             if e.resp.status != 404:
                 raise
@@ -225,10 +253,10 @@ def _resolve_gcal_id(service, occurrence: Occurrence, calendar_id: str, body: di
 
     # gcal_event_id was None or just confirmed missing — search by private tag
     expected_date = occurrence.occurrence_date.isoformat()
-    search = service.events().list(
+    search = _execute(service.events().list(
         calendarId=calendar_id,
         privateExtendedProperty=f"calendarAppId={occurrence.id}",
-    ).execute()
+    ))
     existing = search.get("items", [])
 
     if existing:
@@ -238,14 +266,14 @@ def _resolve_gcal_id(service, occurrence: Occurrence, calendar_id: str, body: di
 
         if found_date == expected_date:
             # Correct event — update to ensure content is current
-            service.events().update(
+            _execute(service.events().update(
                 calendarId=calendar_id, eventId=found_id, body=body
-            ).execute()
+            ))
             print(
                 f"[gcal sync] occ {occurrence.id} ({occurrence.occurrence_date}): "
                 f"adopted existing event {found_id}"
             )
-            return found_id
+            return found_id, "updated"
 
         # Date mismatch → stale event from a previous DB lifecycle; replace it
         print(
@@ -257,10 +285,10 @@ def _resolve_gcal_id(service, occurrence: Occurrence, calendar_id: str, body: di
         except HttpError:
             pass  # already gone from GCal — safe to proceed
 
-    result = service.events().insert(calendarId=calendar_id, body=body).execute()
+    result = _execute(service.events().insert(calendarId=calendar_id, body=body))
     new_id = result["id"]
     print(f"[gcal sync] occ {occurrence.id} ({occurrence.occurrence_date}): inserted {new_id}")
-    return new_id
+    return new_id, "inserted"
 
 
 def _build_flow() -> Flow:

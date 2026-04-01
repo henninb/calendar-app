@@ -102,6 +102,7 @@ class Event(Base):
     duration_days = Column(Integer, default=1)
 
     description = Column(Text)
+    location = Column(String(300))
     reminder_days = Column(JSON, default=[7, 1])
     priority = Column(Enum(Priority), default=Priority.medium)
     amount = Column(Numeric(10, 2))

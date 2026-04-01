@@ -79,7 +79,7 @@ def fetch_mlb_schedule(year: int) -> list[tuple]:
             else:
                 title = f"Twins @ {opp}"
                 desc  = f"Minnesota Twins at {opp} ({venue}) — {ct_time}"
-            games.append((title, "mlb", None, date(y, m, d), desc, Priority.low, [], None))
+            games.append((title, "mlb", None, date(y, m, d), desc, Priority.low, [], None, venue))
 
     print(f"Fetched {len(games)} Twins games ({year} season).")
     return games
@@ -117,7 +117,7 @@ def fetch_nba_schedule(season_year: int) -> list[tuple]:
         else:
             title = f"Wolves @ {opp}"
             desc  = f"Minnesota Timberwolves at {opp} ({venue}) — {ct_time}"
-        games.append((title, "nba", None, date(y, m, d), desc, Priority.low, [], None))
+        games.append((title, "nba", None, date(y, m, d), desc, Priority.low, [], None, venue))
 
     print(f"Fetched {len(games)} Wolves games ({season_year}-{str(season_year + 1)[-2:]} season).")
     return games
@@ -155,7 +155,7 @@ def fetch_nhl_schedule(season_year: int) -> list[tuple]:
         else:
             title = f"Wild @ {opp}"
             desc  = f"Minnesota Wild at {opp} ({venue}) — {ct_time}"
-        games.append((title, "nhl", None, date(y, m, d), desc, Priority.low, [], None))
+        games.append((title, "nhl", None, date(y, m, d), desc, Priority.low, [], None, venue))
 
     print(f"Fetched {len(games)} Wild games ({season_year}-{str(season_year + 1)[-2:]} season).")
     return games
@@ -172,6 +172,20 @@ EXAMPLE_EVENTS = [
      date(2000, 3, 2),    "Johnny's birthday",                 Priority.high,   [7, 1],  None),
     ("Birthday: Frank Walsh",        "birthday",          "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=23",
      date(2000, 3, 23),   "Frank Walsh's birthday",            Priority.high,   [7, 1],  None),
+    ("Birthday: Matthew",            "birthday",          "FREQ=YEARLY;BYMONTH=6;BYMONTHDAY=2",
+     date(2000, 6, 2),    "Matthew's birthday",                Priority.high,   [7, 1],  None),
+    ("Birthday: Maggie",             "birthday",          "FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=28",
+     date(2000, 4, 28),   "Maggie's birthday",                 Priority.high,   [7, 1],  None),
+    ("Birthday: Lilly",              "birthday",          "FREQ=YEARLY;BYMONTH=8;BYMONTHDAY=14",
+     date(2000, 8, 14),   "Lilly's birthday",                  Priority.high,   [7, 1],  None),
+    ("Birthday: Kathryn",            "birthday",          "FREQ=YEARLY;BYMONTH=8;BYMONTHDAY=12",
+     date(2000, 8, 12),   "Kathryn's birthday",                Priority.high,   [7, 1],  None),
+    ("Birthday: Kari",               "birthday",          "FREQ=YEARLY;BYMONTH=8;BYMONTHDAY=15",
+     date(2000, 8, 15),   "Kari's birthday",                   Priority.high,   [7, 1],  None),
+
+    # ── Anniversary ──────────────────────────────────────────────────────────
+    ("Wedding Anniversary",          "other",             "FREQ=YEARLY;BYMONTH=10;BYMONTHDAY=16",
+     date(2000, 10, 16),  "Wedding anniversary — October 16",  Priority.high,   [14, 7, 1], None),
 
     # ── Car Maintenance ──────────────────────────────────────────────────────
     ("Oil Change — Toyota Highlander","car_maintenance",  "FREQ=MONTHLY;INTERVAL=3",
@@ -315,7 +329,7 @@ EXAMPLE_EVENTS = [
 
     # ── Other ────────────────────────────────────────────────────────────────
     ("Chairman's Club — Fairmont Mayakoba","other",         None,
-     date(2026, 5, 19),  "Chairman's Club trip — Fairmont Mayakoba, Mexico (May 19–22)", Priority.high, [30, 7, 1], None),
+     date(2026, 5, 19),  "Chairman's Club trip — Fairmont Mayakoba, Mexico (May 19–22)", Priority.high, [30, 7, 1], None, "Fairmont Mayakoba, Playa del Carmen, Mexico"),
     ("Kathryn — Confirmation",            "other",         None,
      date(2026, 5, 10),  "Kathryn's confirmation — Mother's Day", Priority.high, [14, 7, 1], None),
     ("Kathryn — Candle Passing",          "other",         None,
@@ -393,9 +407,9 @@ EXAMPLE_EVENTS = [
     ("Maggie — Completes Fort Gordon",    "other",         None,
      date(2027, 2, 1),   "Maggie completes training at Fort Gordon, GA — update with exact date", Priority.high, [14, 7, 1], None),
     ("Black Hat USA",                     "other",         "FREQ=YEARLY;BYMONTH=8;BYDAY=1SA",
-     date(2026, 8, 1),    "Black Hat USA — Mandalay Bay, Las Vegas. Trainings early Aug, Briefings mid-Aug", Priority.high, [30, 7], None),
+     date(2026, 8, 1),    "Black Hat USA — Mandalay Bay, Las Vegas. Trainings early Aug, Briefings mid-Aug", Priority.high, [30, 7], None, "Mandalay Bay Convention Center, Las Vegas, NV"),
     ("DEF CON",                           "other",         "FREQ=YEARLY;BYMONTH=8;BYDAY=2SA",
-     date(2026, 8, 6),    "DEF CON — Las Vegas Convention Center, typically second weekend of August", Priority.high, [30, 7], None),
+     date(2026, 8, 6),    "DEF CON — Las Vegas Convention Center, typically second weekend of August", Priority.high, [30, 7], None, "Las Vegas Convention Center, Las Vegas, NV"),
     ("Kids Fishing Event — Lake George",  "other",         "FREQ=YEARLY;BYMONTH=8;BYDAY=1FR",
      date(2026, 8, 7),    "Kids fishing event at Lake George, Oak Grove — first Friday of August", Priority.high, [14, 7, 1], None),
     ("CAST Fishing Tournament — Sign Up", "other",         "FREQ=YEARLY;BYMONTH=6;BYMONTHDAY=1",
@@ -507,22 +521,22 @@ EXAMPLE_EVENTS = [
     # Anoka County Fair: Tuesday in July 21–27 (6-day run Tue–Sun); 2024 started Sunday (outlier*)
     # MN State Fair: Thursday in Aug 22–28 — runs 12 days, ending on or just after Labor Day
     ("Anoka County Fair",               "other", "FREQ=YEARLY;BYMONTH=7;BYDAY=TU;BYMONTHDAY=21,22,23,24,25,26,27",
-     date(2026, 7, 21),  "Anoka County Fair, Anoka MN — 6-day fair (Tue-Sun). 4-H exhibits, livestock shows, demo derby, rides, vendors, entertainment, food, and fireworks.", Priority.high, [14, 7, 1], None),
+     date(2026, 7, 21),  "Anoka County Fair, Anoka MN — 6-day fair (Tue-Sun). 4-H exhibits, livestock shows, demo derby, rides, vendors, entertainment, food, and fireworks.", Priority.high, [14, 7, 1], None, "Anoka County Fairgrounds, 550 Bunker Lake Blvd NW, Andover, MN 55304"),
     ("Minnesota State Fair",            "other", "FREQ=YEARLY;BYMONTH=8;BYDAY=TH;BYMONTHDAY=22,23,24,25,26,27,28",
-     date(2026, 8, 27),  "Minnesota State Fair (The Great Minnesota Get-Together), Falcon Heights MN — 12-day fair (Thu–Mon) ending on or just after Labor Day. Carnival rides, concerts, competitions, exhibits, food vendors, and more.", Priority.high, [30, 14, 7, 1], None),
+     date(2026, 8, 27),  "Minnesota State Fair (The Great Minnesota Get-Together), Falcon Heights MN — 12-day fair (Thu–Mon) ending on or just after Labor Day. Carnival rides, concerts, competitions, exhibits, food vendors, and more.", Priority.high, [30, 14, 7, 1], None, "Minnesota State Fairgrounds, 1265 Snelling Ave N, Falcon Heights, MN 55108"),
 
     # ── Local parades ────────────────────────────────────────────────────────
     # Pioneer Days (St. Francis): last Friday of May — 3-day festival (Fri–Sun), parade on Saturday
     # Happy Days (Ramsey): Saturday in Sept 6–12 — always the Saturday after Labor Day
     # Anoka Halloween: two parade Saturdays in October — 3rd Sat (opener) and 4th Sat (Grande Day)
     ("St. Francis Pioneer Days Festival",       "other", "FREQ=YEARLY;BYMONTH=5;BYDAY=-1FR",
-     date(2026, 5, 29),  "St. Francis Pioneer Days — 3-day festival (Fri-Sun), last weekend of May. Parade on Saturday.", Priority.high,   [14, 7, 1], None),
+     date(2026, 5, 29),  "St. Francis Pioneer Days — 3-day festival (Fri-Sun), last weekend of May. Parade on Saturday.", Priority.high,   [14, 7, 1], None, "St. Francis, MN"),
     ("Happy Days Parade — Ramsey",              "other", "FREQ=YEARLY;BYMONTH=9;BYDAY=SA;BYMONTHDAY=6,7,8,9,10,11,12",
-     date(2026, 9, 12),  "Happy Days Parade in Ramsey, MN — Saturday after Labor Day (Sept 6–12)",     Priority.high,   [7, 1], None),
+     date(2026, 9, 12),  "Happy Days Parade in Ramsey, MN — Saturday after Labor Day (Sept 6–12)",     Priority.high,   [7, 1], None, "Ramsey, MN"),
     ("Halloween Parade — Anoka",                "other", "FREQ=YEARLY;BYMONTH=10;BYDAY=3SA",
-     date(2025, 10, 18), "Anoka Halloween parade — 3rd Saturday of October (opening parade of the season)", Priority.high, [7, 1], None),
+     date(2025, 10, 18), "Anoka Halloween parade — 3rd Saturday of October (opening parade of the season)", Priority.high, [7, 1], None, "Anoka, MN"),
     ("Halloween Grande Day Parade — Anoka",     "other", "FREQ=YEARLY;BYMONTH=10;BYDAY=4SA",
-     date(2026, 10, 24), "Halloween Grande Day Parade in Anoka, MN — 4th Saturday of October (main parade)", Priority.high, [7, 1], None),
+     date(2026, 10, 24), "Halloween Grande Day Parade in Anoka, MN — 4th Saturday of October (main parade)", Priority.high, [7, 1], None, "Anoka, MN"),
 ]
 
 CREDIT_CARDS = [
@@ -563,6 +577,9 @@ def _ensure_is_seeded_columns(db) -> None:
         db.execute(text(
             f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS is_seeded BOOLEAN DEFAULT FALSE"
         ))
+    db.execute(text(
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS location VARCHAR(300)"
+    ))
     db.commit()
 
 
@@ -644,7 +661,7 @@ def reconcile_categories(db) -> dict[str, int]:
 
 _RECURRENCE_FIELDS = frozenset({"rrule", "dtstart"})
 _EVENT_COMPARE_FIELDS = ("category_id", "rrule", "dtstart", "description",
-                         "priority", "reminder_days", "amount")
+                         "location", "priority", "reminder_days", "amount")
 
 
 def _event_diff(ev: Event, data: dict) -> tuple[bool, bool]:
@@ -686,7 +703,9 @@ def reconcile_events(db, cat_map: dict[str, int]) -> None:
 
     # Build seed dict keyed by (title, dtstart)
     seed_events: dict[tuple, dict] = {}
-    for title, cat_name, rrule, dtstart, desc, priority, reminder_days, amount in all_event_tuples:
+    for tup in all_event_tuples:
+        title, cat_name, rrule, dtstart, desc, priority, reminder_days, amount = tup[:8]
+        location = tup[8] if len(tup) > 8 else None
         cat_id = cat_map.get(cat_name)
         if cat_id is None:
             print(f"  WARNING: category '{cat_name}' not found — skipping '{title}'")
@@ -698,6 +717,7 @@ def reconcile_events(db, cat_map: dict[str, int]) -> None:
             rrule=rrule,
             dtstart=dtstart,
             description=desc,
+            location=location,
             priority=priority,
             reminder_days=reminder_days,
             amount=amount,
@@ -721,6 +741,7 @@ def reconcile_events(db, cat_map: dict[str, int]) -> None:
                 rrule=data["rrule"],
                 dtstart=data["dtstart"],
                 description=data["description"],
+                location=data["location"],
                 priority=data["priority"],
                 reminder_days=data["reminder_days"],
                 amount=data["amount"],

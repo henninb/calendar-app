@@ -42,6 +42,7 @@ class EventBase(BaseModel):
     dtend_rule: Optional[date] = None
     duration_days: int = 1
     description: Optional[str] = None
+    location: Optional[str] = None
     reminder_days: list[int] = [7, 1]
     priority: Priority = Priority.medium
     amount: Optional[Decimal] = None
@@ -72,6 +73,7 @@ class EventUpdate(BaseModel):
     dtend_rule: Optional[date] = None
     duration_days: Optional[int] = None
     description: Optional[str] = None
+    location: Optional[str] = None
     reminder_days: Optional[list[int]] = None
     priority: Optional[Priority] = None
     amount: Optional[Decimal] = None
