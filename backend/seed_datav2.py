@@ -329,6 +329,38 @@ EXAMPLE_EVENTS = [
     ("NCAA Frozen Four — Championship", "other", "FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=8,9,10,11,12,13,14;BYDAY=SA",
      date(2023, 4, 8),   "NCAA Men's Ice Hockey Frozen Four — Championship game (evening ET)",          Priority.high, [7, 1], None),
 
+    # ── French Open (Roland Garros) ──────────────────────────────────────────
+    # Main draw starts on the Sunday falling May 24–30 (last Sunday of May before the 31st)
+    # Women's final: Saturday of the second week (June 6–12)
+    # Men's final: Sunday of the second week (June 7–13)
+    ("French Open — Main Draw Begins",  "other", "FREQ=YEARLY;BYMONTH=5;BYDAY=SU;BYMONTHDAY=24,25,26,27,28,29,30",
+     date(2024, 5, 26),  "Roland Garros main draw begins — two-week Grand Slam clay-court tournament in Paris", Priority.medium, [7, 1], None),
+    ("French Open — Women's Final",     "other", "FREQ=YEARLY;BYMONTH=6;BYDAY=SA;BYMONTHDAY=6,7,8,9,10,11,12",
+     date(2024, 6, 8),   "Roland Garros Women's Singles Final (Saturday of the second week)",           Priority.high,   [3, 1], None),
+    ("French Open — Men's Final",       "other", "FREQ=YEARLY;BYMONTH=6;BYDAY=SU;BYMONTHDAY=7,8,9,10,11,12,13",
+     date(2024, 6, 9),   "Roland Garros Men's Singles Final (Sunday of the second week)",               Priority.high,   [3, 1], None),
+
+    # ── Wimbledon Championships ──────────────────────────────────────────────
+    # Always starts Monday of ISO week 27 (June 28 – July 4 window)
+    # Finals on the last weekend: Women's Saturday of week 28, Men's Sunday of week 28
+    ("Wimbledon — Main Draw Begins",    "other", "FREQ=YEARLY;BYWEEKNO=27;BYDAY=MO",
+     date(2023, 7, 3),   "Wimbledon Championships main draw begins — two-week Grand Slam grass-court tournament in London", Priority.medium, [7, 1], None),
+    ("Wimbledon — Women's Final",       "other", "FREQ=YEARLY;BYWEEKNO=28;BYDAY=SA",
+     date(2023, 7, 15),  "Wimbledon Women's Singles Final (Saturday of the second week)",               Priority.high,   [3, 1], None),
+    ("Wimbledon — Men's Final",         "other", "FREQ=YEARLY;BYWEEKNO=28;BYDAY=SU",
+     date(2023, 7, 16),  "Wimbledon Men's Singles Final (Sunday of the second week)",                   Priority.high,   [3, 1], None),
+
+    # ── US Open (hard court, Flushing Meadows, New York) ─────────────────────
+    # Main draw starts Monday of ISO week 35 (last Monday of August)
+    # Note: from ~2025 onward the tournament opens Sunday of week 34 (one day earlier)
+    # Women's Final: Saturday of ISO week 36; Men's Final: Sunday of ISO week 36
+    ("US Open — Main Draw Begins",      "other", "FREQ=YEARLY;BYWEEKNO=35;BYDAY=MO",
+     date(2023, 8, 28),  "US Open main draw begins — two-week Grand Slam hard-court tournament in Flushing Meadows, New York", Priority.medium, [7, 1], None),
+    ("US Open — Women's Final",         "other", "FREQ=YEARLY;BYWEEKNO=36;BYDAY=SA",
+     date(2023, 9, 9),   "US Open Women's Singles Final (Saturday of the second week)",                 Priority.high,   [3, 1], None),
+    ("US Open — Men's Final",           "other", "FREQ=YEARLY;BYWEEKNO=36;BYDAY=SU",
+     date(2023, 9, 10),  "US Open Men's Singles Final (Sunday of the second week)",                     Priority.high,   [3, 1], None),
+
     ("Maggie — Associates Degree Graduation", "other",      None,
      date(2026, 5, 15),  "Maggie graduates with Associates degree from community college", Priority.high, [14, 7, 1], None),
     ("Maggie — Graduation Ceremony",      "other",         None,
