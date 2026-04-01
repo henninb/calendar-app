@@ -309,6 +309,10 @@ EXAMPLE_EVENTS = [
     ("Update — Next.js Finance App", "software",          "FREQ=MONTHLY;BYMONTHDAY=16",
      date(2026, 4, 16),   "Next.js finance app dependency and version update", Priority.medium, [1], None),
 
+    # ── NFL ──────────────────────────────────────────────────────────────────
+    ("Super Bowl",                        "other",         "FREQ=YEARLY;BYMONTH=2;BYDAY=2SU",
+     date(2027, 2, 8),    "NFL Super Bowl — typically the second Sunday of February", Priority.high, [7, 1], None),
+
     # ── Other ────────────────────────────────────────────────────────────────
     ("Chairman's Club — Fairmont Mayakoba","other",         None,
      date(2026, 5, 19),  "Chairman's Club trip — Fairmont Mayakoba, Mexico (May 19–22)", Priority.high, [30, 7, 1], None),

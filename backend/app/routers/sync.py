@@ -67,25 +67,35 @@ def _run_gcal_sync(days_ahead: int, force: bool = False):
         )
         if not force:
             q = q.filter(Occurrence.synced_at.is_(None))
-        occs = q.all()
-        print(f"[gcal sync] {len(occs)} occurrences to sync…")
+        occ_ids = [occ.id for occ in q.all()]
+        total = len(occ_ids)
+        print(f"[gcal sync] {total} occurrences to sync…")
         synced, skipped, failed = 0, 0, 0
-        for i, occ in enumerate(occs, 1):
-            # Snapshot identity fields now — if the session breaks these attributes
-            # become inaccessible without triggering a reload on a broken session.
-            occ_id   = occ.id
+        for i, occ_id in enumerate(occ_ids, 1):
+            # Reload each occurrence fresh — a rollback in a prior iteration expires
+            # all session objects, so referencing the original list triggers a DB
+            # refresh that raises ObjectDeletedError if the row was deleted.
+            occ = (
+                db.query(Occurrence)
+                .options(joinedload(Occurrence.event).joinedload(Event.category))
+                .filter(Occurrence.id == occ_id)
+                .first()
+            )
+            if occ is None:
+                skipped += 1
+                continue
             occ_date = occ.occurrence_date
             try:
                 inserted = gcal.sync_occurrence(db, occ)
                 if inserted:
                     synced += 1
-                    print(f"[gcal sync] {i}/{len(occs)} synced occ {occ_id} ({occ_date})")
+                    print(f"[gcal sync] {i}/{total} synced occ {occ_id} ({occ_date})")
                 else:
                     skipped += 1
             except Exception as exc:
                 failed += 1
-                db.rollback()  # clear pending-rollback state before next iteration
-                print(f"[gcal sync] {i}/{len(occs)} FAILED occ {occ_id} ({occ_date}): {exc}")
+                db.rollback()
+                print(f"[gcal sync] {i}/{total} FAILED occ {occ_id} ({occ_date}): {exc}")
         print(f"[gcal sync] done — synced={synced} skipped={skipped} failed={failed}")
     finally:
         db.close()
@@ -111,11 +121,14 @@ def _run_gcal_delete_all():
     """Background worker — deletes all synced Google Calendar events and clears sync state."""
     db = SessionLocal()
     try:
-        occs = db.query(Occurrence).filter(Occurrence.gcal_event_id.isnot(None)).all()
-        total = len(occs)
+        occ_ids = [o.id for o in db.query(Occurrence).filter(Occurrence.gcal_event_id.isnot(None)).all()]
+        total = len(occ_ids)
         print(f"[gcal delete] {total} synced occurrences to remove from Google Calendar…")
         deleted, failed = 0, 0
-        for i, occ in enumerate(occs, 1):
+        for i, occ_id in enumerate(occ_ids, 1):
+            occ = db.query(Occurrence).filter(Occurrence.id == occ_id).first()
+            if occ is None:
+                continue
             try:
                 gcal.delete_gcal_event(occ)
                 occ.gcal_event_id = None
@@ -125,7 +138,8 @@ def _run_gcal_delete_all():
                 print(f"[gcal delete] {i}/{total} deleted occ {occ.id} ({occ.occurrence_date})")
             except Exception as exc:
                 failed += 1
-                print(f"[gcal delete] {i}/{total} FAILED occ {occ.id} ({occ.occurrence_date}): {exc}")
+                db.rollback()
+                print(f"[gcal delete] {i}/{total} FAILED occ {occ_id}: {exc}")
         print(f"[gcal delete] done — deleted={deleted} failed={failed}")
     finally:
         db.close()
