@@ -1,29 +1,42 @@
 #!/usr/bin/env python3
 """
-Seed the database with default categories and example events.
+seed_datav2.py — Reconciliation-based seed for the calendar-app database.
 
-Run once after the DB is created:
-    python seed_data.py
+Unlike seed_data.py (wipe-and-replace), this script performs per-record upserts:
+  - INSERT if the record does not exist (by natural key)
+  - UPDATE only changed fields if the record exists
+  - DELETE seeded records removed from seed data (via is_seeded flag)
+  - Preserve user-created records and GCal linkage on unchanged occurrences
 
-Requires DATABASE_URL in .env or environment.
+The is_seeded column is added to categories, events, and credit_cards on first
+run via ALTER TABLE ADD COLUMN IF NOT EXISTS (idempotent, PostgreSQL).
+
+Commands:
+  reconcile   Upsert all seed data (default)
+  seed        Alias for reconcile
+  reseed      Legacy wipe-and-replace (kept for emergencies — destroys GCal linkage)
+  cards       Reconcile credit cards only
 """
+import sys
 import urllib.request
 import json
 from datetime import date, datetime, timezone, timedelta
+from sqlalchemy import text
+
 from app.config import settings
 from app.database import SessionLocal, Base, engine
-from app.models import Category, CreditCard, Event, Occurrence, Priority, WeekendShift
-from app.services.recurrence import generate_all_occurrences
+from app.models import Category, CreditCard, Event, Occurrence, OccurrenceStatus, Priority, WeekendShift
+from app.services.recurrence import generate_occurrences, generate_all_occurrences
 from app.services.credit_card import ensure_card_events, generate_credit_card_occurrences
 
 Base.metadata.create_all(bind=engine)
 
 
+# ── Central Time helper ───────────────────────────────────────────────────────
+
 def _to_ct(dt: datetime) -> str:
     """Convert a UTC-aware datetime to a Central Time string."""
     year = dt.year
-    # DST starts 2nd Sunday of March at 2am, ends 1st Sunday of November at 2am
-    # Approximate using fixed offsets (close enough for display purposes)
     mar_second_sun = date(year, 3, 8 + (6 - date(year, 3, 1).weekday()) % 7)
     nov_first_sun  = date(year, 11, 1 + (6 - date(year, 11, 1).weekday()) % 7)
     dst_start = datetime(year, mar_second_sun.month, mar_second_sun.day, 8, 0, tzinfo=timezone.utc)
@@ -31,6 +44,8 @@ def _to_ct(dt: datetime) -> str:
     offset = timedelta(hours=-5) if dst_start <= dt < dst_end else timedelta(hours=-6)
     return (dt + offset).strftime('%I:%M %p CT')
 
+
+# ── Sports schedule fetchers ──────────────────────────────────────────────────
 
 def fetch_mlb_schedule(year: int) -> list[tuple]:
     """Fetch the Twins regular-season schedule for the given year from the MLB Stats API."""
@@ -71,10 +86,7 @@ def fetch_mlb_schedule(year: int) -> list[tuple]:
 
 
 def fetch_nba_schedule(season_year: int) -> list[tuple]:
-    """Fetch the Timberwolves schedule for the given season start year from fixturedownload.com.
-
-    season_year=2025 → the 2025-26 NBA season.
-    """
+    """Fetch the Timberwolves schedule for the given season start year."""
     url = f"https://fixturedownload.com/feed/json/nba-{season_year}/minnesota-timberwolves"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -112,10 +124,7 @@ def fetch_nba_schedule(season_year: int) -> list[tuple]:
 
 
 def fetch_nhl_schedule(season_year: int) -> list[tuple]:
-    """Fetch the Wild schedule for the given season start year from fixturedownload.com.
-
-    season_year=2025 → the 2025-26 NHL season.
-    """
+    """Fetch the Wild schedule for the given season start year."""
     url = f"https://fixturedownload.com/feed/json/nhl-{season_year}/minnesota-wild"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -152,14 +161,11 @@ def fetch_nhl_schedule(season_year: int) -> list[tuple]:
     return games
 
 
+# ── Seed data constants ───────────────────────────────────────────────────────
+
 CATEGORIES = settings.categories
 
 # (title, category_name, rrule, dtstart, description, priority, reminder_days, amount)
-# RRULE reference:
-#   FREQ=YEARLY;BYMONTH=M;BYMONTHDAY=D  → every year on month M, day D
-#   FREQ=MONTHLY;BYMONTHDAY=D           → every month on day D
-#   FREQ=MONTHLY;INTERVAL=N             → every N months from dtstart
-#   FREQ=YEARLY;BYMONTH=M1,M2           → twice a year in M1 and M2
 EXAMPLE_EVENTS = [
     # ── Birthdays ────────────────────────────────────────────────────────────
     ("Birthday: Johnny",             "birthday",          "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=2",
@@ -438,7 +444,6 @@ EXAMPLE_EVENTS = [
      date(2026, 1, 1),    "Ash Wednesday — start of Lent",     Priority.low,    [1],  None),
 ]
 
-
 CREDIT_CARDS = [
     CreditCard(name="T-Mobile Visa",         issuer="Capital One",    last_four="XXXX",
                statement_close_day=25, grace_period_days=25, weekend_shift=None),
@@ -469,154 +474,382 @@ CREDIT_CARDS = [
 ]
 
 
-def clear(db):
-    """Delete all seeded data in dependency order."""
-    synced = db.query(Occurrence).filter(Occurrence.gcal_event_id.isnot(None)).count()
-    if synced:
-        raise RuntimeError(
-            f"{synced} occurrence(s) are still linked to Google Calendar events "
-            f"(gcal_event_id is set). Wipe Google Calendar first using the "
-            f"'💣 Wipe Google Cal' button in the UI, then re-run seed_data.py. "
-            f"Re-seeding without wiping GCal first creates orphaned GCal events "
-            f"and breaks all sync linkage."
-        )
-    db.query(Occurrence).delete()
-    db.query(Event).delete()
-    db.query(CreditCard).delete()
-    db.query(Category).delete()
+# ── Runtime migration ─────────────────────────────────────────────────────────
+
+def _ensure_is_seeded_columns(db) -> None:
+    """Add is_seeded BOOLEAN DEFAULT FALSE to tables that don't have it yet (idempotent)."""
+    for table in ("categories", "events", "credit_cards"):
+        db.execute(text(
+            f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS is_seeded BOOLEAN DEFAULT FALSE"
+        ))
     db.commit()
-    print("Cleared all existing data.")
 
 
-def seed(reseed: bool = False):
-    db = SessionLocal()
-    try:
-        if db.query(Category).count() > 0:
-            if not reseed:
-                print("Database already seeded — skipping.")
-                return
-            clear(db)
+# ── is_seeded helpers (raw SQL — column not in ORM model) ────────────────────
 
-        # Insert categories
-        cat_map: dict[str, int] = {}
-        for data in CATEGORIES:
-            cat = Category(**data)
+def _mark_seeded(db, table: str, record_id: int) -> None:
+    db.execute(
+        text(f"UPDATE {table} SET is_seeded = TRUE WHERE id = :id"),
+        {"id": record_id},
+    )
+
+
+def _get_seeded_ids(db, table: str) -> set[int]:
+    """Return the set of IDs where is_seeded = TRUE."""
+    rows = db.execute(
+        text(f"SELECT id FROM {table} WHERE is_seeded = TRUE")
+    ).fetchall()
+    return {row[0] for row in rows}
+
+
+# ── Category reconciliation ───────────────────────────────────────────────────
+
+_CAT_COMPARE_FIELDS = ("color", "icon", "description")
+
+
+def reconcile_categories(db) -> dict[str, int]:
+    """
+    Upsert categories by natural key (name).
+    Returns {name: id} map needed for event FK resolution.
+    """
+    seed_map = {d["name"]: d for d in CATEGORIES}
+    existing = {cat.name: cat for cat in db.query(Category).all()}
+    seeded_ids = _get_seeded_ids(db, "categories")
+
+    inserted = updated = skipped = deleted = 0
+    cat_map: dict[str, int] = {}
+
+    for name, data in seed_map.items():
+        if name not in existing:
+            cat = Category(
+                name=data["name"],
+                color=data.get("color", "#3b82f6"),
+                icon=data.get("icon", "📅"),
+                description=data.get("description"),
+            )
             db.add(cat)
             db.flush()
-            cat_map[cat.name] = cat.id
-        db.commit()
-        print(f"Inserted {len(CATEGORIES)} categories.")
+            _mark_seeded(db, "categories", cat.id)
+            cat_map[name] = cat.id
+            inserted += 1
+        else:
+            cat = existing[name]
+            changed = False
+            for field in _CAT_COMPARE_FIELDS:
+                new_val = data.get(field)
+                if getattr(cat, field) != new_val:
+                    setattr(cat, field, new_val)
+                    changed = True
+            _mark_seeded(db, "categories", cat.id)
+            cat_map[name] = cat.id
+            if changed:
+                updated += 1
+            else:
+                skipped += 1
 
-        # Insert events (static + dynamically fetched sports schedules)
-        today = date.today()
-        mlb_year = today.year
-        # NBA season: if before July the current season started last year
-        nba_season_year = today.year if today.month >= 7 else today.year - 1
-        # NHL season: same cadence as NBA — starts in October
-        nhl_season_year = today.year if today.month >= 7 else today.year - 1
-        all_events = (EXAMPLE_EVENTS
-                      + fetch_mlb_schedule(mlb_year)
-                      + fetch_nba_schedule(nba_season_year)
-                      + fetch_nhl_schedule(nhl_season_year))
-        for title, cat_name, rrule, dtstart, desc, priority, reminder_days, amount in all_events:
-            ev = Event(
-                title=title,
-                category_id=cat_map[cat_name],
-                rrule=rrule,
-                dtstart=dtstart,
-                description=desc,
-                priority=priority,
-                reminder_days=reminder_days,
-                amount=amount,
-            )
-            db.add(ev)
-        db.commit()
-        print(f"Inserted {len(all_events)} events ({len(EXAMPLE_EVENTS)} static + sports schedules).")
+    # Delete seeded categories that were removed from seed data
+    for name, cat in existing.items():
+        if cat.id in seeded_ids and name not in seed_map:
+            db.delete(cat)
+            deleted += 1
 
-        # Insert credit cards + auto-create their close/due/fee events
-        cc_cat_id = cat_map["credit_card"]
-        for card in CREDIT_CARDS:
-            db.add(card)
-            db.flush()
-            ensure_card_events(db, card, cc_cat_id)
-        db.commit()
-        print(f"Inserted {len(CREDIT_CARDS)} credit cards.")
+    db.commit()
+    print(f"Categories  — inserted: {inserted:3d}, updated: {updated:3d}, "
+          f"skipped: {skipped:3d}, deleted: {deleted:3d}")
+    return cat_map
 
-        # Generate occurrences (events + credit cards)
-        result = generate_all_occurrences(db)
-        print(
-            f"Generated {result['occurrences_created']} occurrences "
-            f"across {result['events_processed']} events."
+
+# ── Event reconciliation ──────────────────────────────────────────────────────
+
+_RECURRENCE_FIELDS = frozenset({"rrule", "dtstart"})
+_EVENT_COMPARE_FIELDS = ("category_id", "rrule", "dtstart", "description",
+                         "priority", "reminder_days", "amount")
+
+
+def _event_diff(ev: Event, data: dict) -> tuple[bool, bool]:
+    """Return (any_changed, recurrence_changed)."""
+    any_ch = recur_ch = False
+    for field in _EVENT_COMPARE_FIELDS:
+        old_val = getattr(ev, field)
+        new_val = data[field]
+        # Normalize for comparison: Priority enum vs string, Decimal vs None, etc.
+        if str(old_val) != str(new_val):
+            any_ch = True
+            if field in _RECURRENCE_FIELDS:
+                recur_ch = True
+    return any_ch, recur_ch
+
+
+def reconcile_events(db, cat_map: dict[str, int]) -> None:
+    """
+    Upsert events (static + sports) by natural key (title, dtstart).
+
+    When recurrence fields change:
+      - Upcoming occurrences without a GCal link are deleted and regenerated.
+      - GCal-linked occurrences are left in place (next sync will update them).
+    When non-recurrence fields change:
+      - Fields are updated in place; existing occurrences and GCal links preserved.
+    For unchanged events:
+      - Any new occurrence dates within the lookahead window are added.
+    """
+    today = date.today()
+    mlb_year = today.year
+    sports_season_year = today.year if today.month >= 7 else today.year - 1
+
+    all_event_tuples = (
+        EXAMPLE_EVENTS
+        + fetch_mlb_schedule(mlb_year)
+        + fetch_nba_schedule(sports_season_year)
+        + fetch_nhl_schedule(sports_season_year)
+    )
+
+    # Build seed dict keyed by (title, dtstart)
+    seed_events: dict[tuple, dict] = {}
+    for title, cat_name, rrule, dtstart, desc, priority, reminder_days, amount in all_event_tuples:
+        cat_id = cat_map.get(cat_name)
+        if cat_id is None:
+            print(f"  WARNING: category '{cat_name}' not found — skipping '{title}'")
+            continue
+        key = (title, dtstart)
+        seed_events[key] = dict(
+            title=title,
+            category_id=cat_id,
+            rrule=rrule,
+            dtstart=dtstart,
+            description=desc,
+            priority=priority,
+            reminder_days=reminder_days,
+            amount=amount,
         )
 
-        cc_total = 0
-        for card in db.query(CreditCard).all():
-            cc_total += generate_credit_card_occurrences(db, card)
-        print(f"Generated {cc_total} credit card occurrences.")
+    # Query existing non-credit-card events
+    existing_evs: dict[tuple, Event] = {
+        (ev.title, ev.dtstart): ev
+        for ev in db.query(Event).filter(Event.credit_card_id.is_(None)).all()
+    }
+    seeded_ids = _get_seeded_ids(db, "events")
 
-    finally:
-        db.close()
+    inserted = updated = skipped = deleted = 0
+    occ_added = occ_removed = 0
+
+    for key, data in seed_events.items():
+        if key not in existing_evs:
+            ev = Event(
+                title=data["title"],
+                category_id=data["category_id"],
+                rrule=data["rrule"],
+                dtstart=data["dtstart"],
+                description=data["description"],
+                priority=data["priority"],
+                reminder_days=data["reminder_days"],
+                amount=data["amount"],
+            )
+            db.add(ev)
+            db.flush()
+            _mark_seeded(db, "events", ev.id)
+            occ_added += generate_occurrences(db, ev)
+            inserted += 1
+        else:
+            ev = existing_evs[key]
+            any_ch, recur_ch = _event_diff(ev, data)
+            _mark_seeded(db, "events", ev.id)
+
+            if any_ch:
+                for field in _EVENT_COMPARE_FIELDS:
+                    setattr(ev, field, data[field])
+                db.flush()
+
+                if recur_ch:
+                    # Remove upcoming occurrences without GCal linkage; regenerate
+                    removed = (
+                        db.query(Occurrence)
+                        .filter(
+                            Occurrence.event_id == ev.id,
+                            Occurrence.status == OccurrenceStatus.upcoming,
+                            Occurrence.gcal_event_id.is_(None),
+                        )
+                        .delete(synchronize_session=False)
+                    )
+                    occ_removed += removed
+                    db.flush()
+
+                occ_added += generate_occurrences(db, ev)
+                updated += 1
+            else:
+                # Extend occurrences into the lookahead window if needed
+                occ_added += generate_occurrences(db, ev)
+                skipped += 1
+
+    # Delete seeded events removed from seed data (cascades to occurrences)
+    for key, ev in existing_evs.items():
+        if ev.id in seeded_ids and key not in seed_events:
+            db.delete(ev)
+            deleted += 1
+
+    db.commit()
+    print(f"Events      — inserted: {inserted:3d}, updated: {updated:3d}, "
+          f"skipped: {skipped:3d}, deleted: {deleted:3d}")
+    print(f"Occurrences — added: {occ_added:4d}, removed (recurrence change): {occ_removed:4d}")
 
 
-def seed_cards():
-    """Seed only credit cards — safe to run when categories/events already exist."""
-    db = SessionLocal()
-    try:
-        if db.query(CreditCard).count() > 0:
-            print("Credit cards already seeded — skipping.")
-            return
+# ── Credit card reconciliation ────────────────────────────────────────────────
+
+_CARD_COMPARE_FIELDS = (
+    "issuer", "last_four", "statement_close_day", "grace_period_days",
+    "weekend_shift", "cycle_days", "cycle_reference_date",
+    "due_day_same_month", "due_day_next_month", "annual_fee_month", "is_active",
+)
+
+
+def _card_diff(card: CreditCard, seed_card: CreditCard) -> bool:
+    for field in _CARD_COMPARE_FIELDS:
+        if str(getattr(card, field)) != str(getattr(seed_card, field)):
+            return True
+    return False
+
+
+def reconcile_credit_cards(db, cat_map: dict[str, int]) -> None:
+    """
+    Upsert credit cards by natural key (name, issuer).
+    Calls ensure_card_events and generate_credit_card_occurrences for new or changed cards.
+    """
+    cc_cat_id = cat_map.get("credit_card")
+    if cc_cat_id is None:
         cc_cat = db.query(Category).filter(Category.name == "credit_card").first()
         if not cc_cat:
-            print("ERROR: credit_card category not found. Run seed() first.")
+            print("ERROR: 'credit_card' category not found — skipping credit card reconciliation.")
             return
-        for card in CREDIT_CARDS:
-            db.add(card)
+        cc_cat_id = cc_cat.id
+
+    existing: dict[tuple, CreditCard] = {
+        (c.name, c.issuer): c
+        for c in db.query(CreditCard).all()
+    }
+    seeded_ids = _get_seeded_ids(db, "credit_cards")
+    seed_keys = {(c.name, c.issuer) for c in CREDIT_CARDS}
+
+    inserted = updated = skipped = deleted = 0
+    occ_added = 0
+
+    for seed_card in CREDIT_CARDS:
+        key = (seed_card.name, seed_card.issuer)
+        if key not in existing:
+            db.add(seed_card)
             db.flush()
-            ensure_card_events(db, card, cc_cat.id)
-        db.commit()
-        print(f"Inserted {len(CREDIT_CARDS)} credit cards.")
-        total = 0
-        for card in db.query(CreditCard).all():
-            total += generate_credit_card_occurrences(db, card)
-        print(f"Generated {total} credit card occurrences.")
+            _mark_seeded(db, "credit_cards", seed_card.id)
+            ensure_card_events(db, seed_card, cc_cat_id)
+            occ_added += generate_credit_card_occurrences(db, seed_card)
+            inserted += 1
+        else:
+            card = existing[key]
+            _mark_seeded(db, "credit_cards", card.id)
+            if _card_diff(card, seed_card):
+                for field in _CARD_COMPARE_FIELDS:
+                    setattr(card, field, getattr(seed_card, field))
+                db.flush()
+                ensure_card_events(db, card, cc_cat_id)
+                occ_added += generate_credit_card_occurrences(db, card)
+                updated += 1
+            else:
+                occ_added += generate_credit_card_occurrences(db, card)
+                skipped += 1
+
+    # Delete seeded cards removed from seed data (cascades to events + occurrences)
+    for key, card in existing.items():
+        if card.id in seeded_ids and key not in seed_keys:
+            db.delete(card)
+            deleted += 1
+
+    db.commit()
+    print(f"CreditCards — inserted: {inserted:3d}, updated: {updated:3d}, "
+          f"skipped: {skipped:3d}, deleted: {deleted:3d}")
+    print(f"CC Occurrences added: {occ_added}")
+
+
+# ── Top-level commands ────────────────────────────────────────────────────────
+
+def reconcile() -> None:
+    """Reconcile all seed data against the DB (idempotent upsert)."""
+    db = SessionLocal()
+    try:
+        print("Running is_seeded column migration...")
+        _ensure_is_seeded_columns(db)
+
+        print("\nReconciling categories...")
+        cat_map = reconcile_categories(db)
+
+        print("\nReconciling events...")
+        reconcile_events(db, cat_map)
+
+        print("\nReconciling credit cards...")
+        reconcile_credit_cards(db, cat_map)
+
+        print("\nDone.")
     finally:
         db.close()
 
 
+def reconcile_cards_only() -> None:
+    """Reconcile credit cards only (categories must already exist)."""
+    db = SessionLocal()
+    try:
+        _ensure_is_seeded_columns(db)
+        cat_map = {cat.name: cat.id for cat in db.query(Category).all()}
+        print("Reconciling credit cards...")
+        reconcile_credit_cards(db, cat_map)
+        print("Done.")
+    finally:
+        db.close()
+
+
+def legacy_reseed() -> None:
+    """
+    Legacy wipe-and-replace (v1 behavior). Kept for emergency use only.
+    Destroys all GCal linkage and user-created records. Use reconcile() instead.
+    """
+    from seed_data import seed  # type: ignore[import]
+    print()
+    print("  WARNING: reseed is a destructive operation!")
+    print("  This will wipe ALL existing data and re-seed from scratch.")
+    print("  All GCal linkage and user-created records will be permanently destroyed.")
+    print("  Use 'reconcile' instead unless you are certain this is what you want.")
+    print()
+    answer = input("  Type YES to continue, or anything else to abort: ").strip()
+    if answer != "YES":
+        print("Aborted.")
+        sys.exit(0)
+    print()
+    seed(reseed=True)
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
 if __name__ == "__main__":
-    import sys
     args = sys.argv[1:]
+
     if not args or "--help" in args or "-h" in args:
-        print("Usage: seed_data.py [command]")
+        print("Usage: seed_datav2.py [command]")
         print()
         print("Commands:")
-        print("  seed      Seed the database (default — skips if already seeded)")
-        print("  reseed    Clear all data and re-seed from scratch")
-        print("  cards     Seed credit cards only (requires categories to exist)")
+        print("  reconcile   Upsert all seed data (default — safe to re-run)")
+        print("  seed        Alias for reconcile")
+        print("  cards       Reconcile credit cards only")
+        print("  reseed      Legacy wipe-and-replace (destroys GCal linkage)")
         print()
         print("Examples:")
-        print("  ./seed_data.py")
-        print("  ./seed_data.py reseed")
-        print("  ./seed_data.py cards")
+        print("  ./seed_datav2.py")
+        print("  ./seed_datav2.py reconcile")
+        print("  ./seed_datav2.py cards")
         sys.exit(0)
-    if "cards" in args:
-        seed_cards()
-    elif "reseed" in args:
-        print()
-        print("  WARNING: reseed is a destructive operation!")
-        print("  This will wipe ALL existing data and re-seed from scratch.")
-        print("  All GCal linkage and user-created records will be permanently destroyed.")
-        print("  Use 'seed' instead unless you are certain this is what you want.")
-        print()
-        answer = input("  Type YES to continue, or anything else to abort: ").strip()
-        if answer != "YES":
-            print("Aborted.")
-            sys.exit(0)
-        print()
-        seed(reseed=True)
-    elif "seed" in args:
-        seed()
+
+    cmd = args[0]
+    if cmd in ("reconcile", "seed"):
+        reconcile()
+    elif cmd == "cards":
+        reconcile_cards_only()
+    elif cmd == "reseed":
+        legacy_reseed()
     else:
-        print(f"Unknown command: {args[0]}")
-        print("Run ./seed_data.py --help for usage.")
+        print(f"Unknown command: {cmd}")
+        print("Run ./seed_datav2.py --help for usage.")
         sys.exit(1)
