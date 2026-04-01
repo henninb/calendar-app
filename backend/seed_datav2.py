@@ -361,6 +361,21 @@ EXAMPLE_EVENTS = [
     ("US Open — Men's Final",           "other", "FREQ=YEARLY;BYWEEKNO=36;BYDAY=SU",
      date(2023, 9, 10),  "US Open Men's Singles Final (Sunday of the second week)",                     Priority.high,   [3, 1], None),
 
+    # ── Australian Open (hard court, Melbourne Park, Australia) ──────────────
+    # Main draw starts Monday of ISO week 3 (historically; from ~2024 opens Sunday of week 2)
+    # Women's Final: Saturday of ISO week 4; Men's Final: Sunday of ISO week 4
+    ("Australian Open — Main Draw Begins", "other", "FREQ=YEARLY;BYWEEKNO=3;BYDAY=MO",
+     date(2023, 1, 16),  "Australian Open main draw begins — two-week Grand Slam hard-court tournament in Melbourne", Priority.medium, [7, 1], None),
+    ("Australian Open — Women's Final", "other", "FREQ=YEARLY;BYWEEKNO=4;BYDAY=SA",
+     date(2023, 1, 28),  "Australian Open Women's Singles Final (Saturday of the second week)",         Priority.high,   [3, 1], None),
+    ("Australian Open — Men's Final",   "other", "FREQ=YEARLY;BYWEEKNO=4;BYDAY=SU",
+     date(2023, 1, 29),  "Australian Open Men's Singles Final (Sunday of the second week)",             Priority.high,   [3, 1], None),
+
+    # ── Kentucky Derby ───────────────────────────────────────────────────────
+    # Always the first Saturday in May; Churchill Downs, Louisville KY; dirt surface
+    ("Kentucky Derby",                  "other", "FREQ=YEARLY;BYMONTH=5;BYDAY=1SA",
+     date(2023, 5, 6),   "Kentucky Derby — first Saturday in May at Churchill Downs, Louisville, KY",  Priority.high,   [7, 1], None),
+
     ("Maggie — Associates Degree Graduation", "other",      None,
      date(2026, 5, 15),  "Maggie graduates with Associates degree from community college", Priority.high, [14, 7, 1], None),
     ("Maggie — Graduation Ceremony",      "other",         None,
@@ -483,6 +498,27 @@ EXAMPLE_EVENTS = [
      date(2026, 1, 1),    "Palm Sunday — one week before Easter", Priority.low, [1],  None),
     ("Ash Wednesday",                "holiday",           "EASTER-46",
      date(2026, 1, 1),    "Ash Wednesday — start of Lent",     Priority.low,    [1],  None),
+
+    # ── Local fairs ──────────────────────────────────────────────────────────
+    # Anoka County Fair: Tuesday in July 21–27 (6-day run Tue–Sun); 2024 started Sunday (outlier*)
+    # MN State Fair: Thursday in Aug 22–28 — runs 12 days, ending on or just after Labor Day
+    ("Anoka County Fair",               "other", "FREQ=YEARLY;BYMONTH=7;BYDAY=TU;BYMONTHDAY=21,22,23,24,25,26,27",
+     date(2026, 7, 21),  "Anoka County Fair, Anoka MN — 6-day fair (Tue-Sun). 4-H exhibits, livestock shows, demo derby, rides, vendors, entertainment, food, and fireworks.", Priority.high, [14, 7, 1], None),
+    ("Minnesota State Fair",            "other", "FREQ=YEARLY;BYMONTH=8;BYDAY=TH;BYMONTHDAY=22,23,24,25,26,27,28",
+     date(2026, 8, 27),  "Minnesota State Fair (The Great Minnesota Get-Together), Falcon Heights MN — 12-day fair (Thu–Mon) ending on or just after Labor Day. Carnival rides, concerts, competitions, exhibits, food vendors, and more.", Priority.high, [30, 14, 7, 1], None),
+
+    # ── Local parades ────────────────────────────────────────────────────────
+    # Pioneer Days (St. Francis): last Friday of May — 3-day festival (Fri–Sun), parade on Saturday
+    # Happy Days (Ramsey): Saturday in Sept 6–12 — always the Saturday after Labor Day
+    # Anoka Halloween: two parade Saturdays in October — 3rd Sat (opener) and 4th Sat (Grande Day)
+    ("St. Francis Pioneer Days Festival",       "other", "FREQ=YEARLY;BYMONTH=5;BYDAY=-1FR",
+     date(2026, 5, 29),  "St. Francis Pioneer Days — 3-day festival (Fri-Sun), last weekend of May. Parade on Saturday.", Priority.high,   [14, 7, 1], None),
+    ("Happy Days Parade — Ramsey",              "other", "FREQ=YEARLY;BYMONTH=9;BYDAY=SA;BYMONTHDAY=6,7,8,9,10,11,12",
+     date(2026, 9, 12),  "Happy Days Parade in Ramsey, MN — Saturday after Labor Day (Sept 6–12)",     Priority.high,   [7, 1], None),
+    ("Halloween Parade — Anoka",                "other", "FREQ=YEARLY;BYMONTH=10;BYDAY=3SA",
+     date(2025, 10, 18), "Anoka Halloween parade — 3rd Saturday of October (opening parade of the season)", Priority.high, [7, 1], None),
+    ("Halloween Grande Day Parade — Anoka",     "other", "FREQ=YEARLY;BYMONTH=10;BYDAY=4SA",
+     date(2026, 10, 24), "Halloween Grande Day Parade in Anoka, MN — 4th Saturday of October (main parade)", Priority.high, [7, 1], None),
 ]
 
 CREDIT_CARDS = [
