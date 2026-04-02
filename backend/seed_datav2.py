@@ -284,14 +284,6 @@ EXAMPLE_EVENTS = [
      date(2026, 4, 15),   "Federal income tax filing deadline", Priority.high,  [60, 30, 7], None),
     ("Minnesota State Taxes Due",    "tax",               "FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=15",
      date(2026, 4, 15),   "Minnesota state income tax filing deadline", Priority.high, [60, 30, 7], None),
-    ("Quarterly Estimated Tax — Q1", "tax",               "FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=15",
-     date(2026, 4, 15),   "Q1 estimated tax payment",          Priority.high,   [14, 3], None),
-    ("Quarterly Estimated Tax — Q2", "tax",               "FREQ=YEARLY;BYMONTH=6;BYMONTHDAY=15",
-     date(2026, 6, 15),   "Q2 estimated tax payment",          Priority.high,   [14, 3], None),
-    ("Quarterly Estimated Tax — Q3", "tax",               "FREQ=YEARLY;BYMONTH=9;BYMONTHDAY=15",
-     date(2026, 9, 15),   "Q3 estimated tax payment",          Priority.high,   [14, 3], None),
-    ("Quarterly Estimated Tax — Q4", "tax",               "FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=15",
-     date(2027, 1, 15),   "Q4 estimated tax payment",          Priority.high,   [14, 3], None),
 
     # ── Finance ──────────────────────────────────────────────────────────────
     ("TGT Earnings Report",          "finance",           "FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=20",
@@ -382,42 +374,42 @@ EXAMPLE_EVENTS = [
     # Main draw starts on the Sunday falling May 24–30 (last Sunday of May before the 31st)
     # Women's final: Saturday of the second week (June 6–12)
     # Men's final: Sunday of the second week (June 7–13)
-    ("French Open — Main Draw Begins",  "other", "FREQ=YEARLY;BYMONTH=5;BYDAY=SU;BYMONTHDAY=24,25,26,27,28,29,30",
+    ("French Open — Main Draw Begins",  "tennis", "FREQ=YEARLY;BYMONTH=5;BYDAY=SU;BYMONTHDAY=24,25,26,27,28,29,30",
      date(2024, 5, 26),  "Roland Garros main draw begins — two-week Grand Slam clay-court tournament in Paris", Priority.medium, [7, 1], None),
-    ("French Open — Women's Final",     "other", "FREQ=YEARLY;BYMONTH=6;BYDAY=SA;BYMONTHDAY=6,7,8,9,10,11,12",
+    ("French Open — Women's Final",     "tennis", "FREQ=YEARLY;BYMONTH=6;BYDAY=SA;BYMONTHDAY=6,7,8,9,10,11,12",
      date(2024, 6, 8),   "Roland Garros Women's Singles Final (Saturday of the second week)",           Priority.high,   [3, 1], None),
-    ("French Open — Men's Final",       "other", "FREQ=YEARLY;BYMONTH=6;BYDAY=SU;BYMONTHDAY=7,8,9,10,11,12,13",
+    ("French Open — Men's Final",       "tennis", "FREQ=YEARLY;BYMONTH=6;BYDAY=SU;BYMONTHDAY=7,8,9,10,11,12,13",
      date(2024, 6, 9),   "Roland Garros Men's Singles Final (Sunday of the second week)",               Priority.high,   [3, 1], None),
 
     # ── Wimbledon Championships ──────────────────────────────────────────────
     # Always starts Monday of ISO week 27 (June 28 – July 4 window)
     # Finals on the last weekend: Women's Saturday of week 28, Men's Sunday of week 28
-    ("Wimbledon — Main Draw Begins",    "other", "FREQ=YEARLY;BYWEEKNO=27;BYDAY=MO",
+    ("Wimbledon — Main Draw Begins",    "tennis", "FREQ=YEARLY;BYWEEKNO=27;BYDAY=MO",
      date(2023, 7, 3),   "Wimbledon Championships main draw begins — two-week Grand Slam grass-court tournament in London", Priority.medium, [7, 1], None),
-    ("Wimbledon — Women's Final",       "other", "FREQ=YEARLY;BYWEEKNO=28;BYDAY=SA",
+    ("Wimbledon — Women's Final",       "tennis", "FREQ=YEARLY;BYWEEKNO=28;BYDAY=SA",
      date(2023, 7, 15),  "Wimbledon Women's Singles Final (Saturday of the second week)",               Priority.high,   [3, 1], None),
-    ("Wimbledon — Men's Final",         "other", "FREQ=YEARLY;BYWEEKNO=28;BYDAY=SU",
+    ("Wimbledon — Men's Final",         "tennis", "FREQ=YEARLY;BYWEEKNO=28;BYDAY=SU",
      date(2023, 7, 16),  "Wimbledon Men's Singles Final (Sunday of the second week)",                   Priority.high,   [3, 1], None),
 
     # ── US Open (hard court, Flushing Meadows, New York) ─────────────────────
     # Main draw starts Monday of ISO week 35 (last Monday of August)
     # Note: from ~2025 onward the tournament opens Sunday of week 34 (one day earlier)
     # Women's Final: Saturday of ISO week 36; Men's Final: Sunday of ISO week 36
-    ("US Open — Main Draw Begins",      "other", "FREQ=YEARLY;BYWEEKNO=35;BYDAY=MO",
+    ("US Open — Main Draw Begins",      "tennis", "FREQ=YEARLY;BYWEEKNO=35;BYDAY=MO",
      date(2023, 8, 28),  "US Open main draw begins — two-week Grand Slam hard-court tournament in Flushing Meadows, New York", Priority.medium, [7, 1], None),
-    ("US Open — Women's Final",         "other", "FREQ=YEARLY;BYWEEKNO=36;BYDAY=SA",
+    ("US Open — Women's Final",         "tennis", "FREQ=YEARLY;BYWEEKNO=36;BYDAY=SA",
      date(2023, 9, 9),   "US Open Women's Singles Final (Saturday of the second week)",                 Priority.high,   [3, 1], None),
-    ("US Open — Men's Final",           "other", "FREQ=YEARLY;BYWEEKNO=36;BYDAY=SU",
+    ("US Open — Men's Final",           "tennis", "FREQ=YEARLY;BYWEEKNO=36;BYDAY=SU",
      date(2023, 9, 10),  "US Open Men's Singles Final (Sunday of the second week)",                     Priority.high,   [3, 1], None),
 
     # ── Australian Open (hard court, Melbourne Park, Australia) ──────────────
     # Main draw starts Monday of ISO week 3 (historically; from ~2024 opens Sunday of week 2)
     # Women's Final: Saturday of ISO week 4; Men's Final: Sunday of ISO week 4
-    ("Australian Open — Main Draw Begins", "other", "FREQ=YEARLY;BYWEEKNO=3;BYDAY=MO",
+    ("Australian Open — Main Draw Begins", "tennis", "FREQ=YEARLY;BYWEEKNO=3;BYDAY=MO",
      date(2023, 1, 16),  "Australian Open main draw begins — two-week Grand Slam hard-court tournament in Melbourne", Priority.medium, [7, 1], None),
-    ("Australian Open — Women's Final", "other", "FREQ=YEARLY;BYWEEKNO=4;BYDAY=SA",
+    ("Australian Open — Women's Final", "tennis", "FREQ=YEARLY;BYWEEKNO=4;BYDAY=SA",
      date(2023, 1, 28),  "Australian Open Women's Singles Final (Saturday of the second week)",         Priority.high,   [3, 1], None),
-    ("Australian Open — Men's Final",   "other", "FREQ=YEARLY;BYWEEKNO=4;BYDAY=SU",
+    ("Australian Open — Men's Final",   "tennis", "FREQ=YEARLY;BYWEEKNO=4;BYDAY=SU",
      date(2023, 1, 29),  "Australian Open Men's Singles Final (Sunday of the second week)",             Priority.high,   [3, 1], None),
 
     # ── Kentucky Derby ───────────────────────────────────────────────────────
@@ -521,19 +513,19 @@ EXAMPLE_EVENTS = [
      date(2026, 11, 1),   "Fall back — clocks back 1 hour",    Priority.medium, [1],     None),
 
     # ── Eclipses ──────────────────────────────────────────────────────────────
-    ("Solar Eclipse",                "holiday",           "ECLIPSE_SOLAR",
+    ("Solar Eclipse",                "astronomy",         "ECLIPSE_SOLAR",
      date(2026, 1, 1),    "Solar eclipse (total, annular, or partial)", Priority.medium, [30, 7], None),
-    ("Lunar Eclipse",                "holiday",           "ECLIPSE_LUNAR",
+    ("Lunar Eclipse",                "astronomy",         "ECLIPSE_LUNAR",
      date(2026, 1, 1),    "Lunar eclipse (total, partial, or penumbral)", Priority.medium, [7, 1], None),
 
     # ── Moon phases ───────────────────────────────────────────────────────────
-    ("New Moon",                     "holiday",           "MOON_NEW",
+    ("New Moon",                     "astronomy",         "MOON_NEW",
      date(2026, 1, 1),    "New moon",                          Priority.low,    [1],     None),
-    ("First Quarter Moon",           "holiday",           "MOON_FIRST_QUARTER",
+    ("First Quarter Moon",           "astronomy",         "MOON_FIRST_QUARTER",
      date(2026, 1, 1),    "First quarter moon",                Priority.low,    [1],     None),
-    ("Full Moon",                    "holiday",           "MOON_FULL",
+    ("Full Moon",                    "astronomy",         "MOON_FULL",
      date(2026, 1, 1),    "Full moon",                         Priority.low,    [1],     None),
-    ("Last Quarter Moon",            "holiday",           "MOON_LAST_QUARTER",
+    ("Last Quarter Moon",            "astronomy",         "MOON_LAST_QUARTER",
      date(2026, 1, 1),    "Last quarter moon",                 Priority.low,    [1],     None),
 
     # ── Easter & related holy days (lunar — use EASTER sentinel) ─────────────

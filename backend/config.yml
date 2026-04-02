@@ -100,3 +100,15 @@ categories:
     color: "#7c3aed"
     icon: "🏒"
     description: "NCAA Men's Ice Hockey — tournament and season events"
+  - name: astronomy
+    color: "#0f172a"
+    icon: "🌙"
+    description: "Moon phases, eclipses, and astronomical events"
+  - name: tennis
+    color: "#84cc16"
+    icon: "🎾"
+    description: "Tennis tournaments and matches"
+  - name: local
+    color: "#f97316"
+    icon: "📍"
+    description: "Local community events and activities"
