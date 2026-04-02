@@ -227,6 +227,26 @@ EXAMPLE_EVENTS = [
     ("Eye Exam",                     "medical",           "FREQ=YEARLY;BYMONTH=9",
      date(2026, 9, 1),    "Annual eye exam",                   Priority.medium, [14, 3], None),
 
+    # ── CPAP ─────────────────────────────────────────────────────────────────
+    ("CPAP Prescription Renewal",      "medical",           "FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=24",
+     date(2026, 2, 24),  "CPAP prescription renewal — expires annually, get new Rx before it lapses", Priority.high, [30, 7], None),
+    ("CPAP Supplies Order",            "medical",           "FREQ=MONTHLY;INTERVAL=3",
+     date(2026, 6, 21),  "Order CPAP supplies — 90-day supply (CPAP received 3/23/2026)", Priority.medium, [14, 3], None),
+    ("CPAP Filter Replacement",        "medical",           "FREQ=MONTHLY",
+     date(2026, 4, 22),  "Replace CPAP machine filter every 30 days (CPAP received 3/23/2026)", Priority.medium, [7, 1], None),
+    ("CPAP Nasal Cushion Replacement", "medical",           "FREQ=MONTHLY",
+     date(2026, 4, 22),  "Replace CPAP nasal cushion every 30 days (CPAP received 3/23/2026)", Priority.medium, [7, 1], None),
+    ("CPAP Mask Frame Replacement",    "medical",           "FREQ=MONTHLY;INTERVAL=3",
+     date(2026, 6, 23),  "Replace CPAP mask frame every 3 months (CPAP received 3/23/2026)", Priority.medium, [14, 3], None),
+    ("CPAP Elbow & Short Tube Replacement", "medical",      "FREQ=MONTHLY;INTERVAL=3",
+     date(2026, 6, 23),  "Replace CPAP elbow and short tube every 3 months (CPAP received 3/23/2026)", Priority.medium, [14, 3], None),
+    ("CPAP Tubing Replacement",        "medical",           "FREQ=MONTHLY;INTERVAL=3",
+     date(2026, 6, 23),  "Replace CPAP tubing every 3 months (CPAP received 3/23/2026)", Priority.medium, [14, 3], None),
+    ("CPAP Mask Headgear Replacement", "medical",           "FREQ=MONTHLY;INTERVAL=6",
+     date(2026, 9, 23),  "Replace CPAP mask headgear every 6 months (CPAP received 3/23/2026)", Priority.medium, [14, 3], None),
+    ("CPAP Humidifier Water Tube Replacement", "medical",   "FREQ=MONTHLY;INTERVAL=6",
+     date(2026, 9, 23),  "Replace CPAP humidifier water tube every 6 months (CPAP received 3/23/2026)", Priority.medium, [14, 3], None),
+
     # ── Dental ───────────────────────────────────────────────────────────────
     ("Dental Cleaning",              "dental",            "FREQ=MONTHLY;INTERVAL=6",
      date(2026, 11, 19),  "Teeth cleaning at 10am",            Priority.high,   [14, 3], None),
