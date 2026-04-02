@@ -359,12 +359,23 @@ EXAMPLE_EVENTS = [
     ("Maggie — Cancel Spotify",           "other",         None,
      date(2026, 4, 1),    "Maggie to cancel Spotify subscription",     Priority.high,   [1],     None),
 
-    # ── NCAA Frozen Four ─────────────────────────────────────────────────────
-    # Semifinals: first Thursday on or after April 6
-    # Championship: first Saturday on or after April 8 (2 days after semis)
-    ("NCAA Frozen Four — Semifinals",   "other", "FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=6,7,8,9,10,11,12;BYDAY=TH",
+    # ── NCAA Men's Ice Hockey Tournament ─────────────────────────────────────
+    # Season opens: first Friday of October
+    # Selection Sunday: 4th Sunday of March
+    # Regionals: Thursday–Sunday of the week after Selection Sunday (Mar 24–30 window)
+    # Frozen Four Semifinals: Thursday in Apr 6–12 window
+    # Championship: Saturday in Apr 8–14 window (2 days after semis)
+    ("NCAA Men's Ice Hockey — Season Opens",                 "college_hockey", "FREQ=YEARLY;BYMONTH=10;BYDAY=1FR",
+     date(2024, 10, 4),  "NCAA Men's Division I Ice Hockey regular season begins — first games of the new season", Priority.medium, [1], None),
+    ("NCAA Men's Ice Hockey Tournament — Selection Sunday",  "college_hockey", "FREQ=YEARLY;BYMONTH=3;BYDAY=4SU",
+     date(2024, 3, 24),  "NCAA Men's Ice Hockey Tournament — Selection Sunday (bracket reveal, field of 16 announced)", Priority.high, [7, 1], None),
+    ("NCAA Men's Ice Hockey Tournament — Regionals Begin",   "college_hockey", "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=24,25,26,27,28,29,30;BYDAY=TH",
+     date(2024, 3, 28),  "NCAA Men's Ice Hockey Tournament — Regional rounds begin (four regional sites, Thu–Sun)", Priority.high, [7, 1], None),
+    ("NCAA Men's Ice Hockey Tournament — Regionals End",     "college_hockey", "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=27,28,29,30,31;BYDAY=SU",
+     date(2024, 3, 31),  "NCAA Men's Ice Hockey Tournament — Regional rounds conclude (final regional games today)", Priority.high, [1], None),
+    ("NCAA Frozen Four — Semifinals",   "college_hockey", "FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=6,7,8,9,10,11,12;BYDAY=TH",
      date(2023, 4, 6),   "NCAA Men's Ice Hockey Frozen Four — Semifinal games (two games, evening ET)", Priority.high, [7, 1], None),
-    ("NCAA Frozen Four — Championship", "other", "FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=8,9,10,11,12,13,14;BYDAY=SA",
+    ("NCAA Frozen Four — Championship", "college_hockey", "FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=8,9,10,11,12,13,14;BYDAY=SA",
      date(2023, 4, 8),   "NCAA Men's Ice Hockey Frozen Four — Championship game (evening ET)",          Priority.high, [7, 1], None),
 
     # ── French Open (Roland Garros) ──────────────────────────────────────────

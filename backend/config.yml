@@ -96,3 +96,7 @@ categories:
     color: "#154734"
     icon: "🏒"
     description: "Minnesota Wild NHL games"
+  - name: college_hockey
+    color: "#7c3aed"
+    icon: "🏒"
+    description: "NCAA Men's Ice Hockey — tournament and season events"
