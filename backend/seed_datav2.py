@@ -412,6 +412,13 @@ EXAMPLE_EVENTS = [
     ("Australian Open — Men's Final",   "tennis", "FREQ=YEARLY;BYWEEKNO=4;BYDAY=SU",
      date(2023, 1, 29),  "Australian Open Men's Singles Final (Sunday of the second week)",             Priority.high,   [3, 1], None),
 
+    # ── MLB Schedule Announcement ────────────────────────────────────────────
+    # Historically released mid-July to late August; late August is most common
+    # 2023 season: Aug 24 2022 | 2024: Jul 13 2023 | 2025: Jul 18 2024 | 2026: Aug 26 2025
+    # Best estimate for recurring: last week of August
+    ("MLB Schedule Announced",          "mlb",  "FREQ=YEARLY;BYMONTH=8;BYMONTHDAY=25",
+     date(2022, 8, 24),  "MLB regular-season schedule released — check twins.com for home schedule and plan Target Field trips. Actual date varies (mid-July to late August).", Priority.medium, [7], None),
+
     # ── Kentucky Derby ───────────────────────────────────────────────────────
     # Always the first Saturday in May; Churchill Downs, Louisville KY; dirt surface
     ("Kentucky Derby",                  "other", "FREQ=YEARLY;BYMONTH=5;BYDAY=1SA",
@@ -433,15 +440,15 @@ EXAMPLE_EVENTS = [
      date(2026, 8, 1),    "Black Hat USA — Mandalay Bay, Las Vegas. Trainings early Aug, Briefings mid-Aug", Priority.high, [30, 7], None, "Mandalay Bay Convention Center, Las Vegas, NV"),
     ("DEF CON",                           "other",         "FREQ=YEARLY;BYMONTH=8;BYDAY=2SA",
      date(2026, 8, 6),    "DEF CON — Las Vegas Convention Center, typically second weekend of August", Priority.high, [30, 7], None, "Las Vegas Convention Center, Las Vegas, NV"),
-    ("Kids Fishing Event — Lake George",  "other",         "FREQ=YEARLY;BYMONTH=8;BYDAY=1FR",
+    ("Kids Fishing Event — Lake George",  "local",         "FREQ=YEARLY;BYMONTH=8;BYDAY=1FR",
      date(2026, 8, 7),    "Kids fishing event at Lake George, Oak Grove — first Friday of August", Priority.high, [14, 7, 1], None),
-    ("CAST Fishing Tournament — Sign Up", "other",         "FREQ=YEARLY;BYMONTH=6;BYMONTHDAY=1",
+    ("CAST Fishing Tournament — Sign Up", "local",         "FREQ=YEARLY;BYMONTH=6;BYMONTHDAY=1",
      date(2026, 6, 1),    "Sign up for Anoka County CAST fishing tournament before July 1 start", Priority.high, [14, 7], None),
-    ("CAST Fishing Tournament Begins",   "other",         "FREQ=YEARLY;BYMONTH=7;BYMONTHDAY=1",
+    ("CAST Fishing Tournament Begins",   "local",         "FREQ=YEARLY;BYMONTH=7;BYMONTHDAY=1",
      date(2026, 7, 1),    "Anoka County CAST fishing tournament starts — also sign-up opens for Kids Fishing Event at Lake George", Priority.high, [7, 1], None),
-    ("MN Fishing Opener",                 "other",         "FREQ=YEARLY;BYMONTH=5;BYDAY=2SA",
+    ("MN Fishing Opener",                 "local",         "FREQ=YEARLY;BYMONTH=5;BYDAY=2SA",
      date(2026, 5, 9),    "Minnesota walleye & northern pike fishing opener — 2nd Saturday of May", Priority.high, [7, 1], None),
-    ("MN Fishing License Expires",        "other",         "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=31",
+    ("MN Fishing License Expires",        "local",         "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=31",
      date(2026, 3, 31),   "Minnesota fishing license expires March 31 — renew before opener", Priority.high, [30, 7], None),
     ("TSA Precheck Renewal",              "other",         "FREQ=YEARLY;INTERVAL=5;BYMONTH=8",
      date(2029, 8, 1),   "TSA Precheck expires — renew every 5 years", Priority.high, [90, 30], None),
@@ -497,13 +504,13 @@ EXAMPLE_EVENTS = [
      date(2026, 11, 26),  "Thanksgiving — 4th Thursday of November", Priority.high, [14, 7, 1], None),
 
     # ── First day of each season ─────────────────────────────────────────────
-    ("First Day of Spring",          "holiday",           "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=20",
+    ("First Day of Spring",          "astronomy",         "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=20",
      date(2026, 3, 20),   "Spring equinox",                    Priority.low,    [1],     None),
-    ("First Day of Summer",          "holiday",           "FREQ=YEARLY;BYMONTH=6;BYMONTHDAY=21",
+    ("First Day of Summer",          "astronomy",         "FREQ=YEARLY;BYMONTH=6;BYMONTHDAY=21",
      date(2026, 6, 21),   "Summer solstice",                   Priority.low,    [1],     None),
-    ("First Day of Fall",            "holiday",           "FREQ=YEARLY;BYMONTH=9;BYMONTHDAY=22",
+    ("First Day of Fall",            "astronomy",         "FREQ=YEARLY;BYMONTH=9;BYMONTHDAY=22",
      date(2026, 9, 22),   "Fall equinox",                      Priority.low,    [1],     None),
-    ("First Day of Winter",          "holiday",           "FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=21",
+    ("First Day of Winter",          "astronomy",         "FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=21",
      date(2026, 12, 21),  "Winter solstice",                   Priority.low,    [1],     None),
 
     # ── Daylight Saving Time (US) ─────────────────────────────────────────────
@@ -543,22 +550,22 @@ EXAMPLE_EVENTS = [
     # ── Local fairs ──────────────────────────────────────────────────────────
     # Anoka County Fair: Tuesday in July 21–27 (6-day run Tue–Sun); 2024 started Sunday (outlier*)
     # MN State Fair: Thursday in Aug 22–28 — runs 12 days, ending on or just after Labor Day
-    ("Anoka County Fair",               "other", "FREQ=YEARLY;BYMONTH=7;BYDAY=TU;BYMONTHDAY=21,22,23,24,25,26,27",
+    ("Anoka County Fair",               "local", "FREQ=YEARLY;BYMONTH=7;BYDAY=TU;BYMONTHDAY=21,22,23,24,25,26,27",
      date(2026, 7, 21),  "Anoka County Fair, Anoka MN — 6-day fair (Tue-Sun). 4-H exhibits, livestock shows, demo derby, rides, vendors, entertainment, food, and fireworks.", Priority.high, [14, 7, 1], None, "Anoka County Fairgrounds, 550 Bunker Lake Blvd NW, Andover, MN 55304"),
-    ("Minnesota State Fair",            "other", "FREQ=YEARLY;BYMONTH=8;BYDAY=TH;BYMONTHDAY=22,23,24,25,26,27,28",
+    ("Minnesota State Fair",            "local", "FREQ=YEARLY;BYMONTH=8;BYDAY=TH;BYMONTHDAY=22,23,24,25,26,27,28",
      date(2026, 8, 27),  "Minnesota State Fair (The Great Minnesota Get-Together), Falcon Heights MN — 12-day fair (Thu–Mon) ending on or just after Labor Day. Carnival rides, concerts, competitions, exhibits, food vendors, and more.", Priority.high, [30, 14, 7, 1], None, "Minnesota State Fairgrounds, 1265 Snelling Ave N, Falcon Heights, MN 55108"),
 
     # ── Local parades ────────────────────────────────────────────────────────
     # Pioneer Days (St. Francis): last Friday of May — 3-day festival (Fri–Sun), parade on Saturday
     # Happy Days (Ramsey): Saturday in Sept 6–12 — always the Saturday after Labor Day
     # Anoka Halloween: two parade Saturdays in October — 3rd Sat (opener) and 4th Sat (Grande Day)
-    ("St. Francis Pioneer Days Festival",       "other", "FREQ=YEARLY;BYMONTH=5;BYDAY=-1FR",
+    ("St. Francis Pioneer Days Festival",       "local", "FREQ=YEARLY;BYMONTH=5;BYDAY=-1FR",
      date(2026, 5, 29),  "St. Francis Pioneer Days — 3-day festival (Fri-Sun), last weekend of May. Parade on Saturday.", Priority.high,   [14, 7, 1], None, "St. Francis, MN"),
-    ("Happy Days Parade — Ramsey",              "other", "FREQ=YEARLY;BYMONTH=9;BYDAY=SA;BYMONTHDAY=6,7,8,9,10,11,12",
+    ("Happy Days Parade — Ramsey",              "local", "FREQ=YEARLY;BYMONTH=9;BYDAY=SA;BYMONTHDAY=6,7,8,9,10,11,12",
      date(2026, 9, 12),  "Happy Days Parade in Ramsey, MN — Saturday after Labor Day (Sept 6–12)",     Priority.high,   [7, 1], None, "Ramsey, MN"),
-    ("Halloween Parade — Anoka",                "other", "FREQ=YEARLY;BYMONTH=10;BYDAY=3SA",
+    ("Halloween Parade — Anoka",                "local", "FREQ=YEARLY;BYMONTH=10;BYDAY=3SA",
      date(2025, 10, 18), "Anoka Halloween parade — 3rd Saturday of October (opening parade of the season)", Priority.high, [7, 1], None, "Anoka, MN"),
-    ("Halloween Grande Day Parade — Anoka",     "other", "FREQ=YEARLY;BYMONTH=10;BYDAY=4SA",
+    ("Halloween Grande Day Parade — Anoka",     "local", "FREQ=YEARLY;BYMONTH=10;BYDAY=4SA",
      date(2026, 10, 24), "Halloween Grande Day Parade in Anoka, MN — 4th Saturday of October (main parade)", Priority.high, [7, 1], None, "Anoka, MN"),
 ]
 
