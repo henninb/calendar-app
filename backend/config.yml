@@ -80,6 +80,10 @@ categories:
     color: "#6b7280"
     icon: "💻"
     description: "Software updates, license renewals, domain renewals"
+  - name: maintenance
+    color: "#78716c"
+    icon: "🔧"
+    description: "General maintenance tasks and reminders"
   - name: other
     color: "#9ca3af"
     icon: "📅"
