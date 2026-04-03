@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 from pydantic import BaseModel, field_validator
-from .models import Priority, OccurrenceStatus, WeekendShift
+from .models import Priority, OccurrenceStatus, TaskRecurrence, TaskStatus, WeekendShift
 
 
 # ── Category ────────────────────────────────────────────────────────────────
@@ -47,6 +47,7 @@ class EventBase(BaseModel):
     priority: Priority = Priority.medium
     amount: Optional[Decimal] = None
     is_active: bool = True
+    generates_tasks: bool = False
     gcal_calendar_id: Optional[str] = None
 
     @field_validator("rrule")
@@ -78,6 +79,7 @@ class EventUpdate(BaseModel):
     priority: Optional[Priority] = None
     amount: Optional[Decimal] = None
     is_active: Optional[bool] = None
+    generates_tasks: Optional[bool] = None
     gcal_calendar_id: Optional[str] = None
 
     @field_validator("rrule")
@@ -211,3 +213,95 @@ class SyncResult(BaseModel):
 class AuthStatus(BaseModel):
     authenticated: bool
     email: Optional[str] = None
+
+
+# ── Person ───────────────────────────────────────────────────────────────────
+
+class PersonBase(BaseModel):
+    name: str
+    email: Optional[str] = None
+
+
+class PersonCreate(PersonBase):
+    pass
+
+
+class PersonUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+
+
+class PersonOut(PersonBase):
+    id: int
+
+    model_config = {"from_attributes": True}
+
+
+# ── Subtask ──────────────────────────────────────────────────────────────────
+
+class SubtaskBase(BaseModel):
+    title: str
+    status: TaskStatus = TaskStatus.todo
+    due_date: Optional[date] = None
+    order: int = 0
+
+
+class SubtaskCreate(SubtaskBase):
+    pass
+
+
+class SubtaskUpdate(BaseModel):
+    title: Optional[str] = None
+    status: Optional[TaskStatus] = None
+    due_date: Optional[date] = None
+    order: Optional[int] = None
+
+
+class SubtaskOut(SubtaskBase):
+    id: int
+    task_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Task ─────────────────────────────────────────────────────────────────────
+
+class TaskBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    status: TaskStatus = TaskStatus.todo
+    priority: Priority = Priority.medium
+    assignee_id: Optional[int] = None
+    due_date: Optional[date] = None
+    estimated_minutes: Optional[int] = None
+    recurrence: TaskRecurrence = TaskRecurrence.none
+    occurrence_id: Optional[int] = None
+
+
+class TaskCreate(TaskBase):
+    pass
+
+
+class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[TaskStatus] = None
+    priority: Optional[Priority] = None
+    assignee_id: Optional[int] = None
+    due_date: Optional[date] = None
+    estimated_minutes: Optional[int] = None
+    recurrence: Optional[TaskRecurrence] = None
+
+
+class TaskOut(TaskBase):
+    id: int
+    gtask_id: Optional[str] = None
+    synced_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+    assignee: Optional[PersonOut] = None
+    subtasks: list[SubtaskOut] = []
+
+    model_config = {"from_attributes": True}

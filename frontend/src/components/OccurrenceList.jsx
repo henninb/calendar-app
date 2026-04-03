@@ -79,7 +79,7 @@ export default function OccurrenceList() {
             <option value={365}>365</option>
           </select>
         </label>
-        <button className="btn btn-blue" onClick={load}>Refresh</button>
+        <button className="btn btn-blue" onClick={load} title="Reload occurrences from the server">Refresh</button>
       </div>
 
       {loading ? (
@@ -121,13 +121,13 @@ export default function OccurrenceList() {
                   <td>
                     <div style={{ display: 'flex', gap: '.35rem' }}>
                       {occ.status !== 'completed' && (
-                        <button className="btn btn-green" onClick={() => mark(occ, 'completed')}>✓</button>
+                        <button className="btn btn-green" title="Mark this occurrence as completed" onClick={() => mark(occ, 'completed')}>✓</button>
                       )}
                       {occ.status !== 'skipped' && (
-                        <button className="btn btn-gray" onClick={() => mark(occ, 'skipped')}>Skip</button>
+                        <button className="btn btn-gray" title="Mark this occurrence as skipped" onClick={() => mark(occ, 'skipped')}>Skip</button>
                       )}
                       {(occ.status === 'completed' || occ.status === 'skipped') && (
-                        <button className="btn btn-blue" onClick={() => mark(occ, 'upcoming')}>↩</button>
+                        <button className="btn btn-blue" title="Reopen this occurrence as upcoming" onClick={() => mark(occ, 'upcoming')}>↩</button>
                       )}
                     </div>
                   </td>

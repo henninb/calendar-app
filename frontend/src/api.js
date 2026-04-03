@@ -36,3 +36,53 @@ export const deleteAllGcalEvents = () =>
 
 export const wipeAllGcalEvents = () =>
   request('/sync/gcal/wipe-all', { method: 'DELETE' })
+
+export const syncToGtasks = () =>
+  request('/sync/gtasks', { method: 'POST' })
+
+// ── Tasks ──────────────────────────────────────────────────────────────────
+
+export const fetchTasks = (params = {}) => {
+  const q = new URLSearchParams({ limit: 500, ...params })
+  return request(`/tasks?${q}`)
+}
+
+export const createTask = (data) =>
+  request('/tasks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+
+export const updateTask = (id, data) =>
+  request(`/tasks/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+
+export const deleteTask = (id) =>
+  request(`/tasks/${id}`, { method: 'DELETE' })
+
+// ── Subtasks ───────────────────────────────────────────────────────────────
+
+export const createSubtask = (taskId, data) =>
+  request(`/tasks/${taskId}/subtasks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+
+export const updateSubtask = (taskId, subtaskId, data) =>
+  request(`/tasks/${taskId}/subtasks/${subtaskId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+
+export const deleteSubtask = (taskId, subtaskId) =>
+  request(`/tasks/${taskId}/subtasks/${subtaskId}`, { method: 'DELETE' })
+
+// ── Persons ────────────────────────────────────────────────────────────────
+
+export const fetchPersons = () => request('/persons')

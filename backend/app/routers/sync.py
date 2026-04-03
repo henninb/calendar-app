@@ -22,6 +22,7 @@ from ..database import SessionLocal, get_db
 from ..models import Event, Occurrence, OccurrenceStatus
 from ..schemas import AuthStatus, SyncResult
 from ..services import google_calendar as gcal
+from ..services import google_tasks as gtasks
 
 _SYNC_WORKERS = 10
 
@@ -217,6 +218,21 @@ def sync_single(occurrence_id: int, db: Session = Depends(get_db)):
         return SyncResult(synced=1, failed=0)
     except Exception as exc:
         return SyncResult(synced=0, failed=1, errors=[str(exc)])
+
+
+# ── Google Tasks Sync ─────────────────────────────────────────────────────────
+
+@router.post("/gtasks", response_model=SyncResult)
+def sync_to_gtasks(db: Session = Depends(get_db)):
+    """Push all non-cancelled tasks to Google Tasks (one-way sync)."""
+    try:
+        result = gtasks.sync_all_tasks(db)
+        msg = f"Synced {result['synced']} tasks to Google Tasks."
+        if result['failed']:
+            msg += f" {result['failed']} failed — check errors for details."
+        return SyncResult(**result, message=msg)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 # ── ICS Export ────────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ from ..database import get_db
 from ..models import Event, Occurrence, OccurrenceStatus
 from ..schemas import GenerateResult, OccurrenceOut, OccurrenceUpdate
 from ..services.recurrence import generate_all_occurrences, mark_overdue
+from ..services.task_generation import cancel_tasks_for_occurrence
 
 router = APIRouter(prefix="/occurrences", tags=["occurrences"])
 
@@ -63,9 +64,12 @@ def update_occurrence(
     occ = db.query(Occurrence).get(occurrence_id)
     if not occ:
         raise HTTPException(status_code=404, detail="Occurrence not found")
+    new_status = body.model_dump(exclude_unset=True).get("status")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(occ, field, value)
     db.commit()
+    if new_status == OccurrenceStatus.skipped:
+        cancel_tasks_for_occurrence(db, occ)
     db.refresh(occ)
     return occ
 

@@ -40,7 +40,7 @@ export default function CreditCardTracker() {
     <div className="card">
       <div style={{ marginBottom: '.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ fontSize: '1rem', fontWeight: 700 }}>Credit Card Billing Tracker</h2>
-        <button className="btn btn-blue" onClick={() => fetchCreditCardTracker().then(setRows)}>
+        <button className="btn btn-blue" onClick={() => fetchCreditCardTracker().then(setRows)} title="Reload credit card billing dates from the server">
           Refresh
         </button>
       </div>

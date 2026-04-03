@@ -21,6 +21,22 @@ class OccurrenceStatus(str, enum.Enum):
     overdue = "overdue"
 
 
+class TaskStatus(str, enum.Enum):
+    todo = "todo"
+    in_progress = "in_progress"
+    done = "done"
+    cancelled = "cancelled"
+
+
+class TaskRecurrence(str, enum.Enum):
+    none = "none"
+    daily = "daily"
+    weekly = "weekly"
+    biweekly = "biweekly"
+    monthly = "monthly"
+    yearly = "yearly"
+
+
 class WeekendShift(str, enum.Enum):
     back = "back"                   # Sat/Sun → preceding Friday
     forward = "forward"             # Sat/Sun → following Monday
@@ -108,6 +124,7 @@ class Event(Base):
     amount = Column(Numeric(10, 2))
 
     is_active = Column(Boolean, default=True)
+    generates_tasks = Column(Boolean, default=False)
     gcal_calendar_id = Column(String(200))
 
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -139,3 +156,57 @@ class Occurrence(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     event = relationship("Event", back_populates="occurrences")
+    tasks = relationship("Task", back_populates="occurrence")
+
+
+class Person(Base):
+    __tablename__ = "persons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    email = Column(String(200))
+
+    tasks = relationship("Task", back_populates="assignee")
+
+
+class Task(Base):
+    __tablename__ = "tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    occurrence_id = Column(Integer, ForeignKey("occurrences.id", ondelete="SET NULL"), nullable=True)
+    title = Column(String(200), nullable=False)
+    description = Column(Text)
+    status = Column(Enum(TaskStatus), default=TaskStatus.todo)
+    priority = Column(Enum(Priority), default=Priority.medium)
+    assignee_id = Column(Integer, ForeignKey("persons.id", ondelete="SET NULL"), nullable=True)
+    due_date = Column(Date)
+    estimated_minutes = Column(Integer)
+    recurrence = Column(Enum(TaskRecurrence), default=TaskRecurrence.none)
+
+    gtask_id = Column(String(200))
+    synced_at = Column(DateTime)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    occurrence = relationship("Occurrence", back_populates="tasks")
+    assignee = relationship("Person", back_populates="tasks")
+    subtasks = relationship("Subtask", back_populates="task", cascade="all, delete-orphan")
+
+
+class Subtask(Base):
+    __tablename__ = "subtasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(200), nullable=False)
+    status = Column(Enum(TaskStatus), default=TaskStatus.todo)
+    due_date = Column(Date)
+    order = Column(Integer, default=0)
+
+    gtask_id = Column(String(200))
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    task = relationship("Task", back_populates="subtasks")

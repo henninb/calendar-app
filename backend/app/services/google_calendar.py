@@ -13,6 +13,7 @@ import time
 from datetime import date, timedelta, datetime
 from typing import Optional
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -23,7 +24,15 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..models import Occurrence, OccurrenceStatus
 
-SCOPES = ["https://www.googleapis.com/auth/calendar"]
+# Module-level flow kept alive between get_auth_url() and exchange_code()
+# so the PKCE code_verifier generated during authorization is available at
+# token exchange time.
+_pending_flow: Optional[Flow] = None
+
+SCOPES = [
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/tasks",
+]
 
 # Maps category name → Google Calendar colorId (1-11)
 CATEGORY_COLOR_MAP = {
@@ -48,8 +57,9 @@ CATEGORY_COLOR_MAP = {
 
 def get_auth_url(state: str = "") -> str:
     """Return the Google OAuth consent URL."""
-    flow = _build_flow()
-    auth_url, _ = flow.authorization_url(
+    global _pending_flow
+    _pending_flow = _build_flow()
+    auth_url, _ = _pending_flow.authorization_url(
         access_type="offline",
         state=state,
         prompt="consent",
@@ -59,7 +69,9 @@ def get_auth_url(state: str = "") -> str:
 
 def exchange_code(code: str) -> Credentials:
     """Exchange an authorization code for credentials and persist the token."""
-    flow = _build_flow()
+    global _pending_flow
+    flow = _pending_flow if _pending_flow is not None else _build_flow()
+    _pending_flow = None
     flow.fetch_token(code=code)
     creds = flow.credentials
     _save_token(creds)
@@ -67,15 +79,24 @@ def exchange_code(code: str) -> Credentials:
 
 
 def get_credentials() -> Optional[Credentials]:
-    """Load credentials from token file, refreshing if expired."""
+    """Load credentials from token file, refreshing if expired.
+
+    Returns None if the token is missing, invalid, or covers a different
+    scope than what is currently requested (triggers re-authentication).
+    """
     token_path = settings.google_token_file
     if not os.path.exists(token_path):
         return None
 
     creds = Credentials.from_authorized_user_file(token_path, SCOPES)
     if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        _save_token(creds)
+        try:
+            creds.refresh(Request())
+            _save_token(creds)
+        except RefreshError:
+            # Token is revoked or covers wrong scopes — force re-auth
+            os.remove(token_path)
+            return None
     return creds if creds.valid else None
 
 

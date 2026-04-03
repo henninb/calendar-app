@@ -13,6 +13,7 @@ from ..database import SessionLocal
 from ..models import CreditCard
 from .recurrence import generate_all_occurrences, mark_overdue
 from .credit_card import generate_credit_card_occurrences
+from .task_generation import generate_pending_tasks
 
 log = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -29,13 +30,16 @@ def _run_daily_job() -> None:
         cards = db.query(CreditCard).filter(CreditCard.is_active == True).all()
         cc_new = sum(generate_credit_card_occurrences(db, card) for card in cards)
 
+        tasks_created = generate_pending_tasks(db)
+
         log.info(
-            "Scheduler: marked %d overdue | events: %d new across %d | credit cards: %d new across %d",
+            "Scheduler: marked %d overdue | events: %d new across %d | credit cards: %d new across %d | tasks created: %d",
             overdue,
             result["occurrences_created"],
             result["events_processed"],
             cc_new,
             len(cards),
+            tasks_created,
         )
     except Exception:
         log.exception("Scheduler job failed")

@@ -79,6 +79,7 @@ export default function CalendarView() {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem', marginTop: '1rem', alignItems: 'center' }}>
         <button
           onClick={() => setFilter(null)}
+          title="Show events from all categories"
           style={{
             padding: '.25rem .6rem',
             borderRadius: '9999px',
@@ -97,6 +98,7 @@ export default function CalendarView() {
           <button
             key={cat.name}
             onClick={() => setFilter(activeFilter === cat.name ? null : cat.name)}
+            title={activeFilter === cat.name ? 'Clear filter' : `Filter to show only ${cat.name.replace(/_/g, ' ')} events`}
             style={{
               padding: '.25rem .6rem',
               borderRadius: '9999px',
@@ -119,7 +121,7 @@ export default function CalendarView() {
       {selected && (
         <div className="detail-overlay" onClick={() => setSelected(null)}>
         <div className="detail-panel" onClick={(e) => e.stopPropagation()}>
-          <button className="close" onClick={() => setSelected(null)}>✕</button>
+          <button className="close" onClick={() => setSelected(null)} title="Close this detail panel">✕</button>
           <h2>{selected.event?.title}</h2>
 
           <div className="detail-row">
@@ -165,6 +167,7 @@ export default function CalendarView() {
               className="btn btn-green"
               disabled={saving || selected.status === 'completed'}
               onClick={() => markStatus('completed')}
+              title="Mark this occurrence as completed"
             >
               ✓ Done
             </button>
@@ -172,6 +175,7 @@ export default function CalendarView() {
               className="btn btn-gray"
               disabled={saving || selected.status === 'skipped'}
               onClick={() => markStatus('skipped')}
+              title="Mark this occurrence as skipped"
             >
               Skip
             </button>
@@ -180,6 +184,7 @@ export default function CalendarView() {
                 className="btn btn-blue"
                 disabled={saving}
                 onClick={() => markStatus('upcoming')}
+                title="Reopen this occurrence as upcoming"
               >
                 Reopen
               </button>

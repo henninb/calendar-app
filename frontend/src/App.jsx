@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef } from 'react'
 import CalendarView from './components/CalendarView'
 import OccurrenceList from './components/OccurrenceList'
 import CreditCardTracker from './components/CreditCardTracker'
-import { generateAll, gcalAuthStatus, syncToGcal, deleteAllGcalEvents, wipeAllGcalEvents } from './api'
+import TaskList from './components/TaskList'
+import { generateAll, gcalAuthStatus, syncToGcal, deleteAllGcalEvents, wipeAllGcalEvents, syncToGtasks } from './api'
 
 const TABS = [
   { id: 'calendar',  label: '📅 Calendar' },
   { id: 'upcoming',  label: '📋 Upcoming' },
   { id: 'cards',     label: '💳 Credit Cards' },
+  { id: 'tasks',     label: '✅ Tasks' },
 ]
 
 function timestamp() {
@@ -16,10 +18,11 @@ function timestamp() {
 
 export default function App() {
   const [tab, setTab]                   = useState('calendar')
-  const [syncing, setSyncing]           = useState(false)
-  const [gcalSyncing, setGcalSyncing]   = useState(false)
-  const [gcalDeleting, setGcalDeleting] = useState(false)
-  const [gcalWiping, setGcalWiping]     = useState(false)
+  const [syncing, setSyncing]               = useState(false)
+  const [gcalSyncing, setGcalSyncing]       = useState(false)
+  const [gcalDeleting, setGcalDeleting]     = useState(false)
+  const [gcalWiping, setGcalWiping]         = useState(false)
+  const [gtasksSyncing, setGtasksSyncing]   = useState(false)
   const [gcalAuth, setGcalAuth]         = useState(null)
   const [logs, setLogs]                 = useState([])
   const logEndRef                       = useRef(null)
@@ -84,6 +87,26 @@ export default function App() {
     setGcalDeleting(false)
   }
 
+  const handleGtasksSync = async () => {
+    if (!gcalAuth) {
+      addLog('info', 'Redirecting to Google OAuth…')
+      window.location.href = '/api/sync/auth'
+      return
+    }
+    setGtasksSyncing(true)
+    addLog('info', 'Syncing tasks to Google Tasks…')
+    try {
+      const res = await syncToGtasks()
+      const level = res.failed > 0 ? 'warn' : 'ok'
+      addLog(level, res.message || `Synced ${res.synced} tasks.`)
+      if (res.failed > 0) addLog('warn', `${res.failed} task(s) failed to sync — you may need to reconnect Google.`)
+      res.errors?.slice(0, 5).forEach(e => addLog('error', e))
+    } catch (e) {
+      addLog('error', `Google Tasks sync failed: ${e.message}`)
+    }
+    setGtasksSyncing(false)
+  }
+
   const handleGcalWipe = async () => {
     if (!gcalAuth) return
     if (!window.confirm('Delete ALL events from your primary Google Calendar? This includes events not created by this app and cannot be undone.')) return
@@ -110,6 +133,7 @@ export default function App() {
               key={t.id}
               className={tab === t.id ? 'active' : ''}
               onClick={() => setTab(t.id)}
+              title={`Switch to ${t.label} view`}
             >
               {t.label}
             </button>
@@ -121,6 +145,7 @@ export default function App() {
             style={{ fontSize: '.8rem' }}
             disabled={syncing}
             onClick={handleGenerate}
+            title="Generate occurrences for all active events"
           >
             {syncing ? 'Generating…' : '⟳ Generate'}
           </button>
@@ -129,6 +154,7 @@ export default function App() {
             style={{ fontSize: '.8rem', background: gcalAuth ? '#16a34a' : '#2563eb' }}
             disabled={gcalSyncing}
             onClick={handleGcalSync}
+            title={gcalAuth ? 'Push events to Google Calendar (force sync, 365 days)' : 'Connect your Google account to enable calendar sync'}
           >
             {gcalSyncing ? 'Syncing…' : gcalAuth ? '📅 Sync to Google' : '🔗 Connect Google'}
           </button>
@@ -138,6 +164,7 @@ export default function App() {
               style={{ fontSize: '.8rem', background: '#dc2626' }}
               disabled={gcalDeleting}
               onClick={handleGcalDelete}
+              title="Delete all events synced by this app from Google Calendar"
             >
               {gcalDeleting ? 'Deleting…' : '🗑 Clear Google Cal'}
             </button>
@@ -148,8 +175,20 @@ export default function App() {
               style={{ fontSize: '.8rem', background: '#7f1d1d' }}
               disabled={gcalWiping}
               onClick={handleGcalWipe}
+              title="Delete ALL events from your primary Google Calendar — including events not created by this app. Cannot be undone."
             >
               {gcalWiping ? 'Wiping…' : '💣 Wipe Google Cal'}
+            </button>
+          )}
+          {tab === 'tasks' && (
+            <button
+              className="btn btn-blue"
+              style={{ fontSize: '.8rem', background: gcalAuth ? '#7c3aed' : '#2563eb' }}
+              disabled={gtasksSyncing}
+              onClick={handleGtasksSync}
+              title={gcalAuth ? 'Sync tasks to Google Tasks' : 'Connect your Google account to enable Google Tasks sync'}
+            >
+              {gtasksSyncing ? 'Syncing…' : '✅ Sync to Google Tasks'}
             </button>
           )}
           {logs.length > 0 && (
@@ -157,6 +196,7 @@ export default function App() {
               className="btn btn-gray"
               style={{ fontSize: '.75rem' }}
               onClick={() => setLogs([])}
+              title="Clear the activity log"
             >
               Clear Log
             </button>
@@ -184,6 +224,7 @@ export default function App() {
         {tab === 'calendar' && <CalendarView />}
         {tab === 'upcoming' && <OccurrenceList />}
         {tab === 'cards'    && <CreditCardTracker />}
+        {tab === 'tasks'    && <TaskList />}
       </main>
     </div>
   )
