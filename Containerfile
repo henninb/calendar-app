@@ -20,15 +20,17 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Node dependencies
 COPY frontend/package*.json ./frontend/
-RUN npm install -g npm@11.12.1 && \
-    cd frontend && npm install
+RUN cd frontend && npm install
 
 # Application source
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 
 COPY container-entrypoint.sh ./
-RUN chmod +x container-entrypoint.sh
+RUN chmod +x container-entrypoint.sh && \
+    chown -R 1000:1000 /app
+
+USER 1000
 
 EXPOSE 8000
 
