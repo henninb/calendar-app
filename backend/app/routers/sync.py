@@ -237,39 +237,70 @@ def sync_single(occurrence_id: int, db: Session = Depends(get_db)):
 
 # ── Google Tasks Sync ─────────────────────────────────────────────────────────
 
+def _sync_one_task(task_id: int, svc, tasklist_id: str) -> tuple[int, str, str]:
+    """
+    Per-thread worker — owns its own DB session.
+    Returns (task_id, action, title) where action is one of:
+      "inserted" | "updated" | "failed:<message>"
+    Never raises — all exceptions are captured in the action string.
+    """
+    db = SessionLocal()
+    try:
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if task is None:
+            return task_id, "skipped", ""
+        title = task.title[:40]
+        action = gtasks.sync_task(db, task, svc=svc, tasklist_id=tasklist_id)
+        return task_id, action, title
+    except Exception as exc:
+        return task_id, f"failed:{exc}", ""
+    finally:
+        db.close()
+
+
 def _gtasks_sync_events() -> Generator[str, None, None]:
     """
     Generator that yields SSE-formatted events for a Google Tasks sync.
-    Emits a 'progress' event per task plus a final 'done' event.
+    Collects task IDs in one session, fans out to _SYNC_WORKERS threads,
+    and emits a 'progress' event per task plus a final 'done' event.
     """
     def sse(data: dict) -> str:
         return f"data: {json.dumps(data)}\n\n"
 
     db = SessionLocal()
     try:
-        tasks = db.query(Task).filter(Task.status != TaskStatus.cancelled).all()
-        total = len(tasks)
-        print(f"[gtasks sync] {total} tasks to sync…")
-        yield sse({"type": "start", "total": total})
-
-        synced, failed, errors = 0, 0, []
-        for i, task in enumerate(tasks, 1):
-            try:
-                action = gtasks.sync_task(db, task)
-                synced += 1
-                msg = f"{i}/{total} task {task.id} ({task.title[:40]}): {action}"
-            except Exception as exc:
-                failed += 1
-                err = f"task {task.id}: {exc}"
-                errors.append(err)
-                msg = f"{i}/{total} task {task.id}: FAILED {exc}"
-            print(f"[gtasks sync] {msg}")
-            yield sse({"type": "progress", "i": i, "total": total, "msg": msg})
-
-        print(f"[gtasks sync] done — synced={synced} failed={failed}")
-        yield sse({"type": "done", "synced": synced, "failed": failed, "errors": errors})
+        task_ids = [
+            t.id for t in db.query(Task).filter(Task.status != TaskStatus.cancelled).all()
+        ]
     finally:
         db.close()
+
+    total = len(task_ids)
+    print(f"[gtasks sync] {total} tasks to sync across {_SYNC_WORKERS} workers…")
+    yield sse({"type": "start", "total": total})
+
+    svc, tasklist_id = gtasks.get_or_create_tasklist()
+
+    synced, failed, errors = 0, 0, []
+    with ThreadPoolExecutor(max_workers=_SYNC_WORKERS) as pool:
+        futures = {pool.submit(_sync_one_task, task_id, svc, tasklist_id): task_id for task_id in task_ids}
+        for i, future in enumerate(as_completed(futures), 1):
+            task_id, action, title = future.result()
+            if action in ("inserted", "updated"):
+                synced += 1
+                msg = f"{i}/{total} task {task_id} ({title}): {action}"
+            elif action == "skipped":
+                msg = f"{i}/{total} task {task_id}: skipped"
+            else:
+                failed += 1
+                err_msg = action[7:]
+                errors.append(f"task {task_id}: {err_msg}")
+                msg = f"{i}/{total} task {task_id}: FAILED {err_msg}"
+            print(f"[gtasks sync] {msg}")
+            yield sse({"type": "progress", "i": i, "total": total, "action": action.split(":")[0], "msg": msg})
+
+    print(f"[gtasks sync] done — synced={synced} failed={failed}")
+    yield sse({"type": "done", "synced": synced, "failed": failed, "errors": errors})
 
 
 @router.post("/gtasks")

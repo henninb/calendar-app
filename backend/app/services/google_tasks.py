@@ -64,10 +64,17 @@ def _sync_subtask(svc, tasklist_id: str, subtask: Subtask, parent_gtask_id: str)
     subtask.gtask_id = result["id"]
 
 
-def sync_task(db: Session, task: Task) -> str:
-    """Push a single task (and its subtasks) to Google Tasks. Returns 'inserted' or 'updated'."""
+def get_or_create_tasklist() -> tuple[object, str]:
+    """Return (svc, tasklist_id), creating the task list if absent. Call once before threading."""
     svc = _service()
-    tasklist_id = _get_or_create_tasklist(svc)
+    return svc, _get_or_create_tasklist(svc)
+
+
+def sync_task(db: Session, task: Task, svc=None, tasklist_id: str = None) -> str:
+    """Push a single task (and its subtasks) to Google Tasks. Returns 'inserted' or 'updated'."""
+    if svc is None or tasklist_id is None:
+        svc = _service()
+        tasklist_id = _get_or_create_tasklist(svc)
 
     body: dict = {
         "title": task.title,
