@@ -26,6 +26,9 @@ export const fetchCreditCardTracker = () => request('/credit-cards/tracker')
 export const generateAll = () =>
   request('/occurrences/generate-all', { method: 'POST' })
 
+export const createTaskFromOccurrence = (occId) =>
+  request(`/occurrences/${occId}/task`, { method: 'POST' })
+
 export const gcalAuthStatus = () => request('/sync/auth/status')
 
 export const syncToGcal = async (daysAhead = 365, force = false, onProgress) => {

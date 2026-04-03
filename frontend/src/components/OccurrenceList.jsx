@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { fetchOccurrences, fetchCategories, updateOccurrence } from '../api'
+import { fetchOccurrences, fetchCategories, updateOccurrence, createTaskFromOccurrence } from '../api'
 
 
 function today() { return new Date().toISOString().slice(0, 10) }
@@ -21,9 +21,10 @@ function daysUntil(dateStr) {
 }
 
 export default function OccurrenceList() {
-  const [occs, setOccs]       = useState([])
-  const [cats, setCats]       = useState([])
-  const [loading, setLoading] = useState(true)
+  const [occs, setOccs]         = useState([])
+  const [cats, setCats]         = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [taskedIds, setTaskedIds] = useState(new Set())
   const [catFilter, setCatFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('upcoming,overdue')
   const [days, setDays]       = useState(60)
@@ -45,6 +46,11 @@ export default function OccurrenceList() {
   const mark = async (occ, status) => {
     const updated = await updateOccurrence(occ.id, { status })
     setOccs(prev => prev.map(o => o.id === updated.id ? updated : o))
+  }
+
+  const makeTask = async (occ) => {
+    await createTaskFromOccurrence(occ.id)
+    setTaskedIds(prev => new Set(prev).add(occ.id))
   }
 
   return (
@@ -128,6 +134,11 @@ export default function OccurrenceList() {
                       )}
                       {(occ.status === 'completed' || occ.status === 'skipped') && (
                         <button className="btn btn-blue" title="Reopen this occurrence as upcoming" onClick={() => mark(occ, 'upcoming')}>↩</button>
+                      )}
+                      {(occ.status === 'upcoming' || occ.status === 'overdue') && (
+                        taskedIds.has(occ.id)
+                          ? <span style={{ fontSize: '.75rem', color: '#86efac' }}>✓ Task</span>
+                          : <button className="btn btn-blue" style={{ background: '#7c3aed' }} title="Create a task from this occurrence" onClick={() => makeTask(occ)}>→ Task</button>
                       )}
                     </div>
                   </td>

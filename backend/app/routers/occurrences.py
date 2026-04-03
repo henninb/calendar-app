@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..config import settings
 from ..database import get_db
-from ..models import Event, Occurrence, OccurrenceStatus
-from ..schemas import GenerateResult, OccurrenceOut, OccurrenceUpdate
+from ..models import Event, Occurrence, OccurrenceStatus, Task
+from ..schemas import GenerateResult, OccurrenceOut, OccurrenceUpdate, TaskOut
 from ..services.recurrence import generate_all_occurrences, mark_overdue
 from ..services.task_generation import cancel_tasks_for_occurrence
 
@@ -72,6 +72,34 @@ def update_occurrence(
         cancel_tasks_for_occurrence(db, occ)
     db.refresh(occ)
     return occ
+
+
+@router.post("/{occurrence_id}/task", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
+def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db)):
+    """Create a task linked to this occurrence, or return the existing one if already created."""
+    occ = (
+        db.query(Occurrence)
+        .options(joinedload(Occurrence.event).joinedload(Event.category))
+        .filter(Occurrence.id == occurrence_id)
+        .first()
+    )
+    if not occ:
+        raise HTTPException(status_code=404, detail="Occurrence not found")
+    existing = db.query(Task).filter(Task.occurrence_id == occurrence_id).first()
+    if existing:
+        return existing
+    task = Task(
+        occurrence_id=occ.id,
+        title=occ.event.title,
+        description=occ.event.description,
+        priority=occ.event.priority,
+        due_date=occ.occurrence_date,
+        category_id=occ.event.category_id,
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return task
 
 
 @router.post("/generate-all", response_model=GenerateResult)

@@ -71,7 +71,8 @@ export default function TaskList() {
   const visible = tasks
     .filter(t => {
       if (filterStatus.length && !filterStatus.includes(t.status)) return false
-      if (filterAssignee && String(t.assignee_id) !== filterAssignee) return false
+      if (filterAssignee === 'unassigned') { if (t.assignee_id != null) return false }
+      else if (filterAssignee && String(t.assignee_id) !== filterAssignee) return false
       if (filterToday && t.due_date !== today) return false
       if (filterTomorrow && t.due_date !== tomorrow) return false
       if (filterCategory && String(t.category_id) !== filterCategory) return false
@@ -266,6 +267,7 @@ export default function TaskList() {
           Assignee&nbsp;
           <select value={filterAssignee} onChange={e => setFAsgn(e.target.value)} style={inputStyle}>
             <option value="">All</option>
+            <option value="unassigned">Unassigned</option>
             {persons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </label>
