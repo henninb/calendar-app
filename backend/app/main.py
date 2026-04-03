@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
 
         mark_overdue(db)
         generate_all_occurrences(db)
-        for card in db.query(CreditCard).filter(CreditCard.is_active == True).all():
+        for card in db.query(CreditCard).filter(CreditCard.is_active.isnot(False)).all():
             generate_credit_card_occurrences(db, card)
         generate_pending_tasks(db)
     finally:

@@ -26,14 +26,17 @@ function DaysCell({ dateStr, days }) {
 export default function CreditCardTracker() {
   const [rows, setRows]       = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
 
   useEffect(() => {
     fetchCreditCardTracker()
       .then(setRows)
+      .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
 
   if (loading) return <div className="loading">Loading…</div>
+  if (error)   return <div className="empty">Failed to load credit cards: {error}</div>
   if (!rows.length) return <div className="empty">No credit cards found. Add cards via the API.</div>
 
   return (

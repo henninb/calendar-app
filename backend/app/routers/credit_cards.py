@@ -47,8 +47,14 @@ def create_card(body: CreditCardCreate, db: Session = Depends(get_db)):
 def tracker(db: Session = Depends(get_db)):
     """Return the tracker view for all active cards (mirrors credit-card-tracker.py output)."""
     today = date.today()
-    cards = db.query(CreditCard).filter(CreditCard.is_active == True).order_by(CreditCard.name).all()
-    return [tracker_row(card, today) for card in cards]
+    cards = db.query(CreditCard).filter(CreditCard.is_active.isnot(False)).order_by(CreditCard.name).all()
+    rows = []
+    for card in cards:
+        try:
+            rows.append(tracker_row(card, today))
+        except Exception as exc:
+            print(f"[tracker] skipping card {card.id} ({card.name}): {exc}")
+    return rows
 
 
 @router.get("/{card_id}", response_model=CreditCardOut)
@@ -100,7 +106,7 @@ def generate_all(
     db: Session = Depends(get_db),
 ):
     """Generate occurrences for all active credit cards."""
-    cards = db.query(CreditCard).filter(CreditCard.is_active == True).all()
+    cards = db.query(CreditCard).filter(CreditCard.is_active.isnot(False)).all()
     total = 0
     for card in cards:
         total += generate_credit_card_occurrences(db, card, lookahead_days)

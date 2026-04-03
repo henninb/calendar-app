@@ -27,7 +27,7 @@ def _run_daily_job() -> None:
 
         result = generate_all_occurrences(db)
 
-        cards = db.query(CreditCard).filter(CreditCard.is_active == True).all()
+        cards = db.query(CreditCard).filter(CreditCard.is_active.isnot(False)).all()
         cc_new = sum(generate_credit_card_occurrences(db, card) for card in cards)
 
         tasks_created = generate_pending_tasks(db)
