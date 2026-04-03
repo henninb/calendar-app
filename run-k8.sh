@@ -124,6 +124,14 @@ spec:
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 192.168.10.1
+        searches:
+          - default.svc.cluster.local
+          - svc.cluster.local
+          - cluster.local
       nodeSelector:
         kubernetes.io/hostname: $WORKER_NODE
       containers:
