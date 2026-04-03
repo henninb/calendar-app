@@ -170,15 +170,17 @@ export default function App() {
           ))}
         </nav>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '.75rem' }}>
-          <button
-            className="btn btn-blue"
-            style={{ fontSize: '.8rem' }}
-            disabled={syncing}
-            onClick={handleGenerate}
-            title="Generate occurrences for all active events"
-          >
-            {syncing ? 'Generating…' : '⟳ Generate'}
-          </button>
+          {tab === 'calendar' && (
+            <button
+              className="btn btn-blue"
+              style={{ fontSize: '.8rem' }}
+              disabled={syncing}
+              onClick={handleGenerate}
+              title="Generate occurrences for all active events"
+            >
+              {syncing ? 'Generating…' : '⟳ Generate'}
+            </button>
+          )}
           {tab === 'calendar' && (
             <button
               className="btn btn-blue"
@@ -190,7 +192,7 @@ export default function App() {
               {gcalSyncing ? 'Syncing…' : gcalAuth ? '📅 Sync to Google Calendar' : '🔗 Connect Google'}
             </button>
           )}
-          {gcalAuth && (
+          {tab === 'calendar' && gcalAuth && (
             <button
               className="btn btn-blue"
               style={{ fontSize: '.8rem', background: '#dc2626' }}
@@ -201,7 +203,7 @@ export default function App() {
               {gcalDeleting ? 'Deleting…' : '🗑 Clear Google Cal'}
             </button>
           )}
-          {gcalAuth && (
+          {tab === 'calendar' && gcalAuth && (
             <button
               className="btn btn-blue"
               style={{ fontSize: '.8rem', background: '#7f1d1d' }}
