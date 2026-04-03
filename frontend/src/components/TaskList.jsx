@@ -311,6 +311,8 @@ export default function TaskList() {
               <option value="weekly">Weekly</option>
               <option value="biweekly">Biweekly</option>
               <option value="monthly">Monthly</option>
+              <option value="quarterly">Every 3 Months</option>
+              <option value="semiannual">Every 6 Months</option>
               <option value="yearly">Yearly</option>
             </select>
           </div>
@@ -481,6 +483,8 @@ export default function TaskList() {
                               <option value="weekly">Weekly</option>
                               <option value="biweekly">Biweekly</option>
                               <option value="monthly">Monthly</option>
+                              <option value="quarterly">Every 3 Months</option>
+                              <option value="semiannual">Every 6 Months</option>
                               <option value="yearly">Yearly</option>
                             </select>
                           </div>

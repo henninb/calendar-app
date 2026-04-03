@@ -34,6 +34,8 @@ class TaskRecurrence(str, enum.Enum):
     weekly = "weekly"
     biweekly = "biweekly"
     monthly = "monthly"
+    quarterly = "quarterly"
+    semiannual = "semiannual"
     yearly = "yearly"
 
 

@@ -9,11 +9,13 @@ from ..models import Category, Subtask, Task, TaskRecurrence, TaskStatus
 from ..schemas import SubtaskCreate, SubtaskOut, SubtaskUpdate, TaskCreate, TaskOut, TaskUpdate
 
 _RECURRENCE_DELTA = {
-    TaskRecurrence.daily:    timedelta(days=1),
-    TaskRecurrence.weekly:   timedelta(weeks=1),
-    TaskRecurrence.biweekly: timedelta(weeks=2),
-    TaskRecurrence.monthly:  None,   # handled separately
-    TaskRecurrence.yearly:   None,   # handled separately
+    TaskRecurrence.daily:      timedelta(days=1),
+    TaskRecurrence.weekly:     timedelta(weeks=1),
+    TaskRecurrence.biweekly:   timedelta(weeks=2),
+    TaskRecurrence.monthly:    None,   # handled separately
+    TaskRecurrence.quarterly:  None,   # handled separately
+    TaskRecurrence.semiannual: None,   # handled separately
+    TaskRecurrence.yearly:     None,   # handled separately
 }
 
 
@@ -25,15 +27,15 @@ def _next_due(task: Task) -> Optional[date]:
     if delta:
         return task.due_date + delta
     today = task.due_date
-    if task.recurrence == TaskRecurrence.monthly:
-        month = today.month + 1
+    import calendar
+    if task.recurrence in (TaskRecurrence.monthly, TaskRecurrence.quarterly, TaskRecurrence.semiannual):
+        months = {TaskRecurrence.monthly: 1, TaskRecurrence.quarterly: 3, TaskRecurrence.semiannual: 6}[task.recurrence]
+        month = today.month + months
         year = today.year + (month - 1) // 12
         month = ((month - 1) % 12) + 1
-        import calendar
         day = min(today.day, calendar.monthrange(year, month)[1])
         return date(year, month, day)
     if task.recurrence == TaskRecurrence.yearly:
-        import calendar
         year = today.year + 1
         day = min(today.day, calendar.monthrange(year, today.month)[1])
         return date(year, today.month, day)
