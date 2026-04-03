@@ -8,18 +8,19 @@ OAuth flow:
   4. POST /api/sync/gcal            → push unsynced occurrences to Google Calendar
   5. GET  /api/sync/export/ics      → download all upcoming events as .ics
 """
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
-from typing import Optional
+from typing import Generator, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from icalendar import Calendar, Event as ICalEvent
 from sqlalchemy.orm import Session, joinedload
 
 from ..config import settings
 from ..database import SessionLocal, get_db
-from ..models import Event, Occurrence, OccurrenceStatus
+from ..models import Event, Occurrence, OccurrenceStatus, Task, TaskStatus
 from ..schemas import AuthStatus, SyncResult
 from ..services import google_calendar as gcal
 from ..services import google_tasks as gtasks
@@ -82,13 +83,16 @@ def _sync_one(occ_id: int) -> tuple[int, str, str, str]:
         db.close()
 
 
-def _run_gcal_sync(days_ahead: int, force: bool = False) -> dict:
+def _gcal_sync_events(days_ahead: int, force: bool = False) -> Generator[str, None, None]:
     """
-    Collects occurrence IDs in one session, then fans out to _SYNC_WORKERS
-    threads each owning their own session and GCal service.
-    Returns a dict with synced, failed, and errors counts.
+    Generator that yields SSE-formatted events for a GCal sync.
+    Collects occurrence IDs in one session, fans out to _SYNC_WORKERS threads,
+    and emits a 'progress' event per occurrence plus a final 'done' event.
     """
-    # Phase 1: collect IDs in a short-lived session
+    def sse(data: dict) -> str:
+        return f"data: {json.dumps(data)}\n\n"
+
+    # Phase 1: collect IDs
     db = SessionLocal()
     try:
         until = date.today() + timedelta(days=days_ahead)
@@ -107,6 +111,8 @@ def _run_gcal_sync(days_ahead: int, force: bool = False) -> dict:
 
     total = len(occ_ids)
     print(f"[gcal sync] {total} occurrences to sync across {_SYNC_WORKERS} workers…")
+    yield sse({"type": "start", "total": total})
+
     inserted, updated, skipped, failed = 0, 0, 0, 0
     errors = []
 
@@ -117,41 +123,39 @@ def _run_gcal_sync(days_ahead: int, force: bool = False) -> dict:
             occ_id, action, occ_date, gcal_id = future.result()
             if action == "inserted":
                 inserted += 1
-                print(f"[gcal sync] {i}/{total} occ {occ_id} ({occ_date}): inserted {gcal_id}")
+                msg = f"{i}/{total} occ {occ_id} ({occ_date}): inserted {gcal_id}"
             elif action == "updated":
                 updated += 1
-                print(f"[gcal sync] {i}/{total} occ {occ_id} ({occ_date}): updated {gcal_id}")
+                msg = f"{i}/{total} occ {occ_id} ({occ_date}): updated {gcal_id}"
             elif action == "skipped":
                 skipped += 1
-                print(f"[gcal sync] {i}/{total} occ {occ_id}: skipped")
+                msg = f"{i}/{total} occ {occ_id}: skipped"
             else:
                 failed += 1
                 err_msg = action[7:]
                 errors.append(f"occ {occ_id}: {err_msg}")
-                print(f"[gcal sync] {i}/{total} occ {occ_id}: FAILED {err_msg}")
+                msg = f"{i}/{total} occ {occ_id}: FAILED {err_msg}"
+            print(f"[gcal sync] {msg}")
+            yield sse({"type": "progress", "i": i, "total": total, "action": action.split(":")[0], "msg": msg})
 
     print(f"[gcal sync] done — inserted={inserted} updated={updated} skipped={skipped} failed={failed}")
-    return dict(synced=inserted + updated, failed=failed, errors=errors)
+    yield sse({"type": "done", "synced": inserted + updated, "failed": failed, "errors": errors})
 
 
-@router.post("/gcal", response_model=SyncResult)
+@router.post("/gcal")
 def sync_to_gcal(
     days_ahead: int = Query(settings.occurrence_lookahead_days, ge=1, le=730),
     force: bool = Query(False, description="Re-sync all occurrences, overwriting existing Google Calendar events"),
 ):
     """
-    Sync occurrences to Google Calendar.
-    Use force=true to overwrite already-synced events (prevents duplicates).
+    Sync occurrences to Google Calendar, streaming progress via Server-Sent Events.
+    Each SSE event is a JSON object with a 'type' field: 'start', 'progress', or 'done'.
     """
-    try:
-        result = _run_gcal_sync(days_ahead, force)
-        synced, failed = result["synced"], result["failed"]
-        msg = f"Synced {synced} events to Google Calendar."
-        if failed:
-            msg += f" {failed} failed — check errors for details."
-        return SyncResult(**result, message=msg)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return StreamingResponse(
+        _gcal_sync_events(days_ahead, force),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 def _run_gcal_delete_all():
@@ -233,17 +237,49 @@ def sync_single(occurrence_id: int, db: Session = Depends(get_db)):
 
 # ── Google Tasks Sync ─────────────────────────────────────────────────────────
 
-@router.post("/gtasks", response_model=SyncResult)
-def sync_to_gtasks(db: Session = Depends(get_db)):
-    """Push all non-cancelled tasks to Google Tasks (one-way sync)."""
+def _gtasks_sync_events() -> Generator[str, None, None]:
+    """
+    Generator that yields SSE-formatted events for a Google Tasks sync.
+    Emits a 'progress' event per task plus a final 'done' event.
+    """
+    def sse(data: dict) -> str:
+        return f"data: {json.dumps(data)}\n\n"
+
+    db = SessionLocal()
     try:
-        result = gtasks.sync_all_tasks(db)
-        msg = f"Synced {result['synced']} tasks to Google Tasks."
-        if result['failed']:
-            msg += f" {result['failed']} failed — check errors for details."
-        return SyncResult(**result, message=msg)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        tasks = db.query(Task).filter(Task.status != TaskStatus.cancelled).all()
+        total = len(tasks)
+        print(f"[gtasks sync] {total} tasks to sync…")
+        yield sse({"type": "start", "total": total})
+
+        synced, failed, errors = 0, 0, []
+        for i, task in enumerate(tasks, 1):
+            try:
+                action = gtasks.sync_task(db, task)
+                synced += 1
+                msg = f"{i}/{total} task {task.id} ({task.title[:40]}): {action}"
+            except Exception as exc:
+                failed += 1
+                err = f"task {task.id}: {exc}"
+                errors.append(err)
+                msg = f"{i}/{total} task {task.id}: FAILED {exc}"
+            print(f"[gtasks sync] {msg}")
+            yield sse({"type": "progress", "i": i, "total": total, "msg": msg})
+
+        print(f"[gtasks sync] done — synced={synced} failed={failed}")
+        yield sse({"type": "done", "synced": synced, "failed": failed, "errors": errors})
+    finally:
+        db.close()
+
+
+@router.post("/gtasks")
+def sync_to_gtasks():
+    """Push all non-cancelled tasks to Google Tasks, streaming progress via Server-Sent Events."""
+    return StreamingResponse(
+        _gtasks_sync_events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ── ICS Export ────────────────────────────────────────────────────────────────

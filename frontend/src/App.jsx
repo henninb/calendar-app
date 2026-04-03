@@ -44,7 +44,13 @@ export default function App() {
   }, [logs])
 
   const addLog = (level, text) => {
-    setLogs(prev => [...prev, { id: Date.now() + Math.random(), level, text, time: timestamp() }])
+    const id = Date.now() + Math.random()
+    setLogs(prev => [...prev, { id, level, text, time: timestamp() }])
+    return id
+  }
+
+  const updateLog = (id, text) => {
+    setLogs(prev => prev.map(entry => entry.id === id ? { ...entry, text } : entry))
   }
 
   const handleGenerate = async () => {
@@ -67,13 +73,22 @@ export default function App() {
     }
     setGcalSyncing(true)
     addLog('info', `Starting Google Calendar sync (force=${config.gcalSyncForce}, ${config.gcalSyncDays} days)…`)
+    const progressId = addLog('info', 'Waiting for server…')
     try {
-      const res = await syncToGcal(config.gcalSyncDays, config.gcalSyncForce)
+      const res = await syncToGcal(config.gcalSyncDays, config.gcalSyncForce, (data) => {
+        if (data.type === 'start') {
+          updateLog(progressId, `[gcal sync] 0/${data.total} starting…`)
+        } else if (data.type === 'progress') {
+          updateLog(progressId, `[gcal sync] ${data.msg}`)
+        }
+      })
+      setLogs(prev => prev.filter(entry => entry.id !== progressId))
       const level = res.failed > 0 ? 'warn' : 'ok'
-      addLog(level, res.message || `Synced ${res.synced} events${res.failed ? `, ${res.failed} failed` : ''}.`)
+      addLog(level, `Synced ${res.synced} events to Google Calendar.${res.failed ? ` ${res.failed} failed.` : ''}`)
       if (res.failed > 0) addLog('warn', `${res.failed} event(s) failed to sync — you may need to reconnect Google.`)
-      res.errors?.slice(0, 5).forEach(e => addLog('error', e))
+      res.errors?.slice(0, 5).forEach(err => addLog('error', err))
     } catch (e) {
+      setLogs(prev => prev.filter(entry => entry.id !== progressId))
       addLog('error', `Google Calendar sync failed: ${e.message}`)
     }
     setGcalSyncing(false)
@@ -101,13 +116,22 @@ export default function App() {
     }
     setGtasksSyncing(true)
     addLog('info', 'Syncing tasks to Google Tasks…')
+    const progressId = addLog('info', 'Waiting for server…')
     try {
-      const res = await syncToGtasks()
+      const res = await syncToGtasks((data) => {
+        if (data.type === 'start') {
+          updateLog(progressId, `[gtasks sync] 0/${data.total} starting…`)
+        } else if (data.type === 'progress') {
+          updateLog(progressId, `[gtasks sync] ${data.msg}`)
+        }
+      })
+      setLogs(prev => prev.filter(entry => entry.id !== progressId))
       const level = res.failed > 0 ? 'warn' : 'ok'
-      addLog(level, res.message || `Synced ${res.synced} tasks.`)
+      addLog(level, `Synced ${res.synced} tasks to Google Tasks.${res.failed ? ` ${res.failed} failed.` : ''}`)
       if (res.failed > 0) addLog('warn', `${res.failed} task(s) failed to sync — you may need to reconnect Google.`)
-      res.errors?.slice(0, 5).forEach(e => addLog('error', e))
+      res.errors?.slice(0, 5).forEach(err => addLog('error', err))
     } catch (e) {
+      setLogs(prev => prev.filter(entry => entry.id !== progressId))
       addLog('error', `Google Tasks sync failed: ${e.message}`)
     }
     setGtasksSyncing(false)

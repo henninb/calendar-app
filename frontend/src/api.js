@@ -28,8 +28,28 @@ export const generateAll = () =>
 
 export const gcalAuthStatus = () => request('/sync/auth/status')
 
-export const syncToGcal = (daysAhead = 365, force = false) =>
-  request(`/sync/gcal?days_ahead=${daysAhead}&force=${force}`, { method: 'POST' })
+export const syncToGcal = async (daysAhead = 365, force = false, onProgress) => {
+  const res = await fetch(`${BASE}/sync/gcal?days_ahead=${daysAhead}&force=${force}`, { method: 'POST' })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let finalResult = null
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const parts = buffer.split('\n\n')
+    buffer = parts.pop()
+    for (const part of parts) {
+      if (!part.startsWith('data: ')) continue
+      const data = JSON.parse(part.slice(6))
+      if (data.type === 'done') finalResult = data
+      else onProgress?.(data)
+    }
+  }
+  return finalResult
+}
 
 export const deleteAllGcalEvents = () =>
   request('/sync/gcal', { method: 'DELETE' })
@@ -37,8 +57,28 @@ export const deleteAllGcalEvents = () =>
 export const wipeAllGcalEvents = () =>
   request('/sync/gcal/wipe-all', { method: 'DELETE' })
 
-export const syncToGtasks = () =>
-  request('/sync/gtasks', { method: 'POST' })
+export const syncToGtasks = async (onProgress) => {
+  const res = await fetch(`${BASE}/sync/gtasks`, { method: 'POST' })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let finalResult = null
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const parts = buffer.split('\n\n')
+    buffer = parts.pop()
+    for (const part of parts) {
+      if (!part.startsWith('data: ')) continue
+      const data = JSON.parse(part.slice(6))
+      if (data.type === 'done') finalResult = data
+      else onProgress?.(data)
+    }
+  }
+  return finalResult
+}
 
 // ── Tasks ──────────────────────────────────────────────────────────────────
 
