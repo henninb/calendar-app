@@ -350,6 +350,8 @@ EXAMPLE_EVENTS = [
      date(2026, 5, 30),  "Kathryn's graduation at 5pm",           Priority.high, [14, 7, 1], None),
     ("Maggie — Cancel Spotify",           "other",         None,
      date(2026, 4, 1),    "Maggie to cancel Spotify subscription",     Priority.high,   [1],     None),
+    ("USPS Package Delivery",             "other",         None,
+     date(2026, 4, 6),    "USPS expects to deliver package by Monday, April 6, 2026 arriving by 9:00pm — Tracking: 9534616019286093804114", Priority.medium, [1], None),
 
     # ── NCAA Men's Ice Hockey Tournament ─────────────────────────────────────
     # Season opens: first Friday of October
