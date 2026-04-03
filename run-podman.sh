@@ -24,6 +24,7 @@ mkdir -p "$TOKEN_DIR"
 podman run -d \
   --name calendar-app \
   --replace \
+  --userns=keep-id \
   -p 8000:8000 \
   -e DB_HOST=postgresql.bhenning.com \
   -e DB_PORT=5432 \
