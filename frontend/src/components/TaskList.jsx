@@ -24,6 +24,14 @@ function daysBadge(dateStr) {
   return <span style={{ fontSize: '.75rem', color, fontWeight: 600, marginLeft: '.4rem' }}>{label}</span>
 }
 
+function localDate(offset = 0) {
+  const d = new Date()
+  d.setDate(d.getDate() + offset)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const emptyTask = () => ({ title: '', priority: 'medium', due_date: localDate(), estimated_minutes: '', assignee_id: '', category_id: '', recurrence: 'none' })
+
 export default function TaskList() {
   const [tasks, setTasks]           = useState([])
   const [persons, setPersons]       = useState([])
@@ -36,7 +44,7 @@ export default function TaskList() {
   const [expanded, setExpanded]     = useState({})
   const [newSubtask, setNewSubtask] = useState({})
   const [addingTask, setAddingTask] = useState(false)
-  const [newTask, setNewTask]       = useState({ title: '', priority: 'medium', due_date: '', estimated_minutes: '', assignee_id: '', category_id: '', recurrence: 'none' })
+  const [newTask, setNewTask]       = useState(emptyTask)
   const [editingId, setEditingId]         = useState(null)
   const [editForm, setEditForm]           = useState({})
   const [editingSubtask, setEditingSubtask] = useState(null)   // { taskId, subtaskId }
@@ -60,11 +68,6 @@ export default function TaskList() {
   const toggleStatus = (s) =>
     setFilter(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
 
-  const localDate = (offset = 0) => {
-    const d = new Date()
-    d.setDate(d.getDate() + offset)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }
   const today    = localDate(0)
   const tomorrow = localDate(1)
 
@@ -114,7 +117,7 @@ export default function TaskList() {
     }
     const created = await createTask(payload)
     setTasks(prev => [created, ...prev])
-    setNewTask({ title: '', priority: 'medium', due_date: '', estimated_minutes: '', assignee_id: '', category_id: '', recurrence: 'none' })
+    setNewTask(emptyTask())
     setAddingTask(false)
   }
 
