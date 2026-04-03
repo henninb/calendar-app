@@ -35,8 +35,10 @@ export default function TaskList() {
   const [newSubtask, setNewSubtask] = useState({})
   const [addingTask, setAddingTask] = useState(false)
   const [newTask, setNewTask]       = useState({ title: '', priority: 'medium', due_date: '', estimated_minutes: '', assignee_id: '', recurrence: 'none' })
-  const [editingId, setEditingId]   = useState(null)
-  const [editForm, setEditForm]     = useState({})
+  const [editingId, setEditingId]         = useState(null)
+  const [editForm, setEditForm]           = useState({})
+  const [editingSubtask, setEditingSubtask] = useState(null)   // { taskId, subtaskId }
+  const [editSubForm, setEditSubForm]     = useState({})
   const [loading, setLoading]       = useState(true)
 
   const load = useCallback(async () => {
@@ -157,6 +159,27 @@ export default function TaskList() {
         ? { ...t, subtasks: t.subtasks.map(s => s.id === subtaskId ? { ...s, ...data } : s) }
         : t
     ))
+  }
+
+  const startEditSubtask = (taskId, sub) => {
+    setEditingSubtask({ taskId, subtaskId: sub.id })
+    setEditSubForm({ title: sub.title, due_date: sub.due_date || '', status: sub.status })
+  }
+
+  const saveEditSubtask = async () => {
+    const { taskId, subtaskId } = editingSubtask
+    const payload = {
+      title: editSubForm.title.trim(),
+      due_date: editSubForm.due_date || null,
+      status: editSubForm.status,
+    }
+    await updateSubtask(taskId, subtaskId, payload)
+    setTasks(prev => prev.map(t =>
+      t.id === taskId
+        ? { ...t, subtasks: t.subtasks.map(s => s.id === subtaskId ? { ...s, ...payload } : s) }
+        : t
+    ))
+    setEditingSubtask(null)
   }
 
   const handleDeleteSubtask = async (taskId, subtaskId) => {
@@ -467,35 +490,69 @@ export default function TaskList() {
                         </div>
 
                         {(task.subtasks || []).sort((a, b) => a.order - b.order).map(sub => (
-                          <div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: '.6rem', marginBottom: '.35rem' }}>
-                            <input
-                              type="checkbox"
-                              checked={sub.status === 'done'}
-                              onChange={e => patchSubtask(task.id, sub.id, { status: e.target.checked ? 'done' : 'todo' })}
-                              style={{ cursor: 'pointer', accentColor: '#22c55e', width: '16px', height: '16px' }}
-                            />
-                            <span style={{
-                              color: sub.status === 'done' ? '#94a3b8' : '#1e293b',
-                              textDecoration: sub.status === 'done' ? 'line-through' : 'none',
-                              flex: 1, fontSize: '.875rem',
-                            }}>
-                              {sub.title}
-                            </span>
-                            {sub.due_date && (
-                              <span style={{ fontSize: '.78rem', color: '#64748b' }}>{fmt(sub.due_date)}</span>
+                          <div key={sub.id} style={{ marginBottom: '.35rem' }}>
+                            {editingSubtask?.taskId === task.id && editingSubtask?.subtaskId === sub.id ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', flexWrap: 'wrap' }}>
+                                <input
+                                  autoFocus
+                                  value={editSubForm.title}
+                                  onChange={e => setEditSubForm(p => ({ ...p, title: e.target.value }))}
+                                  onKeyDown={e => e.key === 'Enter' && saveEditSubtask()}
+                                  style={{ ...inputStyle, flex: '1 1 160px' }}
+                                />
+                                <input
+                                  type="date"
+                                  value={editSubForm.due_date}
+                                  onChange={e => setEditSubForm(p => ({ ...p, due_date: e.target.value }))}
+                                  style={inputStyle}
+                                />
+                                <select
+                                  value={editSubForm.status}
+                                  onChange={e => setEditSubForm(p => ({ ...p, status: e.target.value }))}
+                                  style={{ ...inputStyle, background: STATUS_BG[editSubForm.status], color: STATUS_FG[editSubForm.status], fontWeight: 600 }}
+                                >
+                                  {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+                                </select>
+                                <button onClick={saveEditSubtask} className="btn btn-green" title="Save subtask">Save</button>
+                                <button onClick={() => setEditingSubtask(null)} className="btn btn-gray" title="Cancel edit">Cancel</button>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={sub.status === 'done'}
+                                  onChange={e => patchSubtask(task.id, sub.id, { status: e.target.checked ? 'done' : 'todo' })}
+                                  style={{ cursor: 'pointer', accentColor: '#22c55e', width: '16px', height: '16px' }}
+                                />
+                                <span style={{
+                                  color: sub.status === 'done' ? '#94a3b8' : '#1e293b',
+                                  textDecoration: sub.status === 'done' ? 'line-through' : 'none',
+                                  flex: 1, fontSize: '.875rem',
+                                }}>
+                                  {sub.title}
+                                </span>
+                                {sub.due_date && (
+                                  <span style={{ fontSize: '.78rem', color: '#64748b' }}>{fmt(sub.due_date)}</span>
+                                )}
+                                <select
+                                  value={sub.status}
+                                  onChange={e => patchSubtask(task.id, sub.id, { status: e.target.value })}
+                                  style={{ fontSize: '.78rem', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '.15rem .3rem', background: STATUS_BG[sub.status], color: STATUS_FG[sub.status], fontWeight: 600, cursor: 'pointer' }}
+                                >
+                                  {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+                                </select>
+                                <button onClick={() => startEditSubtask(task.id, sub)}
+                                  title="Edit this subtask"
+                                  style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontSize: '.9rem', padding: '0 .2rem' }}>
+                                  ✎
+                                </button>
+                                <button onClick={() => handleDeleteSubtask(task.id, sub.id)}
+                                  title="Delete this subtask"
+                                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '.9rem', padding: '0 .2rem' }}>
+                                  ✕
+                                </button>
+                              </div>
                             )}
-                            <select
-                              value={sub.status}
-                              onChange={e => patchSubtask(task.id, sub.id, { status: e.target.value })}
-                              style={{ fontSize: '.78rem', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '.15rem .3rem', background: STATUS_BG[sub.status], color: STATUS_FG[sub.status], fontWeight: 600, cursor: 'pointer' }}
-                            >
-                              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-                            </select>
-                            <button onClick={() => handleDeleteSubtask(task.id, sub.id)}
-                              title="Delete this subtask"
-                              style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '.9rem', padding: '0 .2rem' }}>
-                              ✕
-                            </button>
                           </div>
                         ))}
 
