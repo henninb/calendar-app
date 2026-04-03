@@ -263,7 +263,6 @@ def _resolve_gcal_id(service, occurrence: Occurrence, calendar_id: str, body: di
             _execute(service.events().update(
                 calendarId=calendar_id, eventId=gcal_id, body=body
             ))
-            print(f"[gcal sync] occ {occurrence.id} ({occurrence.occurrence_date}): updated {gcal_id}")
             return gcal_id, "updated"
         except HttpError as e:
             if e.resp.status != 404:
@@ -290,10 +289,6 @@ def _resolve_gcal_id(service, occurrence: Occurrence, calendar_id: str, body: di
             _execute(service.events().update(
                 calendarId=calendar_id, eventId=found_id, body=body
             ))
-            print(
-                f"[gcal sync] occ {occurrence.id} ({occurrence.occurrence_date}): "
-                f"adopted existing event {found_id}"
-            )
             return found_id, "updated"
 
         # Date mismatch → stale event from a previous DB lifecycle; replace it
@@ -308,7 +303,6 @@ def _resolve_gcal_id(service, occurrence: Occurrence, calendar_id: str, body: di
 
     result = _execute(service.events().insert(calendarId=calendar_id, body=body))
     new_id = result["id"]
-    print(f"[gcal sync] occ {occurrence.id} ({occurrence.occurrence_date}): inserted {new_id}")
     return new_id, "inserted"
 
 

@@ -3,6 +3,7 @@ import CalendarView from './components/CalendarView'
 import OccurrenceList from './components/OccurrenceList'
 import CreditCardTracker from './components/CreditCardTracker'
 import TaskList from './components/TaskList'
+import ConfigPage, { loadConfig } from './components/ConfigPage'
 import { generateAll, gcalAuthStatus, syncToGcal, deleteAllGcalEvents, wipeAllGcalEvents, syncToGtasks } from './api'
 
 const TABS = [
@@ -10,6 +11,7 @@ const TABS = [
   { id: 'upcoming',  label: '📋 Upcoming' },
   { id: 'cards',     label: '💳 Credit Cards' },
   { id: 'tasks',     label: '✅ Tasks' },
+  { id: 'config',    label: '⚙️ Config' },
 ]
 
 function timestamp() {
@@ -18,6 +20,7 @@ function timestamp() {
 
 export default function App() {
   const [tab, setTab]                   = useState('calendar')
+  const [config, setConfig]             = useState(loadConfig)
   const [syncing, setSyncing]               = useState(false)
   const [gcalSyncing, setGcalSyncing]       = useState(false)
   const [gcalDeleting, setGcalDeleting]     = useState(false)
@@ -63,12 +66,15 @@ export default function App() {
       return
     }
     setGcalSyncing(true)
-    addLog('info', 'Starting Google Calendar sync (force=true, 365 days)…')
+    addLog('info', `Starting Google Calendar sync (force=${config.gcalSyncForce}, ${config.gcalSyncDays} days)…`)
     try {
-      const res = await syncToGcal(365, true)
-      addLog('ok', res.message || `Synced ${res.synced} events${res.failed ? `, ${res.failed} failed` : ''}.`)
+      const res = await syncToGcal(config.gcalSyncDays, config.gcalSyncForce)
+      const level = res.failed > 0 ? 'warn' : 'ok'
+      addLog(level, res.message || `Synced ${res.synced} events${res.failed ? `, ${res.failed} failed` : ''}.`)
+      if (res.failed > 0) addLog('warn', `${res.failed} event(s) failed to sync — you may need to reconnect Google.`)
+      res.errors?.slice(0, 5).forEach(e => addLog('error', e))
     } catch (e) {
-      addLog('error', `Sync failed: ${e.message}`)
+      addLog('error', `Google Calendar sync failed: ${e.message}`)
     }
     setGcalSyncing(false)
   }
@@ -149,15 +155,17 @@ export default function App() {
           >
             {syncing ? 'Generating…' : '⟳ Generate'}
           </button>
-          <button
-            className="btn btn-blue"
-            style={{ fontSize: '.8rem', background: gcalAuth ? '#16a34a' : '#2563eb' }}
-            disabled={gcalSyncing}
-            onClick={handleGcalSync}
-            title={gcalAuth ? 'Push events to Google Calendar (force sync, 365 days)' : 'Connect your Google account to enable calendar sync'}
-          >
-            {gcalSyncing ? 'Syncing…' : gcalAuth ? '📅 Sync to Google' : '🔗 Connect Google'}
-          </button>
+          {tab === 'calendar' && (
+            <button
+              className="btn btn-blue"
+              style={{ fontSize: '.8rem', background: gcalAuth ? '#16a34a' : '#2563eb' }}
+              disabled={gcalSyncing}
+              onClick={handleGcalSync}
+              title={gcalAuth ? `Push events to Google Calendar (force=${config.gcalSyncForce}, ${config.gcalSyncDays} days)` : 'Connect your Google account to enable calendar sync'}
+            >
+              {gcalSyncing ? 'Syncing…' : gcalAuth ? '📅 Sync to Google Calendar' : '🔗 Connect Google'}
+            </button>
+          )}
           {gcalAuth && (
             <button
               className="btn btn-blue"
@@ -225,6 +233,7 @@ export default function App() {
         {tab === 'upcoming' && <OccurrenceList />}
         {tab === 'cards'    && <CreditCardTracker />}
         {tab === 'tasks'    && <TaskList />}
+        {tab === 'config'   && <ConfigPage config={config} onSave={setConfig} />}
       </main>
     </div>
   )

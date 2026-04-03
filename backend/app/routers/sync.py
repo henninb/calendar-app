@@ -56,10 +56,10 @@ def auth_status():
 
 # ── Sync ──────────────────────────────────────────────────────────────────────
 
-def _sync_one(occ_id: int) -> tuple[int, str, str]:
+def _sync_one(occ_id: int) -> tuple[int, str, str, str]:
     """
     Per-thread worker — owns its own DB session and GCal service instance.
-    Returns (occ_id, action, occ_date_str) where action is one of:
+    Returns (occ_id, action, occ_date_str, gcal_id) where action is one of:
       "inserted" | "updated" | "skipped" | "failed:<message>"
     Never raises — all exceptions are captured in the action string.
     """
@@ -72,20 +72,21 @@ def _sync_one(occ_id: int) -> tuple[int, str, str]:
             .first()
         )
         if occ is None:
-            return occ_id, "skipped", ""
+            return occ_id, "skipped", "", ""
         occ_date = str(occ.occurrence_date)
         action = gcal.sync_occurrence(db, occ)
-        return occ_id, action, occ_date
+        return occ_id, action, occ_date, occ.gcal_event_id or ""
     except Exception as exc:
-        return occ_id, f"failed:{exc}", ""
+        return occ_id, f"failed:{exc}", "", ""
     finally:
         db.close()
 
 
-def _run_gcal_sync(days_ahead: int, force: bool = False):
+def _run_gcal_sync(days_ahead: int, force: bool = False) -> dict:
     """
-    Background worker — collects occurrence IDs in one session, then fans out
-    to _SYNC_WORKERS threads each owning their own session and GCal service.
+    Collects occurrence IDs in one session, then fans out to _SYNC_WORKERS
+    threads each owning their own session and GCal service.
+    Returns a dict with synced, failed, and errors counts.
     """
     # Phase 1: collect IDs in a short-lived session
     db = SessionLocal()
@@ -107,40 +108,50 @@ def _run_gcal_sync(days_ahead: int, force: bool = False):
     total = len(occ_ids)
     print(f"[gcal sync] {total} occurrences to sync across {_SYNC_WORKERS} workers…")
     inserted, updated, skipped, failed = 0, 0, 0, 0
+    errors = []
 
     # Phase 2: fan out — each worker owns its session and GCal service
     with ThreadPoolExecutor(max_workers=_SYNC_WORKERS) as pool:
         futures = {pool.submit(_sync_one, occ_id): occ_id for occ_id in occ_ids}
         for i, future in enumerate(as_completed(futures), 1):
-            occ_id, action, occ_date = future.result()
+            occ_id, action, occ_date, gcal_id = future.result()
             if action == "inserted":
                 inserted += 1
-                print(f"[gcal sync] {i}/{total} inserted occ {occ_id} ({occ_date})")
+                print(f"[gcal sync] {i}/{total} occ {occ_id} ({occ_date}): inserted {gcal_id}")
             elif action == "updated":
                 updated += 1
+                print(f"[gcal sync] {i}/{total} occ {occ_id} ({occ_date}): updated {gcal_id}")
             elif action == "skipped":
                 skipped += 1
+                print(f"[gcal sync] {i}/{total} occ {occ_id}: skipped")
             else:
                 failed += 1
-                print(f"[gcal sync] {i}/{total} FAILED occ {occ_id}: {action[7:]}")
+                err_msg = action[7:]
+                errors.append(f"occ {occ_id}: {err_msg}")
+                print(f"[gcal sync] {i}/{total} occ {occ_id}: FAILED {err_msg}")
 
     print(f"[gcal sync] done — inserted={inserted} updated={updated} skipped={skipped} failed={failed}")
+    return dict(synced=inserted + updated, failed=failed, errors=errors)
 
 
 @router.post("/gcal", response_model=SyncResult)
 def sync_to_gcal(
-    background_tasks: BackgroundTasks,
     days_ahead: int = Query(settings.occurrence_lookahead_days, ge=1, le=730),
     force: bool = Query(False, description="Re-sync all occurrences, overwriting existing Google Calendar events"),
 ):
     """
-    Enqueue a background sync to Google Calendar.
+    Sync occurrences to Google Calendar.
     Use force=true to overwrite already-synced events (prevents duplicates).
-    Returns immediately — watch server logs for progress.
     """
-    background_tasks.add_task(_run_gcal_sync, days_ahead, force)
-    mode = "force (overwrite)" if force else "new only"
-    return SyncResult(synced=0, failed=0, errors=[], message=f"Sync started in background [{mode}] — check server logs for progress.")
+    try:
+        result = _run_gcal_sync(days_ahead, force)
+        synced, failed = result["synced"], result["failed"]
+        msg = f"Synced {synced} events to Google Calendar."
+        if failed:
+            msg += f" {failed} failed — check errors for details."
+        return SyncResult(**result, message=msg)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 def _run_gcal_delete_all():
