@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from typing import Generator, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
 from icalendar import Calendar, Event as ICalEvent
 from sqlalchemy.orm import Session, joinedload
@@ -32,18 +32,33 @@ router = APIRouter(prefix="/sync", tags=["sync"])
 
 # ── OAuth ─────────────────────────────────────────────────────────────────────
 
+def _redirect_uri(request: Request) -> str:
+    """Build the OAuth callback URI from the incoming request's headers.
+
+    Respects X-Forwarded-Proto / X-Forwarded-Host set by the reverse proxy so
+    the URI is correct whether the app is reached via localhost,
+    calendar.bhenning.com, or any other domain.
+    """
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get(
+        "x-forwarded-host",
+        request.headers.get("host", request.url.netloc),
+    )
+    return f"{proto}://{host}/api/sync/auth/callback"
+
+
 @router.get("/auth")
-def start_auth():
+def start_auth(request: Request):
     """Redirect the browser to Google's OAuth consent screen."""
-    url = gcal.get_auth_url()
+    url = gcal.get_auth_url(redirect_uri=_redirect_uri(request))
     return RedirectResponse(url)
 
 
 @router.get("/auth/callback")
-def auth_callback(code: str, db: Session = Depends(get_db)):
+def auth_callback(code: str, request: Request, db: Session = Depends(get_db)):
     """Exchange the authorization code for credentials."""
     try:
-        gcal.exchange_code(code)
+        gcal.exchange_code(code, redirect_uri=_redirect_uri(request))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return RedirectResponse(url="/")

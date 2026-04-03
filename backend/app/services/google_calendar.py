@@ -11,6 +11,7 @@ import os
 import random
 import time
 from datetime import date, timedelta, datetime
+from pathlib import Path
 from typing import Optional
 
 from google.auth.exceptions import RefreshError
@@ -28,6 +29,10 @@ from ..models import Occurrence, OccurrenceStatus
 # so the PKCE code_verifier generated during authorization is available at
 # token exchange time.
 _pending_flow: Optional[Flow] = None
+
+# Persisted alongside the token file so the PKCE code_verifier survives
+# a server restart or multi-worker deployment between /auth and /auth/callback.
+_CODE_VERIFIER_FILE = Path(settings.google_token_file).parent / ".pending_code_verifier"
 
 SCOPES = [
     "https://www.googleapis.com/auth/calendar",
@@ -55,24 +60,56 @@ CATEGORY_COLOR_MAP = {
 }
 
 
-def get_auth_url(state: str = "") -> str:
+def get_auth_url(state: str = "", redirect_uri: Optional[str] = None) -> str:
     """Return the Google OAuth consent URL."""
     global _pending_flow
-    _pending_flow = _build_flow()
+    _pending_flow = _build_flow(redirect_uri=redirect_uri)
     auth_url, _ = _pending_flow.authorization_url(
         access_type="offline",
         state=state,
         prompt="consent",
     )
+    # Persist code_verifier + redirect_uri so both survive across
+    # process boundaries (multi-worker / restart) between /auth and /auth/callback.
+    cv = getattr(_pending_flow, "code_verifier", None)
+    state_data = json.dumps({
+        "code_verifier": cv,
+        "redirect_uri": redirect_uri or settings.google_redirect_uri,
+    })
+    _CODE_VERIFIER_FILE.write_text(state_data)
     return auth_url
 
 
-def exchange_code(code: str) -> Credentials:
+def exchange_code(code: str, redirect_uri: Optional[str] = None) -> Credentials:
     """Exchange an authorization code for credentials and persist the token."""
     global _pending_flow
-    flow = _pending_flow if _pending_flow is not None else _build_flow()
+
+    # Restore persisted state when the callback lands on a different process.
+    saved_cv: Optional[str] = None
+    saved_uri: Optional[str] = None
+    if _CODE_VERIFIER_FILE.exists():
+        try:
+            data = json.loads(_CODE_VERIFIER_FILE.read_text())
+            saved_cv = data.get("code_verifier")
+            saved_uri = data.get("redirect_uri")
+        except Exception:
+            pass
+        try:
+            _CODE_VERIFIER_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    effective_uri = redirect_uri or saved_uri or settings.google_redirect_uri
+    flow = _pending_flow if _pending_flow is not None else _build_flow(redirect_uri=effective_uri)
     _pending_flow = None
-    flow.fetch_token(code=code)
+
+    if not getattr(flow, "code_verifier", None) and saved_cv:
+        flow.code_verifier = saved_cv
+
+    fetch_kwargs: dict = {"code": code}
+    if getattr(flow, "code_verifier", None):
+        fetch_kwargs["code_verifier"] = flow.code_verifier
+    flow.fetch_token(**fetch_kwargs)
     creds = flow.credentials
     _save_token(creds)
     return creds
@@ -306,20 +343,21 @@ def _resolve_gcal_id(service, occurrence: Occurrence, calendar_id: str, body: di
     return new_id, "inserted"
 
 
-def _build_flow() -> Flow:
+def _build_flow(redirect_uri: Optional[str] = None) -> Flow:
+    uri = redirect_uri or settings.google_redirect_uri
     client_config = {
         "web": {
             "client_id": settings.google_client_id,
             "client_secret": settings.google_client_secret,
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [settings.google_redirect_uri],
+            "redirect_uris": [uri],
         }
     }
     return Flow.from_client_config(
         client_config,
         scopes=SCOPES,
-        redirect_uri=settings.google_redirect_uri,
+        redirect_uri=uri,
     )
 
 
