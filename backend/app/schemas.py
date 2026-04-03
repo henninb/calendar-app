@@ -274,6 +274,7 @@ class TaskBase(BaseModel):
     status: TaskStatus = TaskStatus.todo
     priority: Priority = Priority.medium
     assignee_id: Optional[int] = None
+    category_id: Optional[int] = None
     due_date: Optional[date] = None
     estimated_minutes: Optional[int] = None
     recurrence: TaskRecurrence = TaskRecurrence.none
@@ -290,6 +291,7 @@ class TaskUpdate(BaseModel):
     status: Optional[TaskStatus] = None
     priority: Optional[Priority] = None
     assignee_id: Optional[int] = None
+    category_id: Optional[int] = None
     due_date: Optional[date] = None
     estimated_minutes: Optional[int] = None
     recurrence: Optional[TaskRecurrence] = None
@@ -302,6 +304,7 @@ class TaskOut(TaskBase):
     created_at: datetime
     updated_at: datetime
     assignee: Optional[PersonOut] = None
+    category: Optional[CategoryOut] = None
     subtasks: list[SubtaskOut] = []
 
     model_config = {"from_attributes": True}

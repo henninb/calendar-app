@@ -174,6 +174,7 @@ class Task(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     occurrence_id = Column(Integer, ForeignKey("occurrences.id", ondelete="SET NULL"), nullable=True)
+    category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
     title = Column(String(200), nullable=False)
     description = Column(Text)
     status = Column(Enum(TaskStatus), default=TaskStatus.todo)
@@ -190,6 +191,7 @@ class Task(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     occurrence = relationship("Occurrence", back_populates="tasks")
+    category = relationship("Category")
     assignee = relationship("Person", back_populates="tasks")
     subtasks = relationship("Subtask", back_populates="task", cascade="all, delete-orphan")
 

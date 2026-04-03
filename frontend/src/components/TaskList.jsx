@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
-  fetchTasks, fetchPersons, createTask, updateTask, deleteTask,
+  fetchTasks, fetchPersons, fetchCategories, createTask, updateTask, deleteTask,
   createSubtask, updateSubtask, deleteSubtask,
 } from '../api'
 
@@ -27,14 +27,16 @@ function daysBadge(dateStr) {
 export default function TaskList() {
   const [tasks, setTasks]           = useState([])
   const [persons, setPersons]       = useState([])
+  const [categories, setCategories] = useState([])
   const [filterStatus, setFilter]   = useState(['todo', 'in_progress'])
   const [filterAssignee, setFAsgn]  = useState('')
+  const [filterCategory, setFCat]   = useState('')
   const [filterTomorrow, setFilterTomorrow] = useState(false)
   const [filterToday, setFilterToday]       = useState(false)
   const [expanded, setExpanded]     = useState({})
   const [newSubtask, setNewSubtask] = useState({})
   const [addingTask, setAddingTask] = useState(false)
-  const [newTask, setNewTask]       = useState({ title: '', priority: 'medium', due_date: '', estimated_minutes: '', assignee_id: '', recurrence: 'none' })
+  const [newTask, setNewTask]       = useState({ title: '', priority: 'medium', due_date: '', estimated_minutes: '', assignee_id: '', category_id: '', recurrence: 'none' })
   const [editingId, setEditingId]         = useState(null)
   const [editForm, setEditForm]           = useState({})
   const [editingSubtask, setEditingSubtask] = useState(null)   // { taskId, subtaskId }
@@ -44,9 +46,10 @@ export default function TaskList() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [t, p] = await Promise.all([fetchTasks(), fetchPersons()])
+      const [t, p, c] = await Promise.all([fetchTasks(), fetchPersons(), fetchCategories()])
       setTasks(t)
       setPersons(p)
+      setCategories(c)
     } finally {
       setLoading(false)
     }
@@ -71,6 +74,7 @@ export default function TaskList() {
       if (filterAssignee && String(t.assignee_id) !== filterAssignee) return false
       if (filterToday && t.due_date !== today) return false
       if (filterTomorrow && t.due_date !== tomorrow) return false
+      if (filterCategory && String(t.category_id) !== filterCategory) return false
       return true
     })
     .sort((a, b) => {
@@ -104,11 +108,12 @@ export default function TaskList() {
       due_date: newTask.due_date || null,
       estimated_minutes: newTask.estimated_minutes ? parseInt(newTask.estimated_minutes) : null,
       assignee_id: newTask.assignee_id ? parseInt(newTask.assignee_id) : null,
+      category_id: newTask.category_id ? parseInt(newTask.category_id) : null,
       recurrence: newTask.recurrence,
     }
     const created = await createTask(payload)
     setTasks(prev => [created, ...prev])
-    setNewTask({ title: '', priority: 'medium', due_date: '', estimated_minutes: '', assignee_id: '', recurrence: 'none' })
+    setNewTask({ title: '', priority: 'medium', due_date: '', estimated_minutes: '', assignee_id: '', category_id: '', recurrence: 'none' })
     setAddingTask(false)
   }
 
@@ -121,6 +126,7 @@ export default function TaskList() {
       due_date: task.due_date || '',
       estimated_minutes: task.estimated_minutes ?? '',
       assignee_id: task.assignee_id ?? '',
+      category_id: task.category_id ?? '',
       recurrence: task.recurrence || 'none',
       status: task.status,
     })
@@ -134,11 +140,16 @@ export default function TaskList() {
       due_date: editForm.due_date || null,
       estimated_minutes: editForm.estimated_minutes ? parseInt(editForm.estimated_minutes) : null,
       assignee_id: editForm.assignee_id ? parseInt(editForm.assignee_id) : null,
+      category_id: editForm.category_id ? parseInt(editForm.category_id) : null,
       recurrence: editForm.recurrence,
       status: editForm.status,
     }
     await updateTask(taskId, payload)
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...payload, assignee: persons.find(p => p.id === payload.assignee_id) || null } : t))
+    setTasks(prev => prev.map(t => t.id === taskId ? {
+      ...t, ...payload,
+      assignee: persons.find(p => p.id === payload.assignee_id) || null,
+      category: categories.find(c => c.id === payload.category_id) || null,
+    } : t))
     setEditingId(null)
   }
 
@@ -244,6 +255,14 @@ export default function TaskList() {
         </button>
 
         <label style={{ fontSize: '.875rem', color: '#475569' }}>
+          Category&nbsp;
+          <select value={filterCategory} onChange={e => setFCat(e.target.value)} style={inputStyle}>
+            <option value="">All</option>
+            {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+          </select>
+        </label>
+
+        <label style={{ fontSize: '.875rem', color: '#475569' }}>
           Assignee&nbsp;
           <select value={filterAssignee} onChange={e => setFAsgn(e.target.value)} style={inputStyle}>
             <option value="">All</option>
@@ -315,6 +334,13 @@ export default function TaskList() {
               {persons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
+          <div>
+            <label style={labelStyle}>Category</label>
+            <select value={newTask.category_id} onChange={e => setNewTask(p => ({ ...p, category_id: e.target.value }))} style={inputStyle}>
+              <option value="">None</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+            </select>
+          </div>
           <div style={{ display: 'flex', gap: '.5rem' }}>
             <button onClick={handleCreateTask} className="btn btn-green" title="Save and create this task">Add</button>
             <button onClick={() => setAddingTask(false)} className="btn btn-gray" title="Discard and close the new task form">Cancel</button>
@@ -361,6 +387,16 @@ export default function TaskList() {
                       >
                         {expanded[task.id] ? '▾' : '▸'} {task.title}
                       </button>
+                      {task.category && (
+                        <span style={{
+                          fontSize: '.72rem', marginLeft: '.5rem', fontWeight: 600,
+                          background: task.category.color + '22', color: task.category.color,
+                          border: `1px solid ${task.category.color}55`,
+                          borderRadius: '4px', padding: '.1rem .35rem',
+                        }}>
+                          {task.category.icon} {task.category.name}
+                        </span>
+                      )}
                       {task.recurrence && task.recurrence !== 'none' && (
                         <span style={{ fontSize: '.72rem', color: '#2563eb', marginLeft: '.5rem', fontWeight: 600 }}>
                           ↻ {task.recurrence}
@@ -466,6 +502,13 @@ export default function TaskList() {
                             <select value={editForm.assignee_id} onChange={e => setEditForm(p => ({ ...p, assignee_id: e.target.value }))} style={inputStyle}>
                               <option value="">Unassigned</option>
                               {persons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label style={labelStyle}>Category</label>
+                            <select value={editForm.category_id} onChange={e => setEditForm(p => ({ ...p, category_id: e.target.value }))} style={inputStyle}>
+                              <option value="">None</option>
+                              {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
                             </select>
                           </div>
                           <div style={{ display: 'flex', gap: '.5rem' }}>

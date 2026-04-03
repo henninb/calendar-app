@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
-from ..models import Subtask, Task, TaskRecurrence, TaskStatus
+from ..models import Category, Subtask, Task, TaskRecurrence, TaskStatus
 from ..schemas import SubtaskCreate, SubtaskOut, SubtaskUpdate, TaskCreate, TaskOut, TaskUpdate
 
 _RECURRENCE_DELTA = {
@@ -50,6 +50,7 @@ def _spawn_next(db: Session, task: Task) -> None:
         description=task.description,
         priority=task.priority,
         assignee_id=task.assignee_id,
+        category_id=task.category_id,
         due_date=next_date,
         estimated_minutes=task.estimated_minutes,
         recurrence=task.recurrence,
@@ -74,6 +75,7 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 def list_tasks(
     status: Optional[TaskStatus] = Query(None),
     assignee_id: Optional[int] = Query(None),
+    category_id: Optional[int] = Query(None),
     occurrence_id: Optional[int] = Query(None),
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -81,13 +83,15 @@ def list_tasks(
 ):
     q = (
         db.query(Task)
-        .options(joinedload(Task.assignee), joinedload(Task.subtasks))
+        .options(joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks))
         .order_by(Task.due_date.asc().nullslast(), Task.created_at)
     )
     if status:
         q = q.filter(Task.status == status)
     if assignee_id:
         q = q.filter(Task.assignee_id == assignee_id)
+    if category_id:
+        q = q.filter(Task.category_id == category_id)
     if occurrence_id:
         q = q.filter(Task.occurrence_id == occurrence_id)
     return q.offset(offset).limit(limit).all()
@@ -108,7 +112,7 @@ def create_task(body: TaskCreate, db: Session = Depends(get_db)):
 def get_task(task_id: int, db: Session = Depends(get_db)):
     task = (
         db.query(Task)
-        .options(joinedload(Task.assignee), joinedload(Task.subtasks))
+        .options(joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks))
         .filter(Task.id == task_id)
         .first()
     )

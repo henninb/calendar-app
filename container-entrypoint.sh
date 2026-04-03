@@ -24,5 +24,14 @@ cd "$ROOT/frontend"
 BACKEND_PORT="$BACKEND_PORT" npx vite --host :: --port "$FRONTEND_PORT" &
 VITE_PID=$!
 
+# Forward SIGTERM/SIGINT to children so they shut down cleanly.
+# Bash running as PID 1 ignores SIGTERM unless explicitly trapped.
+_shutdown() {
+    kill -TERM "$BACKEND_PID" "$VITE_PID" 2>/dev/null || true
+    wait "$BACKEND_PID" "$VITE_PID" 2>/dev/null || true
+    exit 0
+}
+trap _shutdown TERM INT
+
 # Exit the container if either process dies
 wait -n $BACKEND_PID $VITE_PID
