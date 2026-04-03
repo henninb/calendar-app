@@ -72,8 +72,9 @@ def get_or_create_tasklist() -> tuple[object, str]:
 
 def sync_task(db: Session, task: Task, svc=None, tasklist_id: str = None) -> str:
     """Push a single task (and its subtasks) to Google Tasks. Returns 'inserted' or 'updated'."""
-    if svc is None or tasklist_id is None:
+    if svc is None:
         svc = _service()
+    if tasklist_id is None:
         tasklist_id = _get_or_create_tasklist(svc)
 
     body: dict = {

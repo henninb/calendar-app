@@ -252,9 +252,9 @@ def sync_single(occurrence_id: int, db: Session = Depends(get_db)):
 
 # ── Google Tasks Sync ─────────────────────────────────────────────────────────
 
-def _sync_one_task(task_id: int, svc, tasklist_id: str) -> tuple[int, str, str]:
+def _sync_one_task(task_id: int, tasklist_id: str) -> tuple[int, str, str]:
     """
-    Per-thread worker — owns its own DB session.
+    Per-thread worker — owns its own DB session and Tasks service instance.
     Returns (task_id, action, title) where action is one of:
       "inserted" | "updated" | "failed:<message>"
     Never raises — all exceptions are captured in the action string.
@@ -265,7 +265,7 @@ def _sync_one_task(task_id: int, svc, tasklist_id: str) -> tuple[int, str, str]:
         if task is None:
             return task_id, "skipped", ""
         title = task.title[:40]
-        action = gtasks.sync_task(db, task, svc=svc, tasklist_id=tasklist_id)
+        action = gtasks.sync_task(db, task, tasklist_id=tasklist_id)
         return task_id, action, title
     except Exception as exc:
         return task_id, f"failed:{exc}", ""
@@ -294,11 +294,11 @@ def _gtasks_sync_events() -> Generator[str, None, None]:
     print(f"[gtasks sync] {total} tasks to sync across {_SYNC_WORKERS} workers…")
     yield sse({"type": "start", "total": total})
 
-    svc, tasklist_id = gtasks.get_or_create_tasklist()
+    _, tasklist_id = gtasks.get_or_create_tasklist()
 
     synced, failed, errors = 0, 0, []
     with ThreadPoolExecutor(max_workers=_SYNC_WORKERS) as pool:
-        futures = {pool.submit(_sync_one_task, task_id, svc, tasklist_id): task_id for task_id in task_ids}
+        futures = {pool.submit(_sync_one_task, task_id, tasklist_id): task_id for task_id in task_ids}
         for i, future in enumerate(as_completed(futures), 1):
             task_id, action, title = future.result()
             if action in ("inserted", "updated"):
