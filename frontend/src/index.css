@@ -152,6 +152,10 @@ tr:hover td { background: #f8fafc; }
 .detail-row span:first-child { font-size: .75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; }
 .detail-row span:last-child { font-size: .9rem; }
 
+/* ── Subtask rows ── */
+.subtask-row { border-radius: 4px; transition: background .1s; }
+.subtask-row:hover { background: #e2e8f0; }
+
 /* ── Loading / empty ── */
 .loading { text-align: center; color: #94a3b8; padding: 3rem; }
 .empty   { text-align: center; color: #cbd5e1; padding: 2rem; font-style: italic; }

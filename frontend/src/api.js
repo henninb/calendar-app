@@ -21,6 +21,9 @@ export const updateOccurrence = (id, data) =>
     body: JSON.stringify(data),
   })
 
+export const deleteOccurrence = (id) =>
+  request(`/occurrences/${id}`, { method: 'DELETE' })
+
 export const fetchCreditCardTracker = () => request('/credit-cards/tracker')
 
 export const generateAll = () =>

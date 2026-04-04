@@ -542,7 +542,7 @@ export default function TaskList() {
                         </div>
 
                         {(task.subtasks || []).sort((a, b) => a.order - b.order).map(sub => (
-                          <div key={sub.id} style={{ marginBottom: '.35rem' }}>
+                          <div key={sub.id} className="subtask-row" style={{ marginBottom: '.35rem' }}>
                             {editingSubtask?.taskId === task.id && editingSubtask?.subtaskId === sub.id ? (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', flexWrap: 'wrap' }}>
                                 <input

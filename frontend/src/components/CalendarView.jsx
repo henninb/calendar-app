@@ -3,7 +3,7 @@ import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import listPlugin from '@fullcalendar/list'
 import interactionPlugin from '@fullcalendar/interaction'
-import { fetchOccurrences, fetchCategories, updateOccurrence } from '../api'
+import { fetchOccurrences, fetchCategories, updateOccurrence, deleteOccurrence } from '../api'
 
 function fmt(dateStr) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
@@ -59,6 +59,16 @@ export default function CalendarView() {
     setSelected(updated)
     setSaving(false)
     setOccs(prev => prev.map(o => o.id === updated.id ? updated : o))
+  }
+
+  const handleDelete = async () => {
+    if (!selected) return
+    if (!window.confirm(`Delete "${selected.event?.title}" on ${fmt(selected.occurrence_date)}? This cannot be undone.`)) return
+    setSaving(true)
+    await deleteOccurrence(selected.id)
+    setOccs(prev => prev.filter(o => o.id !== selected.id))
+    setSelected(null)
+    setSaving(false)
   }
 
   return (
@@ -189,6 +199,14 @@ export default function CalendarView() {
                 Reopen
               </button>
             )}
+            <button
+              className="btn btn-red"
+              disabled={saving}
+              onClick={handleDelete}
+              title="Permanently delete this calendar entry"
+            >
+              Delete
+            </button>
           </div>
         </div>
         </div>

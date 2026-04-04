@@ -102,6 +102,15 @@ def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db
     return task
 
 
+@router.delete("/{occurrence_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_occurrence(occurrence_id: int, db: Session = Depends(get_db)):
+    occ = db.query(Occurrence).get(occurrence_id)
+    if not occ:
+        raise HTTPException(status_code=404, detail="Occurrence not found")
+    db.delete(occ)
+    db.commit()
+
+
 @router.post("/generate-all", response_model=GenerateResult)
 def generate_all(
     lookahead_days: int = Query(settings.occurrence_lookahead_days, ge=1, le=1825),
