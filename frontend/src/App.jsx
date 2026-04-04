@@ -85,8 +85,15 @@ export default function App() {
       setLogs(prev => prev.filter(entry => entry.id !== progressId))
       const level = res.failed > 0 ? 'warn' : 'ok'
       addLog(level, `Synced ${res.synced} events to Google Calendar.${res.failed ? ` ${res.failed} failed.` : ''}`)
-      if (res.failed > 0) addLog('warn', `${res.failed} event(s) failed to sync — you may need to reconnect Google.`)
-      res.errors?.slice(0, 5).forEach(err => addLog('error', err))
+      if (res.failed > 0) {
+        const quotaErrors = res.errors?.filter(e => e.includes('quotaExceeded') || e.includes('Quota Exceeded')) ?? []
+        if (quotaErrors.length > 0) {
+          addLog('warn', `Google Calendar API quota exceeded — daily limit reached. Try again tomorrow or increase your quota in the Google Cloud Console.`)
+        } else {
+          addLog('warn', `${res.failed} event(s) failed to sync — you may need to reconnect Google.`)
+          res.errors?.slice(0, 5).forEach(err => addLog('error', err))
+        }
+      }
     } catch (e) {
       setLogs(prev => prev.filter(entry => entry.id !== progressId))
       addLog('error', `Google Calendar sync failed: ${e.message}`)
@@ -128,8 +135,15 @@ export default function App() {
       setLogs(prev => prev.filter(entry => entry.id !== progressId))
       const level = res.failed > 0 ? 'warn' : 'ok'
       addLog(level, `Synced ${res.synced} tasks to Google Tasks.${res.failed ? ` ${res.failed} failed.` : ''}`)
-      if (res.failed > 0) addLog('warn', `${res.failed} task(s) failed to sync — you may need to reconnect Google.`)
-      res.errors?.slice(0, 5).forEach(err => addLog('error', err))
+      if (res.failed > 0) {
+        const quotaErrors = res.errors?.filter(e => e.includes('quotaExceeded') || e.includes('Quota Exceeded')) ?? []
+        if (quotaErrors.length > 0) {
+          addLog('warn', `Google Tasks API quota exceeded — daily limit reached. Try again tomorrow or increase your quota in the Google Cloud Console.`)
+        } else {
+          addLog('warn', `${res.failed} task(s) failed to sync — you may need to reconnect Google.`)
+          res.errors?.slice(0, 5).forEach(err => addLog('error', err))
+        }
+      }
     } catch (e) {
       setLogs(prev => prev.filter(entry => entry.id !== progressId))
       addLog('error', `Google Tasks sync failed: ${e.message}`)
