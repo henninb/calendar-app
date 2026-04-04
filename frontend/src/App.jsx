@@ -259,7 +259,7 @@ export default function App() {
         {tab === 'upcoming' && <OccurrenceList />}
         {tab === 'cards'    && <CreditCardTracker />}
         {tab === 'tasks'    && <TaskList />}
-        {tab === 'config'   && <ConfigPage config={config} onSave={setConfig} />}
+        {tab === 'config'   && <ConfigPage config={config} onSave={setConfig} gcalAuth={gcalAuth} />}
       </main>
     </div>
   )

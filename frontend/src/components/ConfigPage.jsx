@@ -13,7 +13,7 @@ export function loadConfig() {
   }
 }
 
-export default function ConfigPage({ config, onSave }) {
+export default function ConfigPage({ config, onSave, gcalAuth }) {
   const [form, setForm] = useState(config)
   const [saved, setSaved] = useState(false)
 
@@ -38,6 +38,28 @@ export default function ConfigPage({ config, onSave }) {
   return (
     <div className="card" style={{ maxWidth: 500 }}>
       <h2 style={{ marginBottom: '1.5rem', fontSize: '1rem', fontWeight: 700 }}>Configuration</h2>
+
+      <div style={{ marginBottom: '1.5rem' }}>
+        <div style={{
+          fontSize: '.7rem', textTransform: 'uppercase', letterSpacing: '.08em',
+          color: '#94a3b8', fontWeight: 700, marginBottom: '1rem',
+          borderBottom: '1px solid #e2e8f0', paddingBottom: '.4rem',
+        }}>
+          Google Account
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '.875rem', color: gcalAuth ? '#16a34a' : '#dc2626' }}>
+            {gcalAuth === null ? 'Checking…' : gcalAuth ? 'Connected' : 'Not connected'}
+          </span>
+          <button
+            className="btn btn-blue"
+            style={{ fontSize: '.8rem' }}
+            onClick={() => { window.location.href = '/api/sync/auth' }}
+          >
+            {gcalAuth ? 'Reconnect Google' : 'Connect Google'}
+          </button>
+        </div>
+      </div>
 
       <div style={{ marginBottom: '1.5rem' }}>
         <div style={{
