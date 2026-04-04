@@ -386,11 +386,11 @@ export default function TaskList() {
                         {STATUS_LABELS[task.status]}
                       </span>
                     </td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       <button
                         onClick={() => setExpanded(p => ({ ...p, [task.id]: !p[task.id] }))}
                         title={expanded[task.id] ? 'Collapse subtasks' : 'Expand subtasks'}
-                        style={{ background: 'none', border: 'none', color: '#1e293b', cursor: 'pointer', padding: 0, textAlign: 'left', fontSize: '.875rem', fontWeight: 500 }}
+                        style={{ background: 'none', border: 'none', color: '#1e293b', cursor: 'pointer', padding: 0, textAlign: 'left', fontSize: '.875rem', fontWeight: 500, whiteSpace: 'nowrap' }}
                       >
                         {expanded[task.id] ? '▾' : '▸'} {task.title}
                       </button>
