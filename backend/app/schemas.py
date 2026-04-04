@@ -152,6 +152,11 @@ class CreditCardBase(BaseModel):
     annual_fee_month: Optional[int] = None
     is_active: bool = True
 
+    @field_validator('is_active', mode='before')
+    @classmethod
+    def coerce_is_active(cls, v):
+        return True if v is None else v
+
 
 class CreditCardCreate(CreditCardBase):
     pass
