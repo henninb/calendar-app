@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 from typing import Optional
 
@@ -16,6 +17,8 @@ from ..services.credit_card import (
     generate_credit_card_occurrences,
     tracker_row,
 )
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/credit-cards", tags=["credit-cards"])
 
@@ -53,13 +56,13 @@ def tracker(db: Session = Depends(get_db)):
         try:
             rows.append(tracker_row(card, today))
         except Exception as exc:
-            print(f"[tracker] skipping card {card.id} ({card.name}): {exc}")
+            log.warning("Skipping tracker row for card %d (%s): %s", card.id, card.name, exc)
     return rows
 
 
 @router.get("/{card_id}", response_model=CreditCardOut)
 def get_card(card_id: int, db: Session = Depends(get_db)):
-    card = db.query(CreditCard).get(card_id)
+    card = db.get(CreditCard, card_id)
     if not card:
         raise HTTPException(status_code=404, detail="Credit card not found")
     return card
@@ -67,7 +70,7 @@ def get_card(card_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{card_id}", response_model=CreditCardOut)
 def update_card(card_id: int, body: CreditCardUpdate, db: Session = Depends(get_db)):
-    card = db.query(CreditCard).get(card_id)
+    card = db.get(CreditCard, card_id)
     if not card:
         raise HTTPException(status_code=404, detail="Credit card not found")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -80,7 +83,7 @@ def update_card(card_id: int, body: CreditCardUpdate, db: Session = Depends(get_
 
 @router.delete("/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_card(card_id: int, db: Session = Depends(get_db)):
-    card = db.query(CreditCard).get(card_id)
+    card = db.get(CreditCard, card_id)
     if not card:
         raise HTTPException(status_code=404, detail="Credit card not found")
     db.delete(card)
@@ -93,7 +96,7 @@ def generate_occurrences(
     lookahead_days: int = Query(settings.occurrence_lookahead_days, ge=1, le=1825),
     db: Session = Depends(get_db),
 ):
-    card = db.query(CreditCard).get(card_id)
+    card = db.get(CreditCard, card_id)
     if not card:
         raise HTTPException(status_code=404, detail="Credit card not found")
     created = generate_credit_card_occurrences(db, card, lookahead_days)

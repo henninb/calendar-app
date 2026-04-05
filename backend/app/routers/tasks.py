@@ -125,7 +125,7 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
 
 @router.patch("/{task_id}", response_model=TaskOut)
 def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)):
-    task = db.query(Task).get(task_id)
+    task = db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     changes = body.model_dump(exclude_unset=True)
@@ -133,7 +133,7 @@ def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)):
     for field, value in changes.items():
         setattr(task, field, value)
     db.commit()
-    if new_status in (TaskStatus.done, TaskStatus.cancelled):
+    if new_status == TaskStatus.done:
         _spawn_next(db, task)
     return db.query(Task).options(
         joinedload(Task.assignee), joinedload(Task.subtasks)
@@ -142,7 +142,7 @@ def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)):
 
 @router.delete("/{task_id}", status_code=204)
 def delete_task(task_id: int, db: Session = Depends(get_db)):
-    task = db.query(Task).get(task_id)
+    task = db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     db.delete(task)
@@ -153,7 +153,7 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{task_id}/subtasks", response_model=SubtaskOut, status_code=201)
 def create_subtask(task_id: int, body: SubtaskCreate, db: Session = Depends(get_db)):
-    if not db.query(Task).get(task_id):
+    if not db.get(Task, task_id):
         raise HTTPException(status_code=404, detail="Task not found")
     subtask = Subtask(task_id=task_id, **body.model_dump())
     db.add(subtask)

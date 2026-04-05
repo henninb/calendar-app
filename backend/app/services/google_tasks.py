@@ -15,7 +15,7 @@ from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
 
 from ..models import Subtask, Task, TaskStatus
-from .google_calendar import get_credentials
+from .google_calendar import get_credentials, _execute
 
 _TASKLIST_TITLE = "Calendar App Tasks"
 
@@ -36,10 +36,10 @@ def _service():
 
 def _get_or_create_tasklist(svc) -> str:
     """Return the ID of our app task list, creating it if absent."""
-    for tl in svc.tasklists().list().execute().get("items", []):
+    for tl in _execute(svc.tasklists().list()).get("items", []):
         if tl["title"] == _TASKLIST_TITLE:
             return tl["id"]
-    return svc.tasklists().insert(body={"title": _TASKLIST_TITLE}).execute()["id"]
+    return _execute(svc.tasklists().insert(body={"title": _TASKLIST_TITLE}))["id"]
 
 
 def _sync_subtask(svc, tasklist_id: str, subtask: Subtask, parent_gtask_id: str) -> None:
@@ -50,18 +50,18 @@ def _sync_subtask(svc, tasklist_id: str, subtask: Subtask, parent_gtask_id: str)
     }
     if subtask.gtask_id:
         try:
-            svc.tasks().update(
+            _execute(svc.tasks().update(
                 tasklist=tasklist_id,
                 task=subtask.gtask_id,
                 body={**body, "id": subtask.gtask_id},
-            ).execute()
+            ))
             return
         except HttpError as e:
             if e.resp.status != 404:
                 raise
-    result = svc.tasks().insert(
+    result = _execute(svc.tasks().insert(
         tasklist=tasklist_id, parent=parent_gtask_id, body=body
-    ).execute()
+    ))
     subtask.gtask_id = result["id"]
 
 
@@ -89,9 +89,9 @@ def sync_task(db: Session, task: Task, svc=None, tasklist_id: Optional[str] = No
     try:
         if task.gtask_id:
             try:
-                svc.tasks().update(
+                _execute(svc.tasks().update(
                     tasklist=tasklist_id, task=task.gtask_id, body={**body, "id": task.gtask_id}
-                ).execute()
+                ))
                 task.synced_at = datetime.now(timezone.utc)
                 action = "updated"
             except HttpError as e:
@@ -103,7 +103,7 @@ def sync_task(db: Session, task: Task, svc=None, tasklist_id: Optional[str] = No
             action = None
 
         if action is None:
-            result = svc.tasks().insert(tasklist=tasklist_id, body=body).execute()
+            result = _execute(svc.tasks().insert(tasklist=tasklist_id, body=body))
             task.gtask_id = result["id"]
             task.synced_at = datetime.now(timezone.utc)
             action = "inserted"

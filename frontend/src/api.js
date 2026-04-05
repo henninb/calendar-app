@@ -2,7 +2,14 @@ const BASE = '/api'
 
 async function request(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, options)
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`
+    try {
+      const body = await res.json()
+      if (body.detail) detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+    } catch {}
+    throw new Error(detail)
+  }
   if (res.status === 204) return null
   return res.json()
 }
@@ -65,7 +72,7 @@ export const deleteAllGcalEvents = () =>
   request('/sync/gcal', { method: 'DELETE' })
 
 export const wipeAllGcalEvents = () =>
-  request('/sync/gcal/wipe-all', { method: 'DELETE' })
+  request('/sync/gcal/wipe-all?confirm=true', { method: 'DELETE' })
 
 export const syncToGtasks = async (onProgress) => {
   const res = await fetch(`${BASE}/sync/gtasks`, { method: 'POST' })

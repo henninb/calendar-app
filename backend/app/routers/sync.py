@@ -9,9 +9,13 @@ OAuth flow:
   5. GET  /api/sync/export/ics      → download all upcoming events as .ics
 """
 import json
+import logging
+import secrets
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from typing import Generator, Optional
+
+log = logging.getLogger(__name__)
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
@@ -25,7 +29,8 @@ from ..schemas import AuthStatus, SyncResult
 from ..services import google_calendar as gcal
 from ..services import google_tasks as gtasks
 
-_SYNC_WORKERS = 10
+_GCAL_SYNC_WORKERS = 10
+_GTASKS_SYNC_WORKERS = 3   # Tasks API enforces ~5 QPS per user; keep headroom
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
@@ -50,13 +55,16 @@ def _redirect_uri(request: Request) -> str:
 @router.get("/auth")
 def start_auth(request: Request):
     """Redirect the browser to Google's OAuth consent screen."""
-    url = gcal.get_auth_url(redirect_uri=_redirect_uri(request))
+    state = secrets.token_urlsafe(32)
+    url = gcal.get_auth_url(state=state, redirect_uri=_redirect_uri(request))
     return RedirectResponse(url)
 
 
 @router.get("/auth/callback")
-def auth_callback(code: str, request: Request, db: Session = Depends(get_db)):
+def auth_callback(code: str, request: Request, state: str = ""):
     """Exchange the authorization code for credentials."""
+    if not gcal.validate_state(state):
+        raise HTTPException(status_code=400, detail="Invalid OAuth state — possible CSRF attempt")
     try:
         gcal.exchange_code(code, redirect_uri=_redirect_uri(request))
     except Exception as exc:
@@ -93,7 +101,8 @@ def _sync_one(occ_id: int) -> tuple[int, str, str, str]:
         action = gcal.sync_occurrence(db, occ)
         return occ_id, action, occ_date, occ.gcal_event_id or ""
     except Exception as exc:
-        return occ_id, f"failed:{exc}", "", ""
+        log.exception("Sync failed for occurrence %d", occ_id)
+        return occ_id, f"failed:{type(exc).__name__}: {str(exc)[:200]}", "", ""
     finally:
         db.close()
 
@@ -125,14 +134,14 @@ def _gcal_sync_events(days_ahead: int, force: bool = False) -> Generator[str, No
         db.close()
 
     total = len(occ_ids)
-    print(f"[gcal sync] {total} occurrences to sync across {_SYNC_WORKERS} workers…")
+    log.info("GCal sync: %d occurrences across %d workers", total, _GCAL_SYNC_WORKERS)
     yield sse({"type": "start", "total": total})
 
     inserted, updated, skipped, failed = 0, 0, 0, 0
     errors = []
 
     # Phase 2: fan out — each worker owns its session and GCal service
-    with ThreadPoolExecutor(max_workers=_SYNC_WORKERS) as pool:
+    with ThreadPoolExecutor(max_workers=_GCAL_SYNC_WORKERS) as pool:
         futures = {pool.submit(_sync_one, occ_id): occ_id for occ_id in occ_ids}
         for i, future in enumerate(as_completed(futures), 1):
             occ_id, action, occ_date, gcal_id = future.result()
@@ -150,10 +159,10 @@ def _gcal_sync_events(days_ahead: int, force: bool = False) -> Generator[str, No
                 err_msg = action[7:]
                 errors.append(f"occ {occ_id}: {err_msg}")
                 msg = f"{i}/{total} occ {occ_id}: FAILED {err_msg}"
-            print(f"[gcal sync] {msg}")
+            log.debug("GCal sync: %s", msg)
             yield sse({"type": "progress", "i": i, "total": total, "action": action.split(":")[0], "msg": msg})
 
-    print(f"[gcal sync] done — inserted={inserted} updated={updated} skipped={skipped} failed={failed}")
+    log.info("GCal sync done — inserted=%d updated=%d skipped=%d failed=%d", inserted, updated, skipped, failed)
     yield sse({"type": "done", "synced": inserted + updated, "failed": failed, "errors": errors})
 
 
@@ -179,7 +188,7 @@ def _run_gcal_delete_all():
     try:
         occs = db.query(Occurrence).filter(Occurrence.gcal_event_id.isnot(None)).all()
         total = len(occs)
-        print(f"[gcal delete] {total} synced occurrences to remove from Google Calendar…")
+        log.info("GCal delete: removing %d synced occurrences", total)
         deleted, failed = 0, 0
         for i, occ in enumerate(occs, 1):
             try:
@@ -188,12 +197,12 @@ def _run_gcal_delete_all():
                 occ.synced_at = None
                 db.commit()
                 deleted += 1
-                print(f"[gcal delete] {i}/{total} deleted occ {occ.id} ({occ.occurrence_date})")
+                log.debug("GCal delete: %d/%d deleted occ %d (%s)", i, total, occ.id, occ.occurrence_date)
             except Exception as exc:
                 failed += 1
                 db.rollback()
-                print(f"[gcal delete] {i}/{total} FAILED occ {occ.id}: {exc}")
-        print(f"[gcal delete] done — deleted={deleted} failed={failed}")
+                log.error("GCal delete: %d/%d FAILED occ %d: %s", i, total, occ.id, exc)
+        log.info("GCal delete done — deleted=%d failed=%d", deleted, failed)
     finally:
         db.close()
 
@@ -270,7 +279,8 @@ def _sync_one_task(task_id: int, tasklist_id: str) -> tuple[int, str, str]:
         action = gtasks.sync_task(db, task, tasklist_id=tasklist_id)
         return task_id, action, title
     except Exception as exc:
-        return task_id, f"failed:{exc}", ""
+        log.exception("Sync failed for task %d", task_id)
+        return task_id, f"failed:{type(exc).__name__}: {str(exc)[:200]}", ""
     finally:
         db.close()
 
@@ -293,13 +303,13 @@ def _gtasks_sync_events() -> Generator[str, None, None]:
         db.close()
 
     total = len(task_ids)
-    print(f"[gtasks sync] {total} tasks to sync across {_SYNC_WORKERS} workers…")
+    log.info("GTasks sync: %d tasks across %d workers", total, _GTASKS_SYNC_WORKERS)
     yield sse({"type": "start", "total": total})
 
     _, tasklist_id = gtasks.get_or_create_tasklist()
 
     synced, failed, errors = 0, 0, []
-    with ThreadPoolExecutor(max_workers=_SYNC_WORKERS) as pool:
+    with ThreadPoolExecutor(max_workers=_GTASKS_SYNC_WORKERS) as pool:
         futures = {pool.submit(_sync_one_task, task_id, tasklist_id): task_id for task_id in task_ids}
         for i, future in enumerate(as_completed(futures), 1):
             task_id, action, title = future.result()
@@ -313,10 +323,10 @@ def _gtasks_sync_events() -> Generator[str, None, None]:
                 err_msg = action[7:]
                 errors.append(f"task {task_id}: {err_msg}")
                 msg = f"{i}/{total} task {task_id}: FAILED {err_msg}"
-            print(f"[gtasks sync] {msg}")
+            log.debug("GTasks sync: %s", msg)
             yield sse({"type": "progress", "i": i, "total": total, "action": action.split(":")[0], "msg": msg})
 
-    print(f"[gtasks sync] done — synced={synced} failed={failed}")
+    log.info("GTasks sync done — synced=%d failed=%d", synced, failed)
     yield sse({"type": "done", "synced": synced, "failed": failed, "errors": errors})
 
 

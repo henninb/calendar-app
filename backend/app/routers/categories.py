@@ -26,7 +26,7 @@ def create_category(body: CategoryCreate, db: Session = Depends(get_db)):
 
 @router.get("/{category_id}", response_model=CategoryOut)
 def get_category(category_id: int, db: Session = Depends(get_db)):
-    cat = db.query(Category).get(category_id)
+    cat = db.get(Category, category_id)
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
     return cat
@@ -36,7 +36,7 @@ def get_category(category_id: int, db: Session = Depends(get_db)):
 def update_category(
     category_id: int, body: CategoryUpdate, db: Session = Depends(get_db)
 ):
-    cat = db.query(Category).get(category_id)
+    cat = db.get(Category, category_id)
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -48,7 +48,7 @@ def update_category(
 
 @router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_category(category_id: int, db: Session = Depends(get_db)):
-    cat = db.query(Category).get(category_id)
+    cat = db.get(Category, category_id)
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
     db.delete(cat)

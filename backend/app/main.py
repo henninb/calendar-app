@@ -1,6 +1,9 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+
+log = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
@@ -20,30 +23,38 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
 
     # Add columns that may not exist on pre-existing tables
+    # TODO: replace with Alembic for proper multi-worker-safe migrations
     with engine.connect() as conn:
-        conn.execute(text(
-            "ALTER TABLE events ADD COLUMN IF NOT EXISTS generates_tasks BOOLEAN NOT NULL DEFAULT FALSE"
-        ))
-        conn.execute(text(
-            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence VARCHAR NOT NULL DEFAULT 'none'"
-        ))
-        conn.execute(text(
-            "ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS gtask_id VARCHAR"
-        ))
-        conn.commit()
+        try:
+            conn.execute(text(
+                "ALTER TABLE events ADD COLUMN IF NOT EXISTS generates_tasks BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+            conn.execute(text(
+                "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence VARCHAR NOT NULL DEFAULT 'none'"
+            ))
+            conn.execute(text(
+                "ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS gtask_id VARCHAR"
+            ))
+            conn.commit()
+            log.info("Schema migrations applied")
+        except Exception:
+            log.exception("Schema migration failed")
+            conn.rollback()
 
     db = SessionLocal()
     try:
-        # Seed default person if none exist
-        if not db.query(Person).first():
-            db.add(Person(name="Brian"))
+        # Seed default person if none exist and a name is configured
+        if not db.query(Person).first() and settings.default_person_name:
+            db.add(Person(name=settings.default_person_name))
             db.commit()
+            log.info("Seeded default person: %s", settings.default_person_name)
 
         mark_overdue(db)
         generate_all_occurrences(db)
         for card in db.query(CreditCard).filter(CreditCard.is_active.isnot(False)).all():
             generate_credit_card_occurrences(db, card)
         generate_pending_tasks(db)
+        log.info("Startup data generation complete")
     finally:
         db.close()
 

@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 
 export const CONFIG_DEFAULTS = {
   gcalSyncDays: 365,
-  gcalSyncForce: true,
+  gcalSyncForce: false,
 }
 
 export function loadConfig() {

@@ -6,6 +6,15 @@ from pydantic import BaseModel, field_validator
 from .models import Priority, OccurrenceStatus, TaskRecurrence, TaskStatus, WeekendShift
 
 
+def _normalize_rrule(v: Optional[str]) -> Optional[str]:
+    if v is None:
+        return v
+    v = v.strip()
+    if v.upper().startswith("RRULE:"):
+        v = v[6:]
+    return v
+
+
 # ── Category ────────────────────────────────────────────────────────────────
 
 class CategoryBase(BaseModel):
@@ -53,13 +62,7 @@ class EventBase(BaseModel):
     @field_validator("rrule")
     @classmethod
     def normalize_rrule(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        v = v.strip()
-        # Strip leading RRULE: prefix so we store a clean rule string
-        if v.upper().startswith("RRULE:"):
-            v = v[6:]
-        return v
+        return _normalize_rrule(v)
 
 
 class EventCreate(EventBase):
@@ -85,12 +88,7 @@ class EventUpdate(BaseModel):
     @field_validator("rrule")
     @classmethod
     def normalize_rrule(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        v = v.strip()
-        if v.upper().startswith("RRULE:"):
-            v = v[6:]
-        return v
+        return _normalize_rrule(v)
 
 
 class EventOut(EventBase):

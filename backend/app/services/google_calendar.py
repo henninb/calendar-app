@@ -7,12 +7,16 @@ The access/refresh token is persisted at settings.google_token_file.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import random
+import secrets
 import time
 from datetime import date, timedelta, datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+log = logging.getLogger(__name__)
 
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
@@ -75,8 +79,11 @@ def get_auth_url(state: str = "", redirect_uri: Optional[str] = None) -> str:
     state_data = json.dumps({
         "code_verifier": cv,
         "redirect_uri": redirect_uri or settings.google_redirect_uri,
+        "state": state,
     })
-    _CODE_VERIFIER_FILE.write_text(state_data)
+    fd = os.open(str(_CODE_VERIFIER_FILE), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(state_data)
     return auth_url
 
 
@@ -115,6 +122,18 @@ def exchange_code(code: str, redirect_uri: Optional[str] = None) -> Credentials:
     return creds
 
 
+def validate_state(state: str) -> bool:
+    """Validate the OAuth state parameter against the persisted expected value."""
+    if not _CODE_VERIFIER_FILE.exists():
+        return False
+    try:
+        data = json.loads(_CODE_VERIFIER_FILE.read_text())
+        expected = data.get("state", "")
+        return bool(expected) and secrets.compare_digest(state, expected)
+    except Exception:
+        return False
+
+
 def get_credentials() -> Optional[Credentials]:
     """Load credentials from token file, refreshing if expired.
 
@@ -146,7 +165,19 @@ def is_authenticated() -> tuple[bool, Optional[str]]:
         service = build("oauth2", "v2", credentials=creds)
         info = service.userinfo().get().execute()
         return True, info.get("email")
+    except HttpError as e:
+        if e.resp.status == 401:
+            # Credentials are stale or revoked despite passing local validity checks
+            log.warning("Google credentials rejected with 401 — clearing token and requiring re-auth")
+            try:
+                os.remove(settings.google_token_file)
+            except OSError:
+                pass
+            return False, None
+        log.warning("Failed to fetch Google userinfo (HTTP %s)", e.resp.status)
+        return True, None
     except Exception:
+        log.warning("Failed to fetch Google userinfo", exc_info=True)
         return True, None
 
 
@@ -242,9 +273,9 @@ def wipe_all_gcal_events() -> int:
             try:
                 service.events().delete(calendarId="primary", eventId=event["id"]).execute()
                 deleted += 1
-                print(f"[gcal wipe] deleted event {event['id']} ({event.get('summary', '—')})")
+                log.info("Wiped event %s (%s)", event["id"], event.get("summary", "—"))
             except HttpError as e:
-                print(f"[gcal wipe] FAILED to delete event {event['id']}: {e}")
+                log.error("Failed to wipe event %s: %s", event["id"], e)
         page_token = response.get("nextPageToken")
         if not page_token:
             break
@@ -272,7 +303,7 @@ def _execute(request) -> dict:
             if not is_rate_limit or attempt == _MAX_RETRIES - 1:
                 raise
             sleep_time = delay + random.uniform(0, delay * 0.5)
-            print(f"[gcal] rate limit hit, backing off {sleep_time:.1f}s (attempt {attempt + 1}/{_MAX_RETRIES})…")
+            log.warning("Rate limit hit, backing off %.1fs (attempt %d/%d)…", sleep_time, attempt + 1, _MAX_RETRIES)
             time.sleep(sleep_time)
             delay = min(delay * 2, 60)
 
@@ -304,9 +335,7 @@ def _resolve_gcal_id(service, occurrence: Occurrence, calendar_id: str, body: di
         except HttpError as e:
             if e.resp.status != 404:
                 raise
-            print(
-                f"[gcal sync] occ {occurrence.id}: stored event {gcal_id} not found in GCal (404) — re-resolving"
-            )
+            log.warning("occ %d: stored event %s not found in GCal (404) — re-resolving", occurrence.id, gcal_id)
 
     # gcal_event_id was None or just confirmed missing — search by private tag
     expected_date = occurrence.occurrence_date.isoformat()
@@ -329,9 +358,9 @@ def _resolve_gcal_id(service, occurrence: Occurrence, calendar_id: str, body: di
             return found_id, "updated"
 
         # Date mismatch → stale event from a previous DB lifecycle; replace it
-        print(
-            f"[gcal sync] occ {occurrence.id}: stale event {found_id} "
-            f"(GCal date={found_date!r}, expected={expected_date!r}) — replacing"
+        log.warning(
+            "occ %d: stale event %s (GCal date=%r, expected=%r) — replacing",
+            occurrence.id, found_id, found_date, expected_date,
         )
         try:
             service.events().delete(calendarId=calendar_id, eventId=found_id).execute()
@@ -362,5 +391,6 @@ def _build_flow(redirect_uri: Optional[str] = None) -> Flow:
 
 
 def _save_token(creds: Credentials) -> None:
-    with open(settings.google_token_file, "w") as f:
+    fd = os.open(settings.google_token_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
         f.write(creds.to_json())

@@ -24,7 +24,7 @@ def create_person(body: PersonCreate, db: Session = Depends(get_db)):
 
 @router.get("/{person_id}", response_model=PersonOut)
 def get_person(person_id: int, db: Session = Depends(get_db)):
-    person = db.query(Person).get(person_id)
+    person = db.get(Person, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
     return person
@@ -32,7 +32,7 @@ def get_person(person_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{person_id}", response_model=PersonOut)
 def update_person(person_id: int, body: PersonUpdate, db: Session = Depends(get_db)):
-    person = db.query(Person).get(person_id)
+    person = db.get(Person, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -44,7 +44,7 @@ def update_person(person_id: int, body: PersonUpdate, db: Session = Depends(get_
 
 @router.delete("/{person_id}", status_code=204)
 def delete_person(person_id: int, db: Session = Depends(get_db)):
-    person = db.query(Person).get(person_id)
+    person = db.get(Person, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
     db.delete(person)

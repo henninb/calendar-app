@@ -17,7 +17,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..models import CreditCard, Event, Occurrence, OccurrenceStatus, WeekendShift
+from ..models import CreditCard, Event, Occurrence, OccurrenceStatus, Priority, WeekendShift
 
 
 # ── Date calculation helpers (mirrors credit-card-tracker.py) ─────────────────
@@ -174,19 +174,6 @@ def tracker_row(card: CreditCard, today: Optional[date] = None) -> dict:
 
 # ── Occurrence generation ──────────────────────────────────────────────────────
 
-def _upsert_occurrence(db: Session, event_id: int, occ_date: date, today: date) -> int:
-    exists = (
-        db.query(Occurrence)
-        .filter(Occurrence.event_id == event_id, Occurrence.occurrence_date == occ_date)
-        .first()
-    )
-    if exists:
-        return 0
-    status = OccurrenceStatus.overdue if occ_date < today else OccurrenceStatus.upcoming
-    db.add(Occurrence(event_id=event_id, occurrence_date=occ_date, status=status))
-    return 1
-
-
 def generate_credit_card_occurrences(
     db: Session, card: CreditCard, lookahead_days: int | None = None
 ) -> int:
@@ -203,7 +190,8 @@ def generate_credit_card_occurrences(
     due_event = next((e for e in events if "Payment Due" in e.title), None)
     fee_event = next((e for e in events if "Annual Fee" in e.title), None)
 
-    new_count = 0
+    # Collect all (event_id, date) pairs to potentially insert
+    planned: list[tuple[int, date]] = []
     ref = date(today.year, today.month, 1)  # start from beginning of current month
 
     while True:
@@ -213,18 +201,39 @@ def generate_credit_card_occurrences(
         due = due_date_for_close(close, card)
 
         if close_event and close >= today - timedelta(days=settings.cc_history_days):
-            new_count += _upsert_occurrence(db, close_event.id, close, today)
+            planned.append((close_event.id, close))
         if due_event:
-            new_count += _upsert_occurrence(db, due_event.id, due, today)
+            planned.append((due_event.id, due))
 
         ref = close + timedelta(days=1)
 
     if fee_event:
         fee_date = next_annual_fee_date(card, today)
         if fee_date and fee_date <= until:
-            new_count += _upsert_occurrence(db, fee_event.id, fee_date, today)
+            planned.append((fee_event.id, fee_date))
 
-    db.commit()
+    if not planned:
+        return 0
+
+    # Batch-check existing occurrences in a single query
+    event_ids = list({eid for eid, _ in planned})
+    existing = {
+        (row.event_id, row.occurrence_date)
+        for row in db.query(Occurrence.event_id, Occurrence.occurrence_date)
+        .filter(Occurrence.event_id.in_(event_ids))
+        .all()
+    }
+
+    new_count = 0
+    for event_id, occ_date in planned:
+        if (event_id, occ_date) in existing:
+            continue
+        status = OccurrenceStatus.overdue if occ_date < today else OccurrenceStatus.upcoming
+        db.add(Occurrence(event_id=event_id, occurrence_date=occ_date, status=status))
+        new_count += 1
+
+    if new_count:
+        db.commit()
     return new_count
 
 
@@ -246,7 +255,7 @@ def ensure_card_events(db: Session, card: CreditCard, credit_card_category_id: i
                 rrule=None,
                 description=description,
                 reminder_days=reminder_days,
-                priority="high",
+                priority=Priority.high,
                 is_active=True,
             ))
 

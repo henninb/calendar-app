@@ -43,7 +43,7 @@ def create_event(body: EventCreate, db: Session = Depends(get_db)):
 
 @router.get("/{event_id}", response_model=EventWithOccurrences)
 def get_event(event_id: int, db: Session = Depends(get_db)):
-    event = db.query(Event).get(event_id)
+    event = db.get(Event, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     return event
@@ -51,7 +51,7 @@ def get_event(event_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{event_id}", response_model=EventOut)
 def update_event(event_id: int, body: EventUpdate, db: Session = Depends(get_db)):
-    event = db.query(Event).get(event_id)
+    event = db.get(Event, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
@@ -75,7 +75,7 @@ def update_event(event_id: int, body: EventUpdate, db: Session = Depends(get_db)
 
 @router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_event(event_id: int, db: Session = Depends(get_db)):
-    event = db.query(Event).get(event_id)
+    event = db.get(Event, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     db.delete(event)
@@ -89,7 +89,7 @@ def generate_event_occurrences(
     db: Session = Depends(get_db),
 ):
     """Manually trigger occurrence generation for a single event."""
-    event = db.query(Event).get(event_id)
+    event = db.get(Event, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     created = generate_occurrences(db, event, lookahead_days)
@@ -99,5 +99,5 @@ def generate_event_occurrences(
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def _assert_category(db: Session, category_id: int) -> None:
-    if not db.query(Category).get(category_id):
+    if not db.get(Category, category_id):
         raise HTTPException(status_code=404, detail="Category not found")

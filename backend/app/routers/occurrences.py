@@ -61,11 +61,12 @@ def get_occurrence(occurrence_id: int, db: Session = Depends(get_db)):
 def update_occurrence(
     occurrence_id: int, body: OccurrenceUpdate, db: Session = Depends(get_db)
 ):
-    occ = db.query(Occurrence).get(occurrence_id)
+    occ = db.get(Occurrence, occurrence_id)
     if not occ:
         raise HTTPException(status_code=404, detail="Occurrence not found")
-    new_status = body.model_dump(exclude_unset=True).get("status")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    changes = body.model_dump(exclude_unset=True)
+    new_status = changes.get("status")
+    for field, value in changes.items():
         setattr(occ, field, value)
     db.commit()
     if new_status == OccurrenceStatus.skipped:
@@ -104,7 +105,7 @@ def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db
 
 @router.delete("/{occurrence_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_occurrence(occurrence_id: int, db: Session = Depends(get_db)):
-    occ = db.query(Occurrence).get(occurrence_id)
+    occ = db.get(Occurrence, occurrence_id)
     if not occ:
         raise HTTPException(status_code=404, detail="Occurrence not found")
     db.delete(occ)

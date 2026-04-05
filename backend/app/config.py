@@ -12,6 +12,7 @@ def _gopass(path: str) -> str:
     result = subprocess.run(
         ["gopass", "show", "-o", path],
         capture_output=True, text=True, check=True,
+        timeout=10,
     )
     return result.stdout.strip()
 
@@ -46,6 +47,7 @@ class Settings:
         self.allowed_origins           = [o.strip() for o in origins_raw.split(",") if o.strip()]
         self.gcal_max_results          = int(os.environ.get("GCAL_MAX_RESULTS", "250"))
         self.cc_history_days           = int(os.environ.get("CC_HISTORY_DAYS", "31"))
+        self.default_person_name       = os.environ.get("DEFAULT_PERSON_NAME", "")
         self.categories                = _load_yaml()["categories"]
 
     def _init_from_gopass(self):
@@ -71,9 +73,10 @@ class Settings:
 
         self.timezone        = cfg["timezone"]
         self.allowed_origins = cfg["cors"]["allowed_origins"]
-        self.gcal_max_results = cfg["google"]["gcal_max_results"]
-        self.cc_history_days  = cfg["credit_cards"]["history_days"]
-        self.categories       = cfg["categories"]
+        self.gcal_max_results     = cfg["google"]["gcal_max_results"]
+        self.cc_history_days      = cfg["credit_cards"]["history_days"]
+        self.default_person_name  = cfg.get("default_person_name", "")
+        self.categories           = cfg["categories"]
 
 
 settings = Settings()

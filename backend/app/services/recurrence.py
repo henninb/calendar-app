@@ -302,11 +302,15 @@ def generate_occurrences(
     db: Session,
     event: Event,
     lookahead_days: int | None = None,
+    existing: set[date] | None = None,
 ) -> int:
     """
     Create Occurrence rows for *event* up to *lookahead_days* from today.
     Skips dates that already have a row (unique constraint on event_id + date).
     Returns the number of new occurrences inserted.
+
+    Pass *existing* (set of already-known occurrence dates for this event) to
+    avoid a per-event DB query; used by generate_all_occurrences for batching.
     """
     if not event.is_active:
         return 0
@@ -317,12 +321,13 @@ def generate_occurrences(
 
     dates = _expand_dates(event, until)
 
-    existing: set[date] = {
-        o.occurrence_date
-        for o in db.query(Occurrence.occurrence_date)
-        .filter(Occurrence.event_id == event.id)
-        .all()
-    }
+    if existing is None:
+        existing = {
+            o.occurrence_date
+            for o in db.query(Occurrence.occurrence_date)
+            .filter(Occurrence.event_id == event.id)
+            .all()
+        }
 
     new_occurrences: list[Occurrence] = []
     for d in dates:
@@ -348,9 +353,24 @@ def generate_all_occurrences(db: Session, lookahead_days: int | None = None) -> 
         Event.is_active == True,
         Event.credit_card_id.is_(None),   # credit card events are managed separately
     ).all()
+
+    if not events:
+        return {"events_processed": 0, "occurrences_created": 0}
+
+    # Batch-load all existing occurrence dates in one query to avoid N+1
+    event_ids = [e.id for e in events]
+    rows = (
+        db.query(Occurrence.event_id, Occurrence.occurrence_date)
+        .filter(Occurrence.event_id.in_(event_ids))
+        .all()
+    )
+    existing_map: dict[int, set[date]] = {}
+    for row in rows:
+        existing_map.setdefault(row.event_id, set()).add(row.occurrence_date)
+
     total_new = 0
     for event in events:
-        total_new += generate_occurrences(db, event, lookahead_days)
+        total_new += generate_occurrences(db, event, lookahead_days, existing_map.get(event.id, set()))
     return {"events_processed": len(events), "occurrences_created": total_new}
 
 
