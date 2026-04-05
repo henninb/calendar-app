@@ -157,27 +157,32 @@ def get_credentials() -> Optional[Credentials]:
 
 
 def is_authenticated() -> tuple[bool, Optional[str]]:
-    """Returns (authenticated, email)."""
+    """
+    Returns (authenticated, email).
+
+    Verifies credentials by calling the Calendar API (a scope we actually own).
+    The userinfo/email endpoint requires the 'email' or 'profile' OAuth scope,
+    which is not in our SCOPES list, so it must not be used here.
+    """
     creds = get_credentials()
     if not creds:
         return False, None
     try:
-        service = build("oauth2", "v2", credentials=creds)
-        info = service.userinfo().get().execute()
-        return True, info.get("email")
+        build("calendar", "v3", credentials=creds).calendarList().list(maxResults=1).execute()
+        build("tasks", "v1", credentials=creds).tasklists().list(maxResults=1).execute()
+        return True, None
     except HttpError as e:
         if e.resp.status == 401:
-            # Credentials are stale or revoked despite passing local validity checks
             log.warning("Google credentials rejected with 401 — clearing token and requiring re-auth")
             try:
                 os.remove(settings.google_token_file)
             except OSError:
                 pass
             return False, None
-        log.warning("Failed to fetch Google userinfo (HTTP %s)", e.resp.status)
+        log.warning("Failed to verify Google credentials (HTTP %s)", e.resp.status)
         return True, None
     except Exception:
-        log.warning("Failed to fetch Google userinfo", exc_info=True)
+        log.warning("Failed to verify Google credentials", exc_info=True)
         return True, None
 
 
@@ -288,18 +293,27 @@ _MAX_RETRIES = 6
 _RETRY_BASE_DELAY = 2.0  # seconds; doubles each attempt, capped at 60s
 
 
+_RETRYABLE_REASONS = ("rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded")
+
+
 def _execute(request) -> dict:
     """
     Call request.execute() with exponential backoff + jitter on rate-limit errors.
-    Retries up to _MAX_RETRIES times on HTTP 429 or 403 rateLimitExceeded.
+    Retries up to _MAX_RETRIES times on HTTP 429 or 403 with a retryable reason.
     All other HttpErrors propagate immediately.
+
+    Google APIs may return any of:
+      rateLimitExceeded      — per-project QPS burst
+      userRateLimitExceeded  — per-user QPS burst
+      quotaExceeded          — also used for per-second user limits on Tasks API
     """
     delay = _RETRY_BASE_DELAY
     for attempt in range(_MAX_RETRIES):
         try:
             return request.execute()
         except HttpError as e:
-            is_rate_limit = e.resp.status in (429, 403) and "rateLimitExceeded" in str(e)
+            err_str = str(e)
+            is_rate_limit = e.resp.status in (429, 403) and any(r in err_str for r in _RETRYABLE_REASONS)
             if not is_rate_limit or attempt == _MAX_RETRIES - 1:
                 raise
             sleep_time = delay + random.uniform(0, delay * 0.5)

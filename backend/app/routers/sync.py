@@ -30,7 +30,7 @@ from ..services import google_calendar as gcal
 from ..services import google_tasks as gtasks
 
 _GCAL_SYNC_WORKERS = 10
-_GTASKS_SYNC_WORKERS = 3   # Tasks API enforces ~5 QPS per user; keep headroom
+_GTASKS_SYNC_WORKERS = 1   # Tasks API: 5 QPS per user; each task makes 2-4 calls so must be sequential
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
