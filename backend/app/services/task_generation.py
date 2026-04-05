@@ -47,9 +47,15 @@ def generate_pending_tasks(db: Session) -> int:
             )
             .all()
         )
+        if not occurrences:
+            continue
+        occ_ids = [occ.id for occ in occurrences]
+        existing_ids = {
+            row[0] for row in
+            db.query(Task.occurrence_id).filter(Task.occurrence_id.in_(occ_ids)).all()
+        }
         for occ in occurrences:
-            existing = db.query(Task).filter(Task.occurrence_id == occ.id).first()
-            if existing:
+            if occ.id in existing_ids:
                 continue
             db.add(Task(
                 occurrence_id=occ.id,

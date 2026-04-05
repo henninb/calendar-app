@@ -10,7 +10,7 @@ import json
 import os
 import random
 import time
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta, datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -199,7 +199,7 @@ def sync_occurrence(db: Session, occurrence: Occurrence) -> str:
     try:
         gcal_id, action = _resolve_gcal_id(service, occurrence, calendar_id, body)
         occurrence.gcal_event_id = gcal_id
-        occurrence.synced_at = datetime.utcnow()
+        occurrence.synced_at = datetime.now(timezone.utc)
         occurrence.status = OccurrenceStatus.upcoming
         db.commit()
         return action

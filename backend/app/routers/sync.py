@@ -60,7 +60,7 @@ def auth_callback(code: str, request: Request, db: Session = Depends(get_db)):
     try:
         gcal.exchange_code(code, redirect_uri=_redirect_uri(request))
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail="OAuth authorization failed") from exc
     return RedirectResponse(url="/")
 
 
@@ -177,14 +177,11 @@ def _run_gcal_delete_all():
     """Background worker — deletes all synced Google Calendar events and clears sync state."""
     db = SessionLocal()
     try:
-        occ_ids = [o.id for o in db.query(Occurrence).filter(Occurrence.gcal_event_id.isnot(None)).all()]
-        total = len(occ_ids)
+        occs = db.query(Occurrence).filter(Occurrence.gcal_event_id.isnot(None)).all()
+        total = len(occs)
         print(f"[gcal delete] {total} synced occurrences to remove from Google Calendar…")
         deleted, failed = 0, 0
-        for i, occ_id in enumerate(occ_ids, 1):
-            occ = db.query(Occurrence).filter(Occurrence.id == occ_id).first()
-            if occ is None:
-                continue
+        for i, occ in enumerate(occs, 1):
             try:
                 gcal.delete_gcal_event(occ)
                 occ.gcal_event_id = None
@@ -195,7 +192,7 @@ def _run_gcal_delete_all():
             except Exception as exc:
                 failed += 1
                 db.rollback()
-                print(f"[gcal delete] {i}/{total} FAILED occ {occ_id}: {exc}")
+                print(f"[gcal delete] {i}/{total} FAILED occ {occ.id}: {exc}")
         print(f"[gcal delete] done — deleted={deleted} failed={failed}")
     finally:
         db.close()
@@ -212,8 +209,13 @@ def delete_all_gcal_events(background_tasks: BackgroundTasks):
 
 
 @router.delete("/gcal/wipe-all", response_model=SyncResult)
-def wipe_all_gcal_events(db: Session = Depends(get_db)):
+def wipe_all_gcal_events(
+    confirm: bool = Query(False, description="Must be true to proceed"),
+    db: Session = Depends(get_db),
+):
     """Delete ALL events from the primary Google Calendar, including non-app events."""
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Pass ?confirm=true to confirm this destructive operation")
     try:
         deleted = gcal.wipe_all_gcal_events()
         cleared = (

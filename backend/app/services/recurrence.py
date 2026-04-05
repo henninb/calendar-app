@@ -284,12 +284,13 @@ def _expand_dates(event: Event, until: date) -> list[date]:
         return _expand_eclipses(dtstart, until, solar)
 
     # Standard RFC 5545 RRULE
+    rrule_part = event.rrule
+    if event.dtend_rule and "UNTIL=" not in rrule_part.upper() and "COUNT=" not in rrule_part.upper():
+        rrule_part = rrule_part.rstrip(";") + f";UNTIL={event.dtend_rule.strftime('%Y%m%d')}"
     rule_str = (
         f"DTSTART:{dtstart.strftime('%Y%m%d')}\n"
-        f"RRULE:{event.rrule}"
+        f"RRULE:{rrule_part}"
     )
-    if event.dtend_rule:
-        rule_str += f";UNTIL={event.dtend_rule.strftime('%Y%m%d')}"
 
     rule = rrulestr(rule_str, ignoretz=True)
     start_dt = datetime.combine(dtstart, datetime.min.time())

@@ -49,9 +49,13 @@ export const syncToGcal = async (daysAhead = 365, force = false, onProgress) => 
     buffer = parts.pop()
     for (const part of parts) {
       if (!part.startsWith('data: ')) continue
-      const data = JSON.parse(part.slice(6))
-      if (data.type === 'done') finalResult = data
-      else onProgress?.(data)
+      try {
+        const data = JSON.parse(part.slice(6))
+        if (data.type === 'done') finalResult = data
+        else onProgress?.(data)
+      } catch (e) {
+        console.error('SSE parse error:', e, part)
+      }
     }
   }
   return finalResult
@@ -78,9 +82,13 @@ export const syncToGtasks = async (onProgress) => {
     buffer = parts.pop()
     for (const part of parts) {
       if (!part.startsWith('data: ')) continue
-      const data = JSON.parse(part.slice(6))
-      if (data.type === 'done') finalResult = data
-      else onProgress?.(data)
+      try {
+        const data = JSON.parse(part.slice(6))
+        if (data.type === 'done') finalResult = data
+        else onProgress?.(data)
+      } catch (e) {
+        console.error('SSE parse error:', e, part)
+      }
     }
   }
   return finalResult

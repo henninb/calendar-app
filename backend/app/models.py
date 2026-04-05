@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     Column, Integer, String, Text, Date, DateTime,
     Boolean, ForeignKey, Enum, Numeric, JSON, UniqueConstraint,
@@ -83,7 +83,7 @@ class CreditCard(Base):
     annual_fee_month = Column(Integer)     # month the fee posts; None = no annual fee
 
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     events = relationship(
         "Event",
@@ -129,8 +129,8 @@ class Event(Base):
     generates_tasks = Column(Boolean, default=False)
     gcal_calendar_id = Column(String(200))
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     category = relationship("Category", back_populates="events")
     credit_card = relationship("CreditCard", back_populates="events")
@@ -155,7 +155,7 @@ class Occurrence(Base):
     gcal_event_id = Column(String(200))
     synced_at = Column(DateTime)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     event = relationship("Event", back_populates="occurrences")
     tasks = relationship("Task", back_populates="occurrence")
@@ -189,8 +189,8 @@ class Task(Base):
     gtask_id = Column(String(200))
     synced_at = Column(DateTime)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     occurrence = relationship("Occurrence", back_populates="tasks")
     category = relationship("Category")
@@ -210,7 +210,7 @@ class Subtask(Base):
 
     gtask_id = Column(String(200))
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     task = relationship("Task", back_populates="subtasks")

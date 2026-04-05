@@ -1,3 +1,4 @@
+import calendar
 from datetime import date, timedelta
 from typing import Optional
 
@@ -27,7 +28,6 @@ def _next_due(task: Task) -> Optional[date]:
     if delta:
         return task.due_date + delta
     today = task.due_date
-    import calendar
     if task.recurrence in (TaskRecurrence.monthly, TaskRecurrence.quarterly, TaskRecurrence.semiannual):
         months = {TaskRecurrence.monthly: 1, TaskRecurrence.quarterly: 3, TaskRecurrence.semiannual: 6}[task.recurrence]
         month = today.month + months
@@ -128,8 +128,9 @@ def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)):
     task = db.query(Task).get(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    new_status = body.model_dump(exclude_unset=True).get("status")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    changes = body.model_dump(exclude_unset=True)
+    new_status = changes.get("status")
+    for field, value in changes.items():
         setattr(task, field, value)
     db.commit()
     if new_status == TaskStatus.done:

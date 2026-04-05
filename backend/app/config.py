@@ -1,6 +1,7 @@
 import os
 import subprocess
 from pathlib import Path
+from urllib.parse import quote_plus
 
 import yaml
 
@@ -33,7 +34,7 @@ class Settings:
         name = os.environ["DB_NAME"]
         user = os.environ["DB_USERNAME"]
         pwd  = os.environ["DB_PASSWORD"]
-        self.database_url             = f"postgresql://{user}:{pwd}@{host}:{port}/{name}"
+        self.database_url             = f"postgresql://{quote_plus(user)}:{quote_plus(pwd)}@{host}:{port}/{name}"
         self.google_client_id         = os.environ.get("GOOGLE_CLIENT_ID", "")
         self.google_client_secret     = os.environ.get("GOOGLE_CLIENT_SECRET", "")
         self.google_token_file        = os.environ.get("GOOGLE_TOKEN_FILE", "token.json")
@@ -54,7 +55,7 @@ class Settings:
         db_user = _gopass(db["gopass_username_path"])
         db_pass = _gopass(db["gopass_password_path"])
         self.database_url = (
-            f"postgresql://{db_user}:{db_pass}"
+            f"postgresql://{quote_plus(db_user)}:{quote_plus(db_pass)}"
             f"@{db['host']}:{db['port']}/{db['name']}"
         )
 

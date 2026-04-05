@@ -7,7 +7,8 @@ they will need to re-authenticate via GET /api/sync/auth.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -70,7 +71,7 @@ def get_or_create_tasklist() -> tuple[object, str]:
     return svc, _get_or_create_tasklist(svc)
 
 
-def sync_task(db: Session, task: Task, svc=None, tasklist_id: str = None) -> str:
+def sync_task(db: Session, task: Task, svc=None, tasklist_id: Optional[str] = None) -> str:
     """Push a single task (and its subtasks) to Google Tasks. Returns 'inserted' or 'updated'."""
     if svc is None:
         svc = _service()
@@ -91,7 +92,7 @@ def sync_task(db: Session, task: Task, svc=None, tasklist_id: str = None) -> str
                 svc.tasks().update(
                     tasklist=tasklist_id, task=task.gtask_id, body={**body, "id": task.gtask_id}
                 ).execute()
-                task.synced_at = datetime.utcnow()
+                task.synced_at = datetime.now(timezone.utc)
                 action = "updated"
             except HttpError as e:
                 if e.resp.status != 404:
@@ -104,7 +105,7 @@ def sync_task(db: Session, task: Task, svc=None, tasklist_id: str = None) -> str
         if action is None:
             result = svc.tasks().insert(tasklist=tasklist_id, body=body).execute()
             task.gtask_id = result["id"]
-            task.synced_at = datetime.utcnow()
+            task.synced_at = datetime.now(timezone.utc)
             action = "inserted"
 
         for subtask in sorted(task.subtasks, key=lambda s: s.order):
