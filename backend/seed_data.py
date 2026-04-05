@@ -188,14 +188,6 @@ EXAMPLE_EVENTS = [
      date(2000, 10, 16),  "Wedding anniversary — October 16",  Priority.high,   [14, 7, 1], None),
 
     # ── Car Maintenance ──────────────────────────────────────────────────────
-    ("Oil Change — Toyota Highlander","car_maintenance",  "FREQ=MONTHLY;INTERVAL=3",
-     date(2026, 4, 6),    "Toyota Highlander oil change every 3 months", Priority.medium, [14, 3], None),
-    ("Oil Change — Ford Taurus",     "car_maintenance",   "FREQ=MONTHLY;INTERVAL=3",
-     date(2026, 4, 6),    "Ford Taurus oil change every 3 months",       Priority.medium, [14, 3], None),
-    ("Oil Change — Hyundai Sonata",  "car_maintenance",   "FREQ=MONTHLY;INTERVAL=3",
-     date(2026, 4, 6),    "Hyundai Sonata oil change every 3 months",    Priority.medium, [14, 3], None),
-    ("Oil Change — Hyundai Entourage","car_maintenance",  "FREQ=MONTHLY;INTERVAL=3",
-     date(2026, 4, 6),    "Hyundai Entourage oil change every 3 months", Priority.medium, [14, 3], None),
     ("Car Insurance Renewal",        "car_maintenance",   "FREQ=MONTHLY;INTERVAL=6",
      date(2026, 6, 18),   "Car insurance policy renewal every 6 months", Priority.high, [30], None),
     ("Tabs — Toyota Highlander",     "car_maintenance",   "FREQ=YEARLY;BYMONTH=11;BYMONTHDAY=-1",
