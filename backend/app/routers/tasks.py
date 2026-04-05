@@ -133,7 +133,7 @@ def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)):
     for field, value in changes.items():
         setattr(task, field, value)
     db.commit()
-    if new_status == TaskStatus.done:
+    if new_status in (TaskStatus.done, TaskStatus.cancelled):
         _spawn_next(db, task)
     return db.query(Task).options(
         joinedload(Task.assignee), joinedload(Task.subtasks)
