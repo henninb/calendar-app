@@ -41,6 +41,9 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS gtask_id VARCHAR"
             ))
+            conn.execute(text(
+                "ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT now()"
+            ))
             conn.commit()
             log.info("Schema migrations applied")
         except Exception:
