@@ -14,7 +14,44 @@ async function request(path, options = {}) {
   return res.json()
 }
 
-export const fetchCategories = () => request('/categories')
+// #19, #23: shared SSE streaming helper — eliminates duplication between syncToGcal / syncToGtasks
+// and uses the same error-extraction logic as request()
+async function streamSSE(url, onProgress) {
+  const res = await fetch(url, { method: 'POST' })
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`
+    try {
+      const body = await res.json()
+      if (body.detail) detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+    } catch {}
+    throw new Error(detail)
+  }
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let finalResult = null
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const parts = buffer.split('\n\n')
+    buffer = parts.pop()
+    for (const part of parts) {
+      if (!part.startsWith('data: ')) continue
+      try {
+        const data = JSON.parse(part.slice(6))
+        if (data.type === 'done') finalResult = data
+        else onProgress?.(data)
+      } catch (e) {
+        console.error('SSE parse error:', e, part)
+      }
+    }
+  }
+  return finalResult
+}
+
+// #13: signal parameter added so callers can abort in-flight requests
+export const fetchCategories = (signal) => request('/categories', { signal })
 
 export const fetchOccurrences = (params = {}) => {
   const q = new URLSearchParams({ limit: 500, ...params })
@@ -41,32 +78,9 @@ export const createTaskFromOccurrence = (occId) =>
 
 export const gcalAuthStatus = () => request('/sync/auth/status')
 
-export const syncToGcal = async (daysAhead = 365, force = false, onProgress) => {
-  const res = await fetch(`${BASE}/sync/gcal?days_ahead=${daysAhead}&force=${force}`, { method: 'POST' })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let finalResult = null
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const parts = buffer.split('\n\n')
-    buffer = parts.pop()
-    for (const part of parts) {
-      if (!part.startsWith('data: ')) continue
-      try {
-        const data = JSON.parse(part.slice(6))
-        if (data.type === 'done') finalResult = data
-        else onProgress?.(data)
-      } catch (e) {
-        console.error('SSE parse error:', e, part)
-      }
-    }
-  }
-  return finalResult
-}
+// #19: refactored to use streamSSE
+export const syncToGcal = (daysAhead = 365, force = false, onProgress) =>
+  streamSSE(`${BASE}/sync/gcal?days_ahead=${daysAhead}&force=${force}`, onProgress)
 
 export const deleteAllGcalEvents = () =>
   request('/sync/gcal', { method: 'DELETE' })
@@ -77,38 +91,16 @@ export const wipeAllGcalEvents = () =>
     headers: { 'X-Confirm-Delete': 'yes' },
   })
 
-export const syncToGtasks = async (onProgress) => {
-  const res = await fetch(`${BASE}/sync/gtasks`, { method: 'POST' })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let finalResult = null
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const parts = buffer.split('\n\n')
-    buffer = parts.pop()
-    for (const part of parts) {
-      if (!part.startsWith('data: ')) continue
-      try {
-        const data = JSON.parse(part.slice(6))
-        if (data.type === 'done') finalResult = data
-        else onProgress?.(data)
-      } catch (e) {
-        console.error('SSE parse error:', e, part)
-      }
-    }
-  }
-  return finalResult
-}
+// #19: refactored to use streamSSE
+export const syncToGtasks = (onProgress) =>
+  streamSSE(`${BASE}/sync/gtasks`, onProgress)
 
 // ── Tasks ──────────────────────────────────────────────────────────────────
 
-export const fetchTasks = (params = {}) => {
+// #13: signal parameter for AbortController support
+export const fetchTasks = (params = {}, signal) => {
   const q = new URLSearchParams({ limit: 500, ...params })
-  return request(`/tasks?${q}`)
+  return request(`/tasks?${q}`, { signal })
 }
 
 export const createTask = (data) =>
@@ -149,4 +141,5 @@ export const deleteSubtask = (taskId, subtaskId) =>
 
 // ── Persons ────────────────────────────────────────────────────────────────
 
-export const fetchPersons = () => request('/persons')
+// #13: signal parameter for AbortController support
+export const fetchPersons = (signal) => request('/persons', { signal })
