@@ -178,6 +178,7 @@ class CreditCardUpdate(BaseModel):
 class CreditCardOut(CreditCardBase):
     id: int
     created_at: Optional[datetime] = None
+    last_four: Optional[str] = None  # no pattern constraint — existing data may not be 4 digits
 
     model_config = {"from_attributes": True}
 
