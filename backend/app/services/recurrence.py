@@ -195,17 +195,11 @@ def _expand_eclipses(dtstart: date, until: date, solar: bool) -> list[date]:
 
     results: list[date] = []
     for _ in range(600):
-        if checker(k):
-            d = _jde_to_date(_moon_phase_jde(k))
-            if d > until:
-                break
-            if d >= dtstart:
-                results.append(d)
-        else:
-            # Even if not an eclipse, advance k and check termination via JDE
-            d = _jde_to_date(_moon_phase_jde(k))
-            if d > until:
-                break
+        d = _jde_to_date(_moon_phase_jde(k))
+        if d > until:
+            break
+        if checker(k) and d >= dtstart:
+            results.append(d)
         k += 1.0
 
     return sorted(set(results))

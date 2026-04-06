@@ -53,8 +53,12 @@ async function streamSSE(url, onProgress) {
 // #13: signal parameter added so callers can abort in-flight requests
 export const fetchCategories = (signal) => request('/categories', { signal })
 
+// Default fetch limit for list endpoints — matches backend max of 1000.
+// Callers can override via params. Increase or add pagination if datasets grow large.
+const FETCH_LIMIT = 500
+
 export const fetchOccurrences = (params = {}) => {
-  const q = new URLSearchParams({ limit: 500, ...params })
+  const q = new URLSearchParams({ limit: FETCH_LIMIT, ...params })
   return request(`/occurrences?${q}`)
 }
 
@@ -99,7 +103,7 @@ export const syncToGtasks = (onProgress) =>
 
 // #13: signal parameter for AbortController support
 export const fetchTasks = (params = {}, signal) => {
-  const q = new URLSearchParams({ limit: 500, ...params })
+  const q = new URLSearchParams({ limit: FETCH_LIMIT, ...params })
   return request(`/tasks?${q}`, { signal })
 }
 

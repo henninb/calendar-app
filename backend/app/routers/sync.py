@@ -80,9 +80,9 @@ def auth_status():
 
 # ── Sync ──────────────────────────────────────────────────────────────────────
 
-def _sync_one(occ_id: int) -> tuple[int, str, str, str, str]:
+def _sync_one(occ_id: int, creds=None) -> tuple[int, str, str, str, str]:
     """
-    Per-thread worker — owns its own DB session and GCal service instance.
+    Per-thread worker — owns its own DB session; credentials are shared from caller.
     Returns (occ_id, action, occ_date_str, gcal_id, error_msg).
     action is one of: "inserted" | "updated" | "skipped" | "failed"
     error_msg is non-empty only when action == "failed".
@@ -99,7 +99,7 @@ def _sync_one(occ_id: int) -> tuple[int, str, str, str, str]:
         if occ is None:
             return occ_id, "skipped", "", "", ""
         occ_date = str(occ.occurrence_date)
-        action = gcal.sync_occurrence(db, occ)
+        action = gcal.sync_occurrence(db, occ, creds=creds)
         return occ_id, action, occ_date, occ.gcal_event_id or "", ""
     except Exception as exc:
         log.exception("Sync failed for occurrence %d", occ_id)
@@ -138,12 +138,18 @@ def _gcal_sync_events(days_ahead: int, force: bool = False) -> Generator[str, No
     log.info("GCal sync: %d occurrences across %d workers", total, _GCAL_SYNC_WORKERS)
     yield sse({"type": "start", "total": total})
 
+    # Pre-fetch credentials once to avoid N file reads across threads
+    creds = gcal.get_credentials()
+    if not creds:
+        yield sse({"type": "done", "synced": 0, "failed": total, "errors": ["Not authenticated with Google Calendar"]})
+        return
+
     inserted, updated, skipped, failed = 0, 0, 0, 0
     errors = []
 
-    # Phase 2: fan out — each worker owns its session and GCal service
+    # Phase 2: fan out — each worker owns its session; credentials are shared
     with ThreadPoolExecutor(max_workers=_GCAL_SYNC_WORKERS) as pool:
-        futures = {pool.submit(_sync_one, occ_id): occ_id for occ_id in occ_ids}
+        futures = {pool.submit(_sync_one, occ_id, creds): occ_id for occ_id in occ_ids}
         for i, future in enumerate(as_completed(futures), 1):
             occ_id, action, occ_date, gcal_id, error_msg = future.result()
             if action == "inserted":
@@ -189,20 +195,22 @@ def _run_gcal_delete_all():
         occs = db.query(Occurrence).filter(Occurrence.gcal_event_id.isnot(None)).all()
         total = len(occs)
         log.info("GCal delete: removing %d synced occurrences", total)
-        deleted, failed = 0, 0
+        deleted_ids, failed = [], 0
         for i, occ in enumerate(occs, 1):
             try:
                 gcal.delete_gcal_event(occ)
-                occ.gcal_event_id = None
-                occ.synced_at = None
-                db.commit()
-                deleted += 1
+                deleted_ids.append(occ.id)
                 log.debug("GCal delete: %d/%d deleted occ %d (%s)", i, total, occ.id, occ.occurrence_date)
             except Exception as exc:
                 failed += 1
-                db.rollback()
                 log.error("GCal delete: %d/%d FAILED occ %d: %s", i, total, occ.id, exc)
-        log.info("GCal delete done — deleted=%d failed=%d", deleted, failed)
+        if deleted_ids:
+            db.query(Occurrence).filter(Occurrence.id.in_(deleted_ids)).update(
+                {Occurrence.gcal_event_id: None, Occurrence.synced_at: None},
+                synchronize_session=False,
+            )
+            db.commit()
+        log.info("GCal delete done — deleted=%d failed=%d", len(deleted_ids), failed)
     finally:
         db.close()
 

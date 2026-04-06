@@ -202,7 +202,7 @@ def generate_credit_card_occurrences(
 
         if close_event and close >= today - timedelta(days=settings.cc_history_days):
             planned.append((close_event.id, close))
-        if due_event:
+        if due_event and due >= today - timedelta(days=settings.cc_history_days):
             planned.append((due_event.id, due))
 
         ref = close + timedelta(days=1)

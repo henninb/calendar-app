@@ -40,6 +40,9 @@ async def lifespan(app: FastAPI):
                 "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence VARCHAR NOT NULL DEFAULT 'none'"
             ))
             conn.execute(text(
+                "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL"
+            ))
+            conn.execute(text(
                 "ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS gtask_id VARCHAR"
             ))
             conn.execute(text(

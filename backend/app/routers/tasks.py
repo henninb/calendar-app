@@ -52,13 +52,14 @@ def _spawn_next(db: Session, task: Task) -> None:
         return
     already_exists = (
         db.query(Task)
-        .filter(Task.title == task.title, Task.due_date == next_date, Task.recurrence == task.recurrence)
+        .filter(Task.parent_task_id == task.id)
         .first()
     )
     if already_exists:
-        log.debug("Skipping spawn for task %d — next instance (due %s) already exists as task %d", task.id, next_date, already_exists.id)
+        log.debug("Skipping spawn for task %d — next instance already exists as task %d", task.id, already_exists.id)
         return
     new_task = Task(
+        parent_task_id=task.id,
         title=task.title,
         description=task.description,
         priority=task.priority,
@@ -113,14 +114,17 @@ def list_tasks(
 
 @router.post("", response_model=TaskOut, status_code=201)
 def create_task(body: TaskCreate, db: Session = Depends(get_db)):
+    if body.category_id is not None and not db.get(Category, body.category_id):
+        raise HTTPException(status_code=404, detail="Category not found")
     task = Task(**body.model_dump())
     db.add(task)
+    db.flush()
+    task_id, task_title = task.id, task.title
     db.commit()
-    db.refresh(task)
-    log.info("Created task %d (%s)", task.id, task.title)
+    log.info("Created task %d (%s)", task_id, task_title)
     return db.query(Task).options(
         joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks)
-    ).filter(Task.id == task.id).first()
+    ).filter(Task.id == task_id).first()
 
 
 @router.get("/{task_id}", response_model=TaskOut)
@@ -145,8 +149,9 @@ def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)):
     new_status = changes.get("status")
     for field, value in changes.items():
         setattr(task, field, value)
+    task_title, task_status = task.title, task.status
     db.commit()
-    log.info("Updated task %d (%s) → status=%s", task_id, task.title, task.status)
+    log.info("Updated task %d (%s) → status=%s", task_id, task_title, task_status)
     if new_status == TaskStatus.done:
         _spawn_next(db, task)
     return db.query(Task).options(

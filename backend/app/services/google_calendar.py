@@ -43,6 +43,21 @@ SCOPES = [
     "https://www.googleapis.com/auth/tasks",
 ]
 
+# ── Auth result cache ────────────────────────────────────────────────────────
+# is_authenticated() makes 2 Google API calls; cache the result so repeated
+# page loads within _AUTH_CACHE_TTL seconds don't hit the network.
+
+_auth_cache: tuple[bool, Optional[str]] | None = None
+_auth_cache_time: float = 0.0
+_AUTH_CACHE_TTL = 60.0  # seconds
+
+
+def _invalidate_auth_cache() -> None:
+    global _auth_cache, _auth_cache_time
+    _auth_cache = None
+    _auth_cache_time = 0.0
+
+
 # Maps category name → Google Calendar colorId (1-11)
 CATEGORY_COLOR_MAP = {
     "birthday": "11",          # Tomato
@@ -126,6 +141,7 @@ def exchange_code(code: str, redirect_uri: Optional[str] = None) -> Credentials:
     flow.fetch_token(**fetch_kwargs)
     creds = flow.credentials
     _save_token(creds)
+    _invalidate_auth_cache()
     return creds
 
 
@@ -171,16 +187,28 @@ def is_authenticated() -> tuple[bool, Optional[str]]:
     Verifies credentials by calling the Calendar API (a scope we actually own).
     The userinfo/email endpoint requires the 'email' or 'profile' OAuth scope,
     which is not in our SCOPES list, so it must not be used here.
+
+    Positive results are cached for _AUTH_CACHE_TTL seconds so repeated page
+    loads don't trigger Google API calls on every request.
     """
+    global _auth_cache, _auth_cache_time
+    now = time.monotonic()
+    if _auth_cache is not None and _auth_cache[0] and now - _auth_cache_time < _AUTH_CACHE_TTL:
+        return _auth_cache
+
     creds = get_credentials()
     if not creds:
+        _invalidate_auth_cache()
         return False, None
     try:
         cal_svc = build("calendar", "v3", credentials=creds)
         tasks_svc = build("tasks", "v1", credentials=creds)
         cal_svc.calendarList().list(maxResults=1).execute()
         tasks_svc.tasklists().list(maxResults=1).execute()
-        return True, None
+        result: tuple[bool, Optional[str]] = (True, None)
+        _auth_cache = result
+        _auth_cache_time = now
+        return result
     except HttpError as e:
         if e.resp.status == 401:
             log.warning("Google credentials rejected with 401 — clearing token and requiring re-auth")
@@ -188,19 +216,28 @@ def is_authenticated() -> tuple[bool, Optional[str]]:
                 os.remove(settings.google_token_file)
             except OSError:
                 pass
+            _invalidate_auth_cache()
             return False, None
         log.warning("Failed to verify Google credentials (HTTP %s)", e.resp.status)
-        return True, None
+        result = (True, None)
+        _auth_cache = result
+        _auth_cache_time = now
+        return result
     except Exception:
         log.warning("Failed to verify Google credentials", exc_info=True)
-        return True, None
+        result = (True, None)
+        _auth_cache = result
+        _auth_cache_time = now
+        return result
 
 
-def sync_occurrence(db: Session, occurrence: Occurrence) -> str:
+def sync_occurrence(db: Session, occurrence: Occurrence, creds=None) -> str:
     """
     Push a single Occurrence to Google Calendar as an all-day event.
     Updates occurrence.gcal_event_id and occurrence.synced_at on success.
     Returns "inserted" or "updated".
+
+    Pass pre-fetched *creds* to avoid repeated file reads in threaded sync paths.
 
     Duplicate-safe decision tree (see _resolve_gcal_id):
       1. gcal_event_id set in DB → attempt update directly
@@ -211,7 +248,8 @@ def sync_occurrence(db: Session, occurrence: Occurrence) -> str:
          found + date wrong   → stale/reused ID; delete it, insert fresh
          not found            → insert fresh
     """
-    creds = get_credentials()
+    if creds is None:
+        creds = get_credentials()
     if not creds:
         raise RuntimeError("Not authenticated with Google Calendar")
 
