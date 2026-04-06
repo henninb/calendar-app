@@ -30,7 +30,7 @@ class CategoryCreate(CategoryBase):
 
 class CategoryUpdate(BaseModel):
     name: Optional[str] = None
-    color: Optional[str] = None
+    color: Optional[str] = Field(None, pattern=r'^#[0-9a-fA-F]{6}$')
     icon: Optional[str] = None
     description: Optional[str] = None
 
@@ -231,7 +231,7 @@ class PersonCreate(PersonBase):
 
 class PersonUpdate(BaseModel):
     name: Optional[str] = None
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
 
 
 class PersonOut(PersonBase):

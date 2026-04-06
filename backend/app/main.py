@@ -47,8 +47,9 @@ async def lifespan(app: FastAPI):
             conn.commit()
             log.info("Schema migrations applied")
         except Exception:
-            log.exception("Schema migration failed")
+            log.exception("Schema migration failed — aborting startup")
             conn.rollback()
+            raise
 
     db = SessionLocal()
     try:

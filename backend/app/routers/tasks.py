@@ -50,6 +50,14 @@ def _spawn_next(db: Session, task: Task) -> None:
     next_date = _next_due(task)
     if not next_date:
         return
+    already_exists = (
+        db.query(Task)
+        .filter(Task.title == task.title, Task.due_date == next_date, Task.recurrence == task.recurrence)
+        .first()
+    )
+    if already_exists:
+        log.debug("Skipping spawn for task %d — next instance (due %s) already exists as task %d", task.id, next_date, already_exists.id)
+        return
     new_task = Task(
         title=task.title,
         description=task.description,

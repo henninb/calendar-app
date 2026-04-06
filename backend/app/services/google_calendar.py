@@ -238,7 +238,8 @@ def sync_occurrence(db: Session, occurrence: Occurrence) -> str:
         gcal_id, action = _resolve_gcal_id(service, occurrence, calendar_id, body)
         occurrence.gcal_event_id = gcal_id
         occurrence.synced_at = datetime.now(timezone.utc)
-        occurrence.status = OccurrenceStatus.upcoming
+        if occurrence.status not in (OccurrenceStatus.completed, OccurrenceStatus.skipped, OccurrenceStatus.overdue):
+            occurrence.status = OccurrenceStatus.upcoming
         db.commit()
         return action
     except HttpError as e:

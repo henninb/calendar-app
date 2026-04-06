@@ -90,7 +90,12 @@ def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db
     )
     if not occ:
         raise HTTPException(status_code=404, detail="Occurrence not found")
-    existing = db.query(Task).filter(Task.occurrence_id == occurrence_id).first()
+    existing = (
+        db.query(Task)
+        .options(joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks))
+        .filter(Task.occurrence_id == occurrence_id)
+        .first()
+    )
     if existing:
         return existing
     task = Task(
