@@ -276,8 +276,17 @@ export default function TaskList() {
         </label>
 
         <button
-          className="btn btn-blue"
+          className="btn btn-gray"
           style={{ marginLeft: 'auto' }}
+          onClick={load}
+          disabled={loading}
+          title="Reload tasks from the server"
+        >
+          ↻ Refresh
+        </button>
+
+        <button
+          className="btn btn-blue"
           onClick={() => setAddingTask(v => !v)}
           title="Open the form to create a new task"
         >
