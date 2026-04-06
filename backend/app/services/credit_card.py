@@ -224,17 +224,20 @@ def generate_credit_card_occurrences(
         .all()
     }
 
-    new_count = 0
-    for event_id, occ_date in planned:
-        if (event_id, occ_date) in existing:
-            continue
-        status = OccurrenceStatus.overdue if occ_date < today else OccurrenceStatus.upcoming
-        db.add(Occurrence(event_id=event_id, occurrence_date=occ_date, status=status))
-        new_count += 1
+    new_occurrences = [
+        Occurrence(
+            event_id=event_id,
+            occurrence_date=occ_date,
+            status=OccurrenceStatus.overdue if occ_date < today else OccurrenceStatus.upcoming,
+        )
+        for event_id, occ_date in planned
+        if (event_id, occ_date) not in existing
+    ]
 
-    if new_count:
+    if new_occurrences:
+        db.bulk_save_objects(new_occurrences)
         db.commit()
-    return new_count
+    return len(new_occurrences)
 
 
 def ensure_card_events(db: Session, card: CreditCard, credit_card_category_id: int) -> None:

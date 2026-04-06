@@ -1,11 +1,17 @@
 import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-
-log = logging.getLogger(__name__)
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+log = logging.getLogger(__name__)
 
 from .database import Base, engine, SessionLocal
 from .models import CreditCard, Person
@@ -80,6 +86,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed = time.perf_counter() - start
+    log.info("%s %s %d %.3fs", request.method, request.url.path, response.status_code, elapsed)
+    return response
 
 app.include_router(categories.router, prefix="/api")
 app.include_router(events.router, prefix="/api")

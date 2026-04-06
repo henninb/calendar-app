@@ -168,8 +168,10 @@ def is_authenticated() -> tuple[bool, Optional[str]]:
     if not creds:
         return False, None
     try:
-        build("calendar", "v3", credentials=creds).calendarList().list(maxResults=1).execute()
-        build("tasks", "v1", credentials=creds).tasklists().list(maxResults=1).execute()
+        cal_svc = build("calendar", "v3", credentials=creds)
+        tasks_svc = build("tasks", "v1", credentials=creds)
+        cal_svc.calendarList().list(maxResults=1).execute()
+        tasks_svc.tasklists().list(maxResults=1).execute()
         return True, None
     except HttpError as e:
         if e.resp.status == 401:

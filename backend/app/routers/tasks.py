@@ -1,9 +1,12 @@
 import calendar
+import logging
 from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
+
+log = logging.getLogger(__name__)
 
 from ..database import get_db
 from ..models import Category, Subtask, Task, TaskRecurrence, TaskStatus
@@ -105,8 +108,9 @@ def create_task(body: TaskCreate, db: Session = Depends(get_db)):
     db.add(task)
     db.commit()
     db.refresh(task)
+    log.info("Created task %d (%s)", task.id, task.title)
     return db.query(Task).options(
-        joinedload(Task.assignee), joinedload(Task.subtasks)
+        joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks)
     ).filter(Task.id == task.id).first()
 
 
@@ -133,10 +137,11 @@ def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)):
     for field, value in changes.items():
         setattr(task, field, value)
     db.commit()
+    log.info("Updated task %d (%s) → status=%s", task_id, task.title, task.status)
     if new_status == TaskStatus.done:
         _spawn_next(db, task)
     return db.query(Task).options(
-        joinedload(Task.assignee), joinedload(Task.subtasks)
+        joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks)
     ).filter(Task.id == task_id).first()
 
 
@@ -145,6 +150,7 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    log.info("Deleted task %d (%s)", task.id, task.title)
     db.delete(task)
     db.commit()
 

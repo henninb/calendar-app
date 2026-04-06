@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -5,6 +7,7 @@ from ..database import get_db
 from ..models import Category
 from ..schemas import CategoryCreate, CategoryOut, CategoryUpdate
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/categories", tags=["categories"])
 
 
@@ -21,6 +24,7 @@ def create_category(body: CategoryCreate, db: Session = Depends(get_db)):
     db.add(cat)
     db.commit()
     db.refresh(cat)
+    log.info("Created category %d (%s)", cat.id, cat.name)
     return cat
 
 
@@ -43,6 +47,7 @@ def update_category(
         setattr(cat, field, value)
     db.commit()
     db.refresh(cat)
+    log.info("Updated category %d (%s)", cat.id, cat.name)
     return cat
 
 
@@ -51,5 +56,6 @@ def delete_category(category_id: int, db: Session = Depends(get_db)):
     cat = db.get(Category, category_id)
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
+    log.info("Deleted category %d (%s)", cat.id, cat.name)
     db.delete(cat)
     db.commit()

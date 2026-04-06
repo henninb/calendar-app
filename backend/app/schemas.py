@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from .models import Priority, OccurrenceStatus, TaskRecurrence, TaskStatus, WeekendShift
 
 
@@ -19,7 +19,7 @@ def _normalize_rrule(v: Optional[str]) -> Optional[str]:
 
 class CategoryBase(BaseModel):
     name: str
-    color: str = "#3b82f6"
+    color: str = Field("#3b82f6", pattern=r'^#[0-9a-fA-F]{6}$')
     icon: str = "📅"
     description: Optional[str] = None
 
@@ -49,7 +49,7 @@ class EventBase(BaseModel):
     rrule: Optional[str] = None          # None → one-time
     dtstart: date
     dtend_rule: Optional[date] = None
-    duration_days: int = 1
+    duration_days: int = Field(1, ge=1)
     description: Optional[str] = None
     location: Optional[str] = None
     reminder_days: list[int] = [7, 1]
@@ -139,15 +139,15 @@ EventWithOccurrences.model_rebuild()
 class CreditCardBase(BaseModel):
     name: str
     issuer: Optional[str] = None
-    last_four: Optional[str] = None
-    statement_close_day: Optional[int] = None
-    grace_period_days: Optional[int] = None
+    last_four: Optional[str] = Field(None, pattern=r'^\d{4}$')
+    statement_close_day: Optional[int] = Field(None, ge=1, le=31)
+    grace_period_days: Optional[int] = Field(None, ge=0)
     weekend_shift: Optional[WeekendShift] = None
     cycle_days: Optional[int] = None
     cycle_reference_date: Optional[date] = None
-    due_day_same_month: Optional[int] = None
-    due_day_next_month: Optional[int] = None
-    annual_fee_month: Optional[int] = None
+    due_day_same_month: Optional[int] = Field(None, ge=1, le=31)
+    due_day_next_month: Optional[int] = Field(None, ge=1, le=31)
+    annual_fee_month: Optional[int] = Field(None, ge=1, le=12)
     is_active: bool = True
 
     @field_validator('is_active', mode='before')
@@ -163,15 +163,15 @@ class CreditCardCreate(CreditCardBase):
 class CreditCardUpdate(BaseModel):
     name: Optional[str] = None
     issuer: Optional[str] = None
-    last_four: Optional[str] = None
-    statement_close_day: Optional[int] = None
-    grace_period_days: Optional[int] = None
+    last_four: Optional[str] = Field(None, pattern=r'^\d{4}$')
+    statement_close_day: Optional[int] = Field(None, ge=1, le=31)
+    grace_period_days: Optional[int] = Field(None, ge=0)
     weekend_shift: Optional[WeekendShift] = None
     cycle_days: Optional[int] = None
     cycle_reference_date: Optional[date] = None
-    due_day_same_month: Optional[int] = None
-    due_day_next_month: Optional[int] = None
-    annual_fee_month: Optional[int] = None
+    due_day_same_month: Optional[int] = Field(None, ge=1, le=31)
+    due_day_next_month: Optional[int] = Field(None, ge=1, le=31)
+    annual_fee_month: Optional[int] = Field(None, ge=1, le=12)
     is_active: Optional[bool] = None
 
 
@@ -222,7 +222,7 @@ class AuthStatus(BaseModel):
 
 class PersonBase(BaseModel):
     name: str
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
 
 
 class PersonCreate(PersonBase):

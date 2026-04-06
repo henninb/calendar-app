@@ -12,3 +12,4 @@ apscheduler==3.11.2
 alembic==1.18.4
 icalendar==7.0.3
 pyyaml==6.0.3
+email-validator==2.2.0

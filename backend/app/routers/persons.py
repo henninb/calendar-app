@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -5,6 +7,7 @@ from ..database import get_db
 from ..models import Person
 from ..schemas import PersonCreate, PersonOut, PersonUpdate
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/persons", tags=["persons"])
 
 
@@ -19,6 +22,7 @@ def create_person(body: PersonCreate, db: Session = Depends(get_db)):
     db.add(person)
     db.commit()
     db.refresh(person)
+    log.info("Created person %d (%s)", person.id, person.name)
     return person
 
 
@@ -39,6 +43,7 @@ def update_person(person_id: int, body: PersonUpdate, db: Session = Depends(get_
         setattr(person, field, value)
     db.commit()
     db.refresh(person)
+    log.info("Updated person %d (%s)", person.id, person.name)
     return person
 
 
@@ -47,5 +52,6 @@ def delete_person(person_id: int, db: Session = Depends(get_db)):
     person = db.get(Person, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
+    log.info("Deleted person %d (%s)", person.id, person.name)
     db.delete(person)
     db.commit()

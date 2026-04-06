@@ -72,7 +72,10 @@ export const deleteAllGcalEvents = () =>
   request('/sync/gcal', { method: 'DELETE' })
 
 export const wipeAllGcalEvents = () =>
-  request('/sync/gcal/wipe-all?confirm=true', { method: 'DELETE' })
+  request('/sync/gcal/wipe-all', {
+    method: 'DELETE',
+    headers: { 'X-Confirm-Delete': 'yes' },
+  })
 
 export const syncToGtasks = async (onProgress) => {
   const res = await fetch(`${BASE}/sync/gtasks`, { method: 'POST' })

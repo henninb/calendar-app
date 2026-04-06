@@ -1,9 +1,13 @@
+import logging
 import os
 import subprocess
+import warnings
 from pathlib import Path
 from urllib.parse import quote_plus
 
 import yaml
+
+_log = logging.getLogger(__name__)
 
 _CONFIG_FILE = Path(__file__).parent.parent / "config.yml"
 
@@ -45,6 +49,12 @@ class Settings:
         self.timezone                  = os.environ.get("TIMEZONE", "America/Chicago")
         origins_raw                    = os.environ.get("ALLOWED_ORIGINS", "")
         self.allowed_origins           = [o.strip() for o in origins_raw.split(",") if o.strip()]
+        if not self.allowed_origins:
+            warnings.warn(
+                "ALLOWED_ORIGINS is not set — all cross-origin requests will be blocked by CORS middleware.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         self.gcal_max_results          = int(os.environ.get("GCAL_MAX_RESULTS", "250"))
         self.cc_history_days           = int(os.environ.get("CC_HISTORY_DAYS", "31"))
         self.default_person_name       = os.environ.get("DEFAULT_PERSON_NAME", "")

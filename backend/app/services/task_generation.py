@@ -26,49 +26,71 @@ def generate_pending_tasks(db: Session) -> int:
     whose occurrence_date falls within the next max(reminder_days) days
     and that don't already have a linked task.
     Returns the count of tasks created.
+
+    Uses 3 queries regardless of event count (no N+1):
+      1. Load all qualifying events.
+      2. Batch-load all candidate occurrences up to the max threshold.
+      3. Batch-check which occurrence IDs already have tasks.
     """
     today = date.today()
-    created = 0
 
     events = db.query(Event).filter(
-        Event.is_active == True,
-        Event.generates_tasks == True,
+        Event.is_active.is_(True),
+        Event.generates_tasks.is_(True),
     ).all()
 
-    for event in events:
-        threshold = today + timedelta(days=_lead_days(event))
-        occurrences = (
-            db.query(Occurrence)
-            .filter(
-                Occurrence.event_id == event.id,
-                Occurrence.occurrence_date >= today,
-                Occurrence.occurrence_date <= threshold,
-                Occurrence.status.in_([OccurrenceStatus.upcoming, OccurrenceStatus.overdue]),
-            )
-            .all()
-        )
-        if not occurrences:
-            continue
-        occ_ids = [occ.id for occ in occurrences]
-        existing_ids = {
-            row[0] for row in
-            db.query(Task.occurrence_id).filter(Task.occurrence_id.in_(occ_ids)).all()
-        }
-        for occ in occurrences:
-            if occ.id in existing_ids:
-                continue
-            db.add(Task(
-                occurrence_id=occ.id,
-                title=event.title,
-                description=event.description,
-                priority=event.priority,
-                due_date=occ.occurrence_date,
-            ))
-            created += 1
+    if not events:
+        return 0
 
-    if created:
+    # Per-event thresholds and lookup map
+    event_thresholds = {event.id: today + timedelta(days=_lead_days(event)) for event in events}
+    event_map = {event.id: event for event in events}
+    max_threshold = max(event_thresholds.values())
+
+    # Batch-load all candidate occurrences across all events in one query
+    qualifying_occs = (
+        db.query(Occurrence)
+        .filter(
+            Occurrence.event_id.in_(event_thresholds.keys()),
+            Occurrence.occurrence_date >= today,
+            Occurrence.occurrence_date <= max_threshold,
+            Occurrence.status.in_([OccurrenceStatus.upcoming, OccurrenceStatus.overdue]),
+        )
+        .all()
+    )
+
+    # Filter per-event threshold in Python, then batch-check existing tasks
+    occ_ids_to_check = [
+        occ.id for occ in qualifying_occs
+        if occ.occurrence_date <= event_thresholds[occ.event_id]
+    ]
+    if not occ_ids_to_check:
+        return 0
+
+    existing_occ_ids = {
+        row[0] for row in
+        db.query(Task.occurrence_id).filter(Task.occurrence_id.in_(occ_ids_to_check)).all()
+    }
+
+    new_tasks = []
+    for occ in qualifying_occs:
+        if occ.occurrence_date > event_thresholds[occ.event_id]:
+            continue
+        if occ.id in existing_occ_ids:
+            continue
+        event = event_map[occ.event_id]
+        new_tasks.append(Task(
+            occurrence_id=occ.id,
+            title=event.title,
+            description=event.description,
+            priority=event.priority,
+            due_date=occ.occurrence_date,
+        ))
+
+    if new_tasks:
+        db.bulk_save_objects(new_tasks)
         db.commit()
-    return created
+    return len(new_tasks)
 
 
 def cancel_tasks_for_occurrence(db: Session, occurrence: Occurrence) -> int:

@@ -1,7 +1,10 @@
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+
+log = logging.getLogger(__name__)
 
 from ..config import settings
 from ..database import get_db
@@ -38,6 +41,7 @@ def create_event(body: EventCreate, db: Session = Depends(get_db)):
     db.refresh(event)
     generate_occurrences(db, event)
     db.refresh(event)
+    log.info("Created event %d (%s)", event.id, event.title)
     return event
 
 
@@ -70,6 +74,7 @@ def update_event(event_id: int, body: EventUpdate, db: Session = Depends(get_db)
         generate_occurrences(db, event)
         db.refresh(event)
 
+    log.info("Updated event %d (%s)", event.id, event.title)
     return event
 
 
@@ -78,6 +83,7 @@ def delete_event(event_id: int, db: Session = Depends(get_db)):
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+    log.info("Deleted event %d (%s)", event.id, event.title)
     db.delete(event)
     db.commit()
 

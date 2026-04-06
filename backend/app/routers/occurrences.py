@@ -1,8 +1,11 @@
+import logging
 from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
+
+log = logging.getLogger(__name__)
 
 from ..config import settings
 from ..database import get_db
@@ -72,6 +75,7 @@ def update_occurrence(
     if new_status == OccurrenceStatus.skipped:
         cancel_tasks_for_occurrence(db, occ)
     db.refresh(occ)
+    log.info("Updated occurrence %d → status=%s", occurrence_id, occ.status)
     return occ
 
 
@@ -108,6 +112,7 @@ def delete_occurrence(occurrence_id: int, db: Session = Depends(get_db)):
     occ = db.get(Occurrence, occurrence_id)
     if not occ:
         raise HTTPException(status_code=404, detail="Occurrence not found")
+    log.info("Deleted occurrence %d (event_id=%d, date=%s)", occ.id, occ.event_id, occ.occurrence_date)
     db.delete(occ)
     db.commit()
 

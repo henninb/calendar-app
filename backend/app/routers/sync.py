@@ -17,7 +17,7 @@ from typing import Generator, Optional
 
 log = logging.getLogger(__name__)
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
 from icalendar import Calendar, Event as ICalEvent
 from sqlalchemy.orm import Session, joinedload
@@ -80,12 +80,13 @@ def auth_status():
 
 # ── Sync ──────────────────────────────────────────────────────────────────────
 
-def _sync_one(occ_id: int) -> tuple[int, str, str, str]:
+def _sync_one(occ_id: int) -> tuple[int, str, str, str, str]:
     """
     Per-thread worker — owns its own DB session and GCal service instance.
-    Returns (occ_id, action, occ_date_str, gcal_id) where action is one of:
-      "inserted" | "updated" | "skipped" | "failed:<message>"
-    Never raises — all exceptions are captured in the action string.
+    Returns (occ_id, action, occ_date_str, gcal_id, error_msg).
+    action is one of: "inserted" | "updated" | "skipped" | "failed"
+    error_msg is non-empty only when action == "failed".
+    Never raises — all exceptions are captured in error_msg.
     """
     db = SessionLocal()
     try:
@@ -96,13 +97,13 @@ def _sync_one(occ_id: int) -> tuple[int, str, str, str]:
             .first()
         )
         if occ is None:
-            return occ_id, "skipped", "", ""
+            return occ_id, "skipped", "", "", ""
         occ_date = str(occ.occurrence_date)
         action = gcal.sync_occurrence(db, occ)
-        return occ_id, action, occ_date, occ.gcal_event_id or ""
+        return occ_id, action, occ_date, occ.gcal_event_id or "", ""
     except Exception as exc:
         log.exception("Sync failed for occurrence %d", occ_id)
-        return occ_id, f"failed:{type(exc).__name__}: {str(exc)[:200]}", "", ""
+        return occ_id, "failed", "", "", f"{type(exc).__name__}: {str(exc)[:200]}"
     finally:
         db.close()
 
@@ -144,7 +145,7 @@ def _gcal_sync_events(days_ahead: int, force: bool = False) -> Generator[str, No
     with ThreadPoolExecutor(max_workers=_GCAL_SYNC_WORKERS) as pool:
         futures = {pool.submit(_sync_one, occ_id): occ_id for occ_id in occ_ids}
         for i, future in enumerate(as_completed(futures), 1):
-            occ_id, action, occ_date, gcal_id = future.result()
+            occ_id, action, occ_date, gcal_id, error_msg = future.result()
             if action == "inserted":
                 inserted += 1
                 msg = f"{i}/{total} occ {occ_id} ({occ_date}): inserted {gcal_id}"
@@ -154,13 +155,12 @@ def _gcal_sync_events(days_ahead: int, force: bool = False) -> Generator[str, No
             elif action == "skipped":
                 skipped += 1
                 msg = f"{i}/{total} occ {occ_id}: skipped"
-            else:
+            else:  # "failed"
                 failed += 1
-                err_msg = action[7:]
-                errors.append(f"occ {occ_id}: {err_msg}")
-                msg = f"{i}/{total} occ {occ_id}: FAILED {err_msg}"
+                errors.append(f"occ {occ_id}: {error_msg}")
+                msg = f"{i}/{total} occ {occ_id}: FAILED {error_msg}"
             log.debug("GCal sync: %s", msg)
-            yield sse({"type": "progress", "i": i, "total": total, "action": action.split(":")[0], "msg": msg})
+            yield sse({"type": "progress", "i": i, "total": total, "action": action, "msg": msg})
 
     log.info("GCal sync done — inserted=%d updated=%d skipped=%d failed=%d", inserted, updated, skipped, failed)
     yield sse({"type": "done", "synced": inserted + updated, "failed": failed, "errors": errors})
@@ -219,12 +219,19 @@ def delete_all_gcal_events(background_tasks: BackgroundTasks):
 
 @router.delete("/gcal/wipe-all", response_model=SyncResult)
 def wipe_all_gcal_events(
-    confirm: bool = Query(False, description="Must be true to proceed"),
+    x_confirm_delete: str = Header(None, alias="X-Confirm-Delete"),
     db: Session = Depends(get_db),
 ):
-    """Delete ALL events from the primary Google Calendar, including non-app events."""
-    if not confirm:
-        raise HTTPException(status_code=400, detail="Pass ?confirm=true to confirm this destructive operation")
+    """Delete ALL events from the primary Google Calendar, including non-app events.
+
+    Requires the ``X-Confirm-Delete: yes`` request header to prevent accidental
+    or CSRF-triggered invocation.
+    """
+    if x_confirm_delete != "yes":
+        raise HTTPException(
+            status_code=400,
+            detail="Set the 'X-Confirm-Delete: yes' header to confirm this destructive operation",
+        )
     try:
         deleted = gcal.wipe_all_gcal_events()
         cleared = (
@@ -258,29 +265,31 @@ def sync_single(occurrence_id: int, db: Session = Depends(get_db)):
         gcal.sync_occurrence(db, occ)
         return SyncResult(synced=1, failed=0)
     except Exception as exc:
-        return SyncResult(synced=0, failed=1, errors=[str(exc)])
+        log.error("sync_single: occurrence %d failed: %s", occurrence_id, exc)
+        raise HTTPException(status_code=502, detail="Google Calendar sync failed") from exc
 
 
 # ── Google Tasks Sync ─────────────────────────────────────────────────────────
 
-def _sync_one_task(task_id: int, tasklist_id: str) -> tuple[int, str, str]:
+def _sync_one_task(task_id: int, tasklist_id: str) -> tuple[int, str, str, str]:
     """
     Per-thread worker — owns its own DB session and Tasks service instance.
-    Returns (task_id, action, title) where action is one of:
-      "inserted" | "updated" | "failed:<message>"
-    Never raises — all exceptions are captured in the action string.
+    Returns (task_id, action, title, error_msg).
+    action is one of: "inserted" | "updated" | "skipped" | "failed"
+    error_msg is non-empty only when action == "failed".
+    Never raises — all exceptions are captured in error_msg.
     """
     db = SessionLocal()
     try:
         task = db.query(Task).filter(Task.id == task_id).first()
         if task is None:
-            return task_id, "skipped", ""
+            return task_id, "skipped", "", ""
         title = task.title[:40]
         action = gtasks.sync_task(db, task, tasklist_id=tasklist_id)
-        return task_id, action, title
+        return task_id, action, title, ""
     except Exception as exc:
         log.exception("Sync failed for task %d", task_id)
-        return task_id, f"failed:{type(exc).__name__}: {str(exc)[:200]}", ""
+        return task_id, "failed", "", f"{type(exc).__name__}: {str(exc)[:200]}"
     finally:
         db.close()
 
@@ -312,19 +321,18 @@ def _gtasks_sync_events() -> Generator[str, None, None]:
     with ThreadPoolExecutor(max_workers=_GTASKS_SYNC_WORKERS) as pool:
         futures = {pool.submit(_sync_one_task, task_id, tasklist_id): task_id for task_id in task_ids}
         for i, future in enumerate(as_completed(futures), 1):
-            task_id, action, title = future.result()
+            task_id, action, title, error_msg = future.result()
             if action in ("inserted", "updated"):
                 synced += 1
                 msg = f"{i}/{total} task {task_id} ({title}): {action}"
             elif action == "skipped":
                 msg = f"{i}/{total} task {task_id}: skipped"
-            else:
+            else:  # "failed"
                 failed += 1
-                err_msg = action[7:]
-                errors.append(f"task {task_id}: {err_msg}")
-                msg = f"{i}/{total} task {task_id}: FAILED {err_msg}"
+                errors.append(f"task {task_id}: {error_msg}")
+                msg = f"{i}/{total} task {task_id}: FAILED {error_msg}"
             log.debug("GTasks sync: %s", msg)
-            yield sse({"type": "progress", "i": i, "total": total, "action": action.split(":")[0], "msg": msg})
+            yield sse({"type": "progress", "i": i, "total": total, "action": action, "msg": msg})
 
     log.info("GTasks sync done — synced=%d failed=%d", synced, failed)
     yield sse({"type": "done", "synced": synced, "failed": failed, "errors": errors})
