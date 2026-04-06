@@ -177,7 +177,7 @@ class CreditCardUpdate(BaseModel):
 
 class CreditCardOut(CreditCardBase):
     id: int
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 

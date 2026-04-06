@@ -48,6 +48,9 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT now()"
             ))
+            conn.execute(text(
+                "UPDATE credit_cards SET created_at = now() WHERE created_at IS NULL"
+            ))
             conn.commit()
             log.info("Schema migrations applied")
         except Exception:
