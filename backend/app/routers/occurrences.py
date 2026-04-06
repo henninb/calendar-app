@@ -97,6 +97,7 @@ def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db
         .first()
     )
     if existing:
+        log.info("Task %d already exists for occurrence %d — returning existing", existing.id, occurrence_id)
         return existing
     task = Task(
         occurrence_id=occ.id,
@@ -109,6 +110,7 @@ def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db
     db.add(task)
     db.commit()
     db.refresh(task)
+    log.info("Created task %d (%s) from occurrence %d (event %d, date %s)", task.id, task.title, occurrence_id, occ.event_id, occ.occurrence_date)
     return task
 
 

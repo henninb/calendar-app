@@ -78,6 +78,7 @@ def _spawn_next(db: Session, task: Task) -> None:
             order=subtask.order,
         ))
     db.commit()
+    log.info("Spawned next %s task %d (due %s) from completed task %d", task.recurrence, new_task.id, next_date, task.id)
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 

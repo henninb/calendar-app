@@ -1,4 +1,5 @@
 from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker, declarative_base
 from .config import settings
 
@@ -17,7 +18,7 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
-    except Exception:
+    except SQLAlchemyError:
         db.rollback()
         raise
     finally:

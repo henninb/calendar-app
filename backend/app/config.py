@@ -34,6 +34,7 @@ class Settings:
             self._init_from_gopass()
 
     def _init_from_env(self):
+        _log.info("Config loaded from environment variables")
         host = os.environ["DB_HOST"]
         port = os.environ["DB_PORT"]
         name = os.environ["DB_NAME"]
@@ -61,6 +62,7 @@ class Settings:
         self.categories                = _load_yaml()["categories"]
 
     def _init_from_gopass(self):
+        _log.info("Config loaded from gopass + config.yml")
         cfg = _load_yaml()
 
         db = cfg["database"]

@@ -1,8 +1,9 @@
+import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
@@ -51,22 +52,24 @@ async def lifespan(app: FastAPI):
             conn.rollback()
             raise
 
-    db = SessionLocal()
-    try:
-        # Seed default person if none exist and a name is configured
-        if not db.query(Person).first() and settings.default_person_name:
-            db.add(Person(name=settings.default_person_name))
-            db.commit()
-            log.info("Seeded default person: %s", settings.default_person_name)
+    def _startup_data_generation() -> None:
+        db = SessionLocal()
+        try:
+            if not db.query(Person).first() and settings.default_person_name:
+                db.add(Person(name=settings.default_person_name))
+                db.commit()
+                log.info("Seeded default person: %s", settings.default_person_name)
 
-        mark_overdue(db)
-        generate_all_occurrences(db)
-        for card in db.query(CreditCard).filter(CreditCard.is_active.isnot(False)).all():
-            generate_credit_card_occurrences(db, card)
-        generate_pending_tasks(db)
-        log.info("Startup data generation complete")
-    finally:
-        db.close()
+            mark_overdue(db)
+            generate_all_occurrences(db)
+            for card in db.query(CreditCard).filter(CreditCard.is_active.isnot(False)).all():
+                generate_credit_card_occurrences(db, card)
+            generate_pending_tasks(db)
+            log.info("Startup data generation complete")
+        finally:
+            db.close()
+
+    await asyncio.to_thread(_startup_data_generation)
 
     start_scheduler()
 
@@ -110,5 +113,12 @@ app.include_router(tasks.router, prefix="/api")
 
 
 @app.get("/health")
-def health():
-    return {"status": "ok"}
+def health(response: Response):
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "ok"}
+    except Exception:
+        log.exception("Health check: database unreachable")
+        response.status_code = 503
+        return {"status": "error", "detail": "database unavailable"}

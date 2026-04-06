@@ -43,6 +43,7 @@ def create_card(body: CreditCardCreate, db: Session = Depends(get_db)):
     db.refresh(card)
     ensure_card_events(db, card, _cc_category_id(db))
     generate_credit_card_occurrences(db, card)
+    log.info("Created credit card %d (%s)", card.id, card.name)
     return card
 
 
@@ -78,6 +79,7 @@ def update_card(card_id: int, body: CreditCardUpdate, db: Session = Depends(get_
     db.commit()
     db.refresh(card)
     ensure_card_events(db, card, _cc_category_id(db))
+    log.info("Updated credit card %d (%s)", card.id, card.name)
     return card
 
 
@@ -86,6 +88,7 @@ def delete_card(card_id: int, db: Session = Depends(get_db)):
     card = db.get(CreditCard, card_id)
     if not card:
         raise HTTPException(status_code=404, detail="Credit card not found")
+    log.info("Deleted credit card %d (%s)", card.id, card.name)
     db.delete(card)
     db.commit()
 

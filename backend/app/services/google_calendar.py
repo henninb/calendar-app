@@ -107,7 +107,14 @@ def exchange_code(code: str, redirect_uri: Optional[str] = None) -> Credentials:
             pass
 
     effective_uri = redirect_uri or saved_uri or settings.google_redirect_uri
-    flow = _pending_flow if _pending_flow is not None else _build_flow(redirect_uri=effective_uri)
+    if _pending_flow is not None:
+        flow = _pending_flow
+    else:
+        log.warning(
+            "OAuth callback landed on a different process than /auth — using file-based fallback. "
+            "In multi-worker deployments, sticky sessions should route /auth and /auth/callback to the same worker."
+        )
+        flow = _build_flow(redirect_uri=effective_uri)
     _pending_flow = None
 
     if not getattr(flow, "code_verifier", None) and saved_cv:
@@ -149,6 +156,7 @@ def get_credentials() -> Optional[Credentials]:
         try:
             creds.refresh(Request())
             _save_token(creds)
+            log.info("Google credentials refreshed successfully")
         except RefreshError:
             # Token is revoked or covers wrong scopes — force re-auth
             os.remove(token_path)
