@@ -19,7 +19,7 @@ function timestamp() {
 }
 
 export default function App() {
-  const [tab, setTab]                   = useState('calendar')
+  const [tab, setTab]                   = useState('tasks')
   const [config, setConfig]             = useState(loadConfig)
   const [syncing, setSyncing]               = useState(false)
   const [gcalSyncing, setGcalSyncing]       = useState(false)
