@@ -294,7 +294,7 @@ const TaskRow = React.memo(function TaskRow({
               title="Click to edit due date"
               style={{ cursor: 'pointer', borderBottom: '1px dashed #94a3b8' }}
             >
-              {fmt(task.due_date)}{daysBadge(task.due_date)}
+              {fmt(task.due_date)}{task.status !== 'done' && task.status !== 'cancelled' && daysBadge(task.due_date)}
             </span>
           )}
         </td>
@@ -384,10 +384,11 @@ const TaskRow = React.memo(function TaskRow({
       {/* Inline edit form */}
       {isEditing && (
         <tr>
-          <td colSpan={7} style={{ background: '#f8fafc', padding: '1rem 1rem 1rem 2.5rem', borderBottom: '2px solid #3b82f6' }}>
-            <div style={{ display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}
-              onKeyDown={e => e.key === 'Escape' && onCancelEdit()}>
-              <div style={{ flex: '2 1 220px' }}>
+          <td colSpan={7} style={{ background: '#f8fafc', padding: '1rem 1rem 1rem 2.5rem', borderBottom: '2px solid #3b82f6' }}
+            onKeyDown={e => e.key === 'Escape' && onCancelEdit()}>
+            {/* Row 1: Title + Description */}
+            <div style={{ display: 'flex', gap: '.75rem', alignItems: 'flex-end', marginBottom: '.5rem' }}>
+              <div style={{ flex: '2 1 0' }}>
                 <label style={labelStyle}>Title *</label>
                 <input
                   autoFocus
@@ -397,7 +398,7 @@ const TaskRow = React.memo(function TaskRow({
                   style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }}
                 />
               </div>
-              <div style={{ flex: '2 1 180px' }}>
+              <div style={{ flex: '2 1 0' }}>
                 <label style={labelStyle}>Description</label>
                 <input
                   value={editForm.description}
@@ -406,6 +407,9 @@ const TaskRow = React.memo(function TaskRow({
                   placeholder="Optional"
                 />
               </div>
+            </div>
+            {/* Row 2: short fields + buttons */}
+            <div style={{ display: 'flex', gap: '.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div>
                 <label style={labelStyle}>Status</label>
                 <select value={editForm.status} onChange={e => onEditFormChange('status', e.target.value)} style={inputStyle}>
@@ -457,10 +461,12 @@ const TaskRow = React.memo(function TaskRow({
                   {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
                 </select>
               </div>
-              <div style={{ display: 'flex', gap: '.5rem' }}>
-                <button onClick={handleSaveEdit} className="btn btn-green" title="Save changes to this task">Save</button>
-                <button onClick={onCancelEdit} className="btn btn-gray" title="Discard changes and close the edit form">Cancel</button>
-              </div>
+            </div>
+          </td>
+          <td style={{ background: '#f8fafc', borderBottom: '2px solid #3b82f6', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+            <div style={{ display: 'flex', gap: '.5rem' }}>
+              <button onClick={handleSaveEdit} className="btn btn-green" title="Save changes to this task">Save</button>
+              <button onClick={onCancelEdit} className="btn btn-gray" title="Discard changes and close the edit form">Cancel</button>
             </div>
           </td>
         </tr>
