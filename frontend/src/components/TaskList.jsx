@@ -186,6 +186,8 @@ const TaskRow = React.memo(function TaskRow({
   persons,
   categories,
 }) {
+  const [editingField, setEditingField] = useState(null)
+
   // Create task-scoped stable handlers so inline JSX below doesn't create new
   // function references on every render of THIS row.
   const handleToggleExpand = useCallback(() => onToggleExpand(task.id),          [onToggleExpand, task.id])
@@ -240,16 +242,122 @@ const TaskRow = React.memo(function TaskRow({
           )}
         </td>
         <td style={{ color: PRIORITY_COLORS[task.priority], fontWeight: 600, textTransform: 'capitalize', fontSize: '.875rem' }}>
-          {task.priority}
+          {editingField === 'priority' ? (
+            <select
+              autoFocus
+              defaultValue={task.priority}
+              onChange={e => {
+                onPatchTask(task.id, { priority: e.target.value })
+                setEditingField(null)
+              }}
+              onBlur={() => setEditingField(null)}
+              onKeyDown={e => e.key === 'Escape' && setEditingField(null)}
+              style={{ fontSize: '.875rem' }}
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          ) : (
+            <span
+              onClick={() => setEditingField('priority')}
+              title="Click to edit priority"
+              style={{ cursor: 'pointer', borderBottom: '1px dashed #94a3b8' }}
+            >
+              {task.priority}
+            </span>
+          )}
         </td>
         <td style={{ whiteSpace: 'nowrap', fontSize: '.875rem' }}>
-          {fmt(task.due_date)}{daysBadge(task.due_date)}
+          {editingField === 'due_date' ? (
+            <input
+              autoFocus
+              type="date"
+              defaultValue={task.due_date ?? ''}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  onPatchTask(task.id, { due_date: e.target.value || null })
+                  setEditingField(null)
+                } else if (e.key === 'Escape') {
+                  setEditingField(null)
+                }
+              }}
+              onBlur={e => {
+                onPatchTask(task.id, { due_date: e.target.value || null })
+                setEditingField(null)
+              }}
+              style={{ fontSize: '.875rem' }}
+            />
+          ) : (
+            <span
+              onClick={() => setEditingField('due_date')}
+              title="Click to edit due date"
+              style={{ cursor: 'pointer', borderBottom: '1px dashed #94a3b8' }}
+            >
+              {fmt(task.due_date)}{daysBadge(task.due_date)}
+            </span>
+          )}
+        </td>
+        <td style={{ whiteSpace: 'nowrap', fontSize: '.875rem', color: '#15803d' }}>
+          {task.completed_at ? new Date(task.completed_at).toLocaleString() : '—'}
         </td>
         <td style={{ color: '#64748b', fontSize: '.875rem' }}>
-          {task.estimated_minutes ? `${task.estimated_minutes}m` : '—'}
+          {editingField === 'estimated_minutes' ? (
+            <input
+              autoFocus
+              type="number"
+              min="1"
+              defaultValue={task.estimated_minutes ?? ''}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const val = parseInt(e.target.value, 10)
+                  onPatchTask(task.id, { estimated_minutes: val > 0 ? val : null })
+                  setEditingField(null)
+                } else if (e.key === 'Escape') {
+                  setEditingField(null)
+                }
+              }}
+              onBlur={e => {
+                const val = parseInt(e.target.value, 10)
+                onPatchTask(task.id, { estimated_minutes: val > 0 ? val : null })
+                setEditingField(null)
+              }}
+              style={{ width: '70px', fontSize: '.875rem' }}
+            />
+          ) : (
+            <span
+              onClick={() => setEditingField('estimated_minutes')}
+              title="Click to edit estimated minutes"
+              style={{ cursor: 'pointer', borderBottom: '1px dashed #94a3b8' }}
+            >
+              {task.estimated_minutes ? `${task.estimated_minutes}m` : '—'}
+            </span>
+          )}
         </td>
         <td style={{ color: '#475569', fontSize: '.875rem' }}>
-          {task.assignee?.name ?? '—'}
+          {editingField === 'assignee_id' ? (
+            <select
+              autoFocus
+              defaultValue={task.assignee_id ?? ''}
+              onChange={e => {
+                onPatchTask(task.id, { assignee_id: e.target.value || null })
+                setEditingField(null)
+              }}
+              onBlur={() => setEditingField(null)}
+              style={{ fontSize: '.875rem' }}
+            >
+              <option value="">Unassigned</option>
+              {persons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          ) : (
+            <span
+              onClick={() => setEditingField('assignee_id')}
+              title="Click to edit assignee"
+              style={{ cursor: 'pointer', borderBottom: '1px dashed #94a3b8' }}
+            >
+              {task.assignee?.name ?? '—'}
+            </span>
+          )}
         </td>
         <td>
           <div style={{ display: 'flex', gap: '.35rem', flexWrap: 'wrap' }}>
@@ -264,11 +372,11 @@ const TaskRow = React.memo(function TaskRow({
             )}
             {task.status !== 'cancelled' && task.status !== 'done' && (
               <button className="btn btn-gray" title="Cancel this task"
-                onClick={() => onPatchTask(task.id, { status: 'cancelled' })}>Cancel</button>
+                onClick={() => onPatchTask(task.id, { status: 'cancelled' })} style={{ padding: '0 .45rem' }}>⊘</button>
             )}
-            <button className="btn btn-blue" title="Edit this task's details" onClick={handleStartEdit}>Edit</button>
+            <button className="btn btn-blue" title="Edit this task's details" onClick={handleStartEdit} style={{ padding: '0 .45rem' }}>✎</button>
             <button className="btn btn-red" title="Permanently delete this task"
-              onClick={() => onDeleteTask(task.id)}>Del</button>
+              onClick={() => onDeleteTask(task.id)} style={{ padding: '0 .45rem' }}>✕</button>
           </div>
         </td>
       </tr>
@@ -277,7 +385,8 @@ const TaskRow = React.memo(function TaskRow({
       {isEditing && (
         <tr>
           <td colSpan={7} style={{ background: '#f8fafc', padding: '1rem 1rem 1rem 2.5rem', borderBottom: '2px solid #3b82f6' }}>
-            <div style={{ display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}
+              onKeyDown={e => e.key === 'Escape' && onCancelEdit()}>
               <div style={{ flex: '2 1 220px' }}>
                 <label style={labelStyle}>Title *</label>
                 <input
@@ -897,6 +1006,7 @@ export default function TaskList() {
                 <th>Title</th>
                 <th>Priority</th>
                 <th>Due</th>
+                <th>Completed</th>
                 <th>Est.</th>
                 <th>Assignee</th>
                 <th>Actions</th>

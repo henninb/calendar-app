@@ -1,6 +1,6 @@
 import calendar
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -158,6 +158,10 @@ def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)):
     new_status = changes.get("status")
     for field, value in changes.items():
         setattr(task, field, value)
+    if new_status == TaskStatus.done and task.completed_at is None:
+        task.completed_at = datetime.now(timezone.utc)
+    elif new_status is not None and new_status != TaskStatus.done:
+        task.completed_at = None
     task_title, task_status = task.title, task.status
     # Spawn before commit so the status change and the new task are atomic.
     if new_status == TaskStatus.done:

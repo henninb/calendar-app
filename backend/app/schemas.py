@@ -305,6 +305,7 @@ class TaskOut(TaskBase):
     id: int
     gtask_id: Optional[str] = None
     synced_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     assignee: Optional[PersonOut] = None
