@@ -55,20 +55,26 @@ export default function CalendarView() {
   const markStatus = async (status) => {
     if (!selected) return
     setSaving(true)
-    const updated = await updateOccurrence(selected.id, { status })
-    setSelected(updated)
-    setSaving(false)
-    setOccs(prev => prev.map(o => o.id === updated.id ? updated : o))
+    try {
+      const updated = await updateOccurrence(selected.id, { status })
+      setSelected(updated)
+      setOccs(prev => prev.map(o => o.id === updated.id ? updated : o))
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleDelete = async () => {
     if (!selected) return
     if (!window.confirm(`Delete "${selected.event?.title}" on ${fmt(selected.occurrence_date)}? This cannot be undone.`)) return
     setSaving(true)
-    await deleteOccurrence(selected.id)
-    setOccs(prev => prev.filter(o => o.id !== selected.id))
-    setSelected(null)
-    setSaving(false)
+    try {
+      await deleteOccurrence(selected.id)
+      setOccs(prev => prev.filter(o => o.id !== selected.id))
+      setSelected(null)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (

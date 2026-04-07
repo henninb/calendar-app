@@ -8,6 +8,8 @@ log = logging.getLogger(__name__)
 
 from ..config import settings
 from ..database import get_db
+from sqlalchemy.orm import joinedload
+
 from ..models import Category, Event
 from ..schemas import EventCreate, EventOut, EventUpdate, EventWithOccurrences, GenerateResult
 from ..services.recurrence import generate_occurrences
@@ -22,7 +24,7 @@ def list_events(
     search: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Event)
+    q = db.query(Event).options(joinedload(Event.category))
     if category_id is not None:
         q = q.filter(Event.category_id == category_id)
     if is_active is not None:

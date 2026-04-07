@@ -28,10 +28,27 @@ def _load_yaml() -> dict:
 
 class Settings:
     def __init__(self):
+        # Defer all I/O (gopass subprocess, YAML read) to first attribute access
+        # so that importing this module does not block at startup or in tests.
+        self.__dict__['_ready'] = False
+
+    def _ensure_ready(self) -> None:
+        if self.__dict__['_ready']:
+            return
         if os.environ.get("DB_PASSWORD"):
             self._init_from_env()
         else:
             self._init_from_gopass()
+        self.__dict__['_ready'] = True
+
+    def __getattr__(self, name: str):
+        if name.startswith('_'):
+            raise AttributeError(name)
+        self._ensure_ready()
+        try:
+            return self.__dict__[name]
+        except KeyError:
+            raise AttributeError(f"Settings has no attribute {name!r}") from None
 
     def _init_from_env(self):
         _log.info("Config loaded from environment variables")

@@ -31,32 +31,24 @@ async def lifespan(app: FastAPI):
 
     # Add columns that may not exist on pre-existing tables
     # TODO: replace with Alembic for proper multi-worker-safe migrations
+    _migrations = [
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS generates_tasks BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence VARCHAR NOT NULL DEFAULT 'none'",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL",
+        "ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS gtask_id VARCHAR",
+        "ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT now()",
+        "UPDATE credit_cards SET created_at = now() WHERE created_at IS NULL",
+    ]
     with engine.connect() as conn:
-        try:
-            conn.execute(text(
-                "ALTER TABLE events ADD COLUMN IF NOT EXISTS generates_tasks BOOLEAN NOT NULL DEFAULT FALSE"
-            ))
-            conn.execute(text(
-                "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence VARCHAR NOT NULL DEFAULT 'none'"
-            ))
-            conn.execute(text(
-                "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL"
-            ))
-            conn.execute(text(
-                "ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS gtask_id VARCHAR"
-            ))
-            conn.execute(text(
-                "ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT now()"
-            ))
-            conn.execute(text(
-                "UPDATE credit_cards SET created_at = now() WHERE created_at IS NULL"
-            ))
-            conn.commit()
-            log.info("Schema migrations applied")
-        except Exception:
-            log.exception("Schema migration failed — aborting startup")
-            conn.rollback()
-            raise
+        for stmt in _migrations:
+            try:
+                conn.execute(text(stmt))
+            except Exception:
+                log.exception("Schema migration failed — aborting startup\n  stmt: %s", stmt)
+                conn.rollback()
+                raise
+        conn.commit()
+        log.info("Schema migrations applied")
 
     def _startup_data_generation() -> None:
         db = SessionLocal()

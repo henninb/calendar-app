@@ -46,7 +46,12 @@ def _next_due(task: Task) -> Optional[date]:
 
 
 def _spawn_next(db: Session, task: Task) -> None:
-    """Create the next task instance for a recurring task."""
+    """Flush (but do NOT commit) the next task for a recurring task. Caller commits.
+
+    Keeping spawn inside the caller's transaction makes the status-change and
+    the new-task creation atomic — a crash between them can no longer leave a
+    task permanently 'done' without a successor.
+    """
     next_date = _next_due(task)
     if not next_date:
         return
@@ -70,7 +75,7 @@ def _spawn_next(db: Session, task: Task) -> None:
         recurrence=task.recurrence,
     )
     db.add(new_task)
-    db.flush()
+    db.flush()  # populate new_task.id without committing
     for subtask in task.subtasks:
         db.add(Subtask(
             task_id=new_task.id,
@@ -78,7 +83,6 @@ def _spawn_next(db: Session, task: Task) -> None:
             status=TaskStatus.todo,
             order=subtask.order,
         ))
-    db.commit()
     log.info("Spawned next %s task %d (due %s) from completed task %d", task.recurrence, new_task.id, next_date, task.id)
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -142,7 +146,12 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
 
 @router.patch("/{task_id}", response_model=TaskOut)
 def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)):
-    task = db.get(Task, task_id)
+    task = (
+        db.query(Task)
+        .options(joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks))
+        .filter(Task.id == task_id)
+        .first()
+    )
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     changes = body.model_dump(exclude_unset=True)
@@ -150,13 +159,13 @@ def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)):
     for field, value in changes.items():
         setattr(task, field, value)
     task_title, task_status = task.title, task.status
-    db.commit()
-    log.info("Updated task %d (%s) → status=%s", task_id, task_title, task_status)
+    # Spawn before commit so the status change and the new task are atomic.
     if new_status == TaskStatus.done:
         _spawn_next(db, task)
-    return db.query(Task).options(
-        joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks)
-    ).filter(Task.id == task_id).first()
+    db.commit()
+    db.refresh(task)
+    log.info("Updated task %d (%s) → status=%s", task_id, task_title, task_status)
+    return task
 
 
 @router.delete("/{task_id}", status_code=204)

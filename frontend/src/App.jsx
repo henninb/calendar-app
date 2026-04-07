@@ -61,8 +61,9 @@ export default function App() {
       addLog('ok', `Generated ${res.occurrences_created} new occurrences across ${res.events_processed} events.`)
     } catch (e) {
       addLog('error', `Generate failed: ${e.message}`)
+    } finally {
+      setSyncing(false)
     }
-    setSyncing(false)
   }
 
   const handleGcalSync = async () => {
@@ -97,8 +98,9 @@ export default function App() {
     } catch (e) {
       setLogs(prev => prev.filter(entry => entry.id !== progressId))
       addLog('error', `Google Calendar sync failed: ${e.message}`)
+    } finally {
+      setGcalSyncing(false)
     }
-    setGcalSyncing(false)
   }
 
   const handleGcalDelete = async () => {
@@ -111,8 +113,9 @@ export default function App() {
       addLog('ok', res.message || 'Delete started in background.')
     } catch (e) {
       addLog('error', `Delete failed: ${e.message}`)
+    } finally {
+      setGcalDeleting(false)
     }
-    setGcalDeleting(false)
   }
 
   const handleGtasksSync = async () => {
@@ -147,8 +150,9 @@ export default function App() {
     } catch (e) {
       setLogs(prev => prev.filter(entry => entry.id !== progressId))
       addLog('error', `Google Tasks sync failed: ${e.message}`)
+    } finally {
+      setGtasksSyncing(false)
     }
-    setGtasksSyncing(false)
   }
 
   const handleGcalWipe = async () => {
@@ -161,8 +165,9 @@ export default function App() {
       addLog('ok', res.message || 'Full wipe started in background.')
     } catch (e) {
       addLog('error', `Wipe failed: ${e.message}`)
+    } finally {
+      setGcalWiping(false)
     }
-    setGcalWiping(false)
   }
 
   const logColor = { info: '#93c5fd', ok: '#86efac', warn: '#fde68a', error: '#fca5a5' }

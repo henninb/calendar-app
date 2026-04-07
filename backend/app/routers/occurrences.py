@@ -74,7 +74,15 @@ def update_occurrence(
     db.commit()
     if new_status == OccurrenceStatus.skipped:
         cancel_tasks_for_occurrence(db, occ)
-    db.refresh(occ)
+    # Reload with eager joins — db.commit() expires all attributes and the
+    # OccurrenceOut schema accesses occ.event.category, causing N+1 lazy loads
+    # without an explicit joinedload here.
+    occ = (
+        db.query(Occurrence)
+        .options(joinedload(Occurrence.event).joinedload(Event.category))
+        .filter(Occurrence.id == occurrence_id)
+        .first()
+    )
     log.info("Updated occurrence %d → status=%s", occurrence_id, occ.status)
     return occ
 

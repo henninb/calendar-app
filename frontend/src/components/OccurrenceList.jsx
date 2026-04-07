@@ -31,13 +31,18 @@ export default function OccurrenceList() {
 
   const load = async () => {
     setLoading(true)
-    const params = { start_date: today(), end_date: daysOut(days) }
-    if (catFilter)    params.category_id = catFilter
-    const data = await fetchOccurrences(params)
-    // client-side status filter (multi-value)
-    const statuses = statusFilter ? statusFilter.split(',') : []
-    setOccs(statuses.length ? data.filter(o => statuses.includes(o.status)) : data)
-    setLoading(false)
+    try {
+      const params = { start_date: today(), end_date: daysOut(days) }
+      if (catFilter)    params.category_id = catFilter
+      const data = await fetchOccurrences(params)
+      // client-side status filter (multi-value)
+      const statuses = statusFilter ? statusFilter.split(',') : []
+      setOccs(statuses.length ? data.filter(o => statuses.includes(o.status)) : data)
+    } catch (e) {
+      console.error('Failed to load occurrences:', e)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { fetchCategories().then(setCats) }, [])

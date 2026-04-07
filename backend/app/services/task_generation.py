@@ -54,7 +54,7 @@ def generate_pending_tasks(db: Session) -> int:
             Occurrence.event_id.in_(event_thresholds.keys()),
             Occurrence.occurrence_date >= today,
             Occurrence.occurrence_date <= max_threshold,
-            Occurrence.status.in_([OccurrenceStatus.upcoming, OccurrenceStatus.overdue]),
+            Occurrence.status == OccurrenceStatus.upcoming,
         )
         .all()
     )

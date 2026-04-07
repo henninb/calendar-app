@@ -316,10 +316,15 @@ def generate_occurrences(
     dates = _expand_dates(event, until)
 
     if existing is None:
+        # Bound to the generation window — avoids loading unbounded historical
+        # rows for long-running events that are all already in the DB.
         existing = {
             o.occurrence_date
             for o in db.query(Occurrence.occurrence_date)
-            .filter(Occurrence.event_id == event.id)
+            .filter(
+                Occurrence.event_id == event.id,
+                Occurrence.occurrence_date <= until,
+            )
             .all()
         }
 
@@ -344,18 +349,25 @@ def generate_occurrences(
 def generate_all_occurrences(db: Session, lookahead_days: int | None = None) -> dict:
     """Generate occurrences for every active non-credit-card event. Returns summary stats."""
     events = db.query(Event).filter(
-        Event.is_active == True,
+        Event.is_active.is_(True),
         Event.credit_card_id.is_(None),   # credit card events are managed separately
     ).all()
 
     if not events:
         return {"events_processed": 0, "occurrences_created": 0}
 
-    # Batch-load all existing occurrence dates in one query to avoid N+1
+    days = lookahead_days or settings.occurrence_lookahead_days
+    until = date.today() + timedelta(days=days)
+
+    # Batch-load existing occurrence dates bounded to the generation window to
+    # avoid loading unbounded historical rows for long-running events.
     event_ids = [e.id for e in events]
     rows = (
         db.query(Occurrence.event_id, Occurrence.occurrence_date)
-        .filter(Occurrence.event_id.in_(event_ids))
+        .filter(
+            Occurrence.event_id.in_(event_ids),
+            Occurrence.occurrence_date <= until,
+        )
         .all()
     )
     existing_map: dict[int, set[date]] = {}
