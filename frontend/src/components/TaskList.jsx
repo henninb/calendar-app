@@ -582,6 +582,11 @@ const TaskRow = React.memo(function TaskRow({
                     {sub.due_date && (
                       <span style={{ fontSize: '.78rem', color: '#64748b' }}>{fmt(sub.due_date)}</span>
                     )}
+                    {sub.completed_at && (
+                      <span style={{ fontSize: '.78rem', color: '#15803d' }}>
+                        Completed: {new Date(sub.completed_at).toLocaleString()}
+                      </span>
+                    )}
                     <select
                       value={sub.status}
                       onChange={e => onPatchSubtask(task.id, sub.id, { status: e.target.value })}
@@ -863,10 +868,10 @@ export default function TaskList() {
 
   const patchSubtask = useCallback(async (taskId, subtaskId, data) => {
     try {
-      await updateSubtask(taskId, subtaskId, data)
+      const updated = await updateSubtask(taskId, subtaskId, data)
       setTasks(prev => prev.map(t =>
         t.id === taskId
-          ? { ...t, subtasks: t.subtasks.map(s => s.id === subtaskId ? { ...s, ...data } : s) }
+          ? { ...t, subtasks: t.subtasks.map(s => s.id === subtaskId ? updated : s) }
           : t
       ))
     } catch (err) {

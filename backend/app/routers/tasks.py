@@ -205,7 +205,13 @@ def update_subtask(
     ).first()
     if not subtask:
         raise HTTPException(status_code=404, detail="Subtask not found")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    update_data = body.model_dump(exclude_unset=True)
+    new_status = update_data.get("status")
+    if new_status == TaskStatus.done and subtask.status != TaskStatus.done:
+        subtask.completed_at = datetime.now(timezone.utc)
+    elif new_status is not None and new_status != TaskStatus.done:
+        subtask.completed_at = None
+    for field, value in update_data.items():
         setattr(subtask, field, value)
     db.commit()
     db.refresh(subtask)

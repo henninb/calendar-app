@@ -211,6 +211,7 @@ class Subtask(Base):
     order = Column(Integer, default=0)
 
     gtask_id = Column(String(200))
+    completed_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

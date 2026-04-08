@@ -264,6 +264,7 @@ class SubtaskUpdate(BaseModel):
 class SubtaskOut(SubtaskBase):
     id: int
     task_id: int
+    completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

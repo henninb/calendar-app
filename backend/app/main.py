@@ -36,6 +36,7 @@ async def lifespan(app: FastAPI):
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence VARCHAR NOT NULL DEFAULT 'none'",
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL",
         "ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS gtask_id VARCHAR",
+        "ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE",
         "ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT now()",
         "UPDATE credit_cards SET created_at = now() WHERE created_at IS NULL",
     ]
