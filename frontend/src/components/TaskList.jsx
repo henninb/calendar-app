@@ -233,13 +233,35 @@ const TaskRow = React.memo(function TaskRow({
     <React.Fragment>
       <tr style={isOverdue(task) ? { background: '#fee2e2' } : {}}>
         <td style={{ whiteSpace: 'nowrap' }}>
-          <span style={{
-            display: 'inline-block', padding: '.2rem .55rem', borderRadius: '4px',
-            fontSize: '.78rem', fontWeight: 700,
-            background: STATUS_BG[task.status], color: STATUS_FG[task.status],
-          }}>
-            {STATUS_LABELS[task.status]}
-          </span>
+          {editingField === 'status' ? (
+            <select
+              autoFocus
+              defaultValue={task.status}
+              onChange={e => {
+                onPatchTask(task.id, { status: e.target.value })
+                setEditingField(null)
+              }}
+              onBlur={() => setEditingField(null)}
+              style={{ fontSize: '.78rem', fontWeight: 700 }}
+            >
+              {STATUS_OPTIONS.map(s => (
+                <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+              ))}
+            </select>
+          ) : (
+            <span
+              className="editable-cell"
+              onClick={() => setEditingField('status')}
+              title="Click to edit status"
+              style={{
+                display: 'inline-block', padding: '.2rem .55rem', borderRadius: '4px',
+                fontSize: '.78rem', fontWeight: 700,
+                background: STATUS_BG[task.status], color: STATUS_FG[task.status],
+              }}
+            >
+              {STATUS_LABELS[task.status]}
+            </span>
+          )}
         </td>
         <td style={{ whiteSpace: 'nowrap' }}>
           <button
@@ -295,7 +317,7 @@ const TaskRow = React.memo(function TaskRow({
             <span
               onClick={() => setEditingField('priority')}
               title="Click to edit priority"
-              style={{ cursor: 'pointer', borderBottom: '1px dashed #94a3b8' }}
+              className="editable-cell"
             >
               {task.priority}
             </span>
@@ -325,7 +347,7 @@ const TaskRow = React.memo(function TaskRow({
             <span
               onClick={() => setEditingField('due_date')}
               title="Click to edit due date"
-              style={{ cursor: 'pointer', borderBottom: '1px dashed #94a3b8' }}
+              className="editable-cell"
             >
               {fmt(task.due_date)}{task.status !== 'done' && task.status !== 'cancelled' && daysBadge(task.due_date)}
             </span>
@@ -363,7 +385,7 @@ const TaskRow = React.memo(function TaskRow({
             <span
               onClick={() => setEditingField('estimated_minutes')}
               title="Click to edit estimated minutes"
-              style={{ cursor: 'pointer', borderBottom: '1px dashed #94a3b8' }}
+              className="editable-cell"
             >
               {task.estimated_minutes ? `${task.estimated_minutes}m` : '—'}
             </span>
@@ -388,7 +410,7 @@ const TaskRow = React.memo(function TaskRow({
             <span
               onClick={() => setEditingField('assignee_id')}
               title="Click to edit assignee"
-              style={{ cursor: 'pointer', borderBottom: '1px dashed #94a3b8' }}
+              className="editable-cell"
             >
               {task.assignee?.name ?? '—'}
             </span>

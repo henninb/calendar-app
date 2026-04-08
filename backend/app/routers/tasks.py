@@ -164,7 +164,8 @@ def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)):
         task.completed_at = None
     task_title, task_status = task.title, task.status
     # Spawn before commit so the status change and the new task are atomic.
-    if new_status == TaskStatus.done:
+    # Cancelling a recurring task should also advance the chain, not terminate it.
+    if new_status in (TaskStatus.done, TaskStatus.cancelled):
         _spawn_next(db, task)
     db.commit()
     db.refresh(task)

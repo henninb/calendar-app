@@ -74,6 +74,13 @@ export const deleteOccurrence = (id) =>
 
 export const fetchCreditCardTracker = () => request('/credit-cards/tracker')
 
+export const createCreditCard = (data) =>
+  request('/credit-cards', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+
 export const generateAll = () =>
   request('/occurrences/generate-all', { method: 'POST' })
 

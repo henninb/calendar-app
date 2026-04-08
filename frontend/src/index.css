@@ -129,6 +129,10 @@ tr:hover td { background: #f8fafc; }
 .fc .fc-daygrid-day.fc-day-today { background: #eff6ff; }
 .fc-event { cursor: pointer; font-size: .78rem !important; border: none !important; }
 
+/* ── Inline-editable cell affordance ── */
+.editable-cell { cursor: pointer; border-bottom: 1px dashed transparent; }
+.editable-cell:hover { border-bottom-color: #94a3b8; }
+
 /* ── Credit card table highlights ── */
 .cc-overdue { color: #dc2626; font-weight: 600; }
 .cc-soon    { color: #d97706; font-weight: 600; }
