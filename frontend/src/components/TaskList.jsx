@@ -416,7 +416,7 @@ const TaskRow = React.memo(function TaskRow({
             </span>
           )}
         </td>
-        <td style={{ whiteSpace: 'nowrap' }}>
+        <td style={{ whiteSpace: 'nowrap', position: 'sticky', right: 0, background: '#fff', zIndex: 1, boxShadow: '-2px 0 4px rgba(0,0,0,.06)' }}>
           <div style={{ display: 'flex', gap: '.35rem', flexWrap: 'nowrap' }}>
             {task.status !== 'done' && (
               <button className="btn btn-green" title="Mark this task as done"
@@ -1070,7 +1070,7 @@ export default function TaskList() {
                 {filterStatus.includes('done') && <th>Completed</th>}
                 <th>Est.</th>
                 <th>Assignee</th>
-                <th>Actions</th>
+                <th style={{ position: 'sticky', right: 0, background: '#f8fafc', zIndex: 1, boxShadow: '-2px 0 4px rgba(0,0,0,.06)' }}>Actions</th>
               </tr>
             </thead>
             <tbody>

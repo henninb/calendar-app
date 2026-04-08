@@ -86,6 +86,7 @@ th {
 td { padding: .55rem .75rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
 tr:last-child td { border-bottom: none; }
 tr:hover td { background: #f8fafc; }
+tr:hover td[style*="sticky"] { background: #f8fafc; }
 
 /* ── Buttons ── */
 .btn {
