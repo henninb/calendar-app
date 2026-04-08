@@ -70,6 +70,40 @@ const emptyTask = () => ({
   assignee_id: '', category_id: '', recurrence: 'none',
 })
 
+// ── CategoryCombobox ───────────────────────────────────────────────────────
+function CategoryCombobox({ value, onChange, categories, style }) {
+  const id = React.useId()
+  const toText = v => {
+    const c = categories.find(c => String(c.id) === String(v))
+    return c ? `${c.icon} ${c.name}` : ''
+  }
+  const [text, setText] = React.useState(() => toText(value))
+
+  React.useEffect(() => { setText(toText(value)) }, [value, categories])
+
+  function handleChange(e) {
+    const t = e.target.value
+    setText(t)
+    const match = categories.find(c => `${c.icon} ${c.name}` === t || c.name === t)
+    if (match) onChange(String(match.id))
+    else if (!t) onChange('')
+  }
+
+  function handleBlur() {
+    setText(toText(value))
+  }
+
+  return (
+    <>
+      <input list={id} value={text} onChange={handleChange} onBlur={handleBlur}
+        style={style} placeholder="None" autoComplete="off" />
+      <datalist id={id}>
+        {categories.map(c => <option key={c.id} value={`${c.icon} ${c.name}`} />)}
+      </datalist>
+    </>
+  )
+}
+
 // ── NewTaskForm ────────────────────────────────────────────────────────────
 // #14: extracted sub-component so typing in the form doesn't re-render the task table
 const NewTaskForm = React.memo(function NewTaskForm({
@@ -134,10 +168,8 @@ const NewTaskForm = React.memo(function NewTaskForm({
       </div>
       <div>
         <label style={labelStyle}>Category</label>
-        <select value={newTask.category_id} onChange={e => onChange('category_id', e.target.value)} style={inputStyle}>
-          <option value="">None</option>
-          {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-        </select>
+        <CategoryCombobox value={newTask.category_id} onChange={id => onChange('category_id', id)}
+          categories={categories} style={inputStyle} />
       </div>
       <div style={{ display: 'flex', gap: '.5rem' }}>
         <button onClick={onSubmit} className="btn btn-green" title="Save and create this task">Add</button>
@@ -185,6 +217,7 @@ const TaskRow = React.memo(function TaskRow({
   onDeleteSubtask,
   persons,
   categories,
+  showCompleted,
 }) {
   const [editingField, setEditingField] = useState(null)
 
@@ -199,7 +232,7 @@ const TaskRow = React.memo(function TaskRow({
   return (
     <React.Fragment>
       <tr style={isOverdue(task) ? { background: '#fee2e2' } : {}}>
-        <td>
+        <td style={{ whiteSpace: 'nowrap' }}>
           <span style={{
             display: 'inline-block', padding: '.2rem .55rem', borderRadius: '4px',
             fontSize: '.78rem', fontWeight: 700,
@@ -298,9 +331,11 @@ const TaskRow = React.memo(function TaskRow({
             </span>
           )}
         </td>
-        <td style={{ whiteSpace: 'nowrap', fontSize: '.875rem', color: '#15803d' }}>
-          {task.completed_at ? new Date(task.completed_at).toLocaleString() : '—'}
-        </td>
+        {showCompleted && (
+          <td style={{ whiteSpace: 'nowrap', fontSize: '.875rem', color: '#15803d' }}>
+            {task.completed_at ? new Date(task.completed_at).toLocaleString() : '—'}
+          </td>
+        )}
         <td style={{ color: '#64748b', fontSize: '.875rem' }}>
           {editingField === 'estimated_minutes' ? (
             <input
@@ -359,8 +394,8 @@ const TaskRow = React.memo(function TaskRow({
             </span>
           )}
         </td>
-        <td>
-          <div style={{ display: 'flex', gap: '.35rem', flexWrap: 'wrap' }}>
+        <td style={{ whiteSpace: 'nowrap' }}>
+          <div style={{ display: 'flex', gap: '.35rem', flexWrap: 'nowrap' }}>
             {task.status !== 'done' && (
               <button className="btn btn-green" title="Mark this task as done"
                 onClick={() => onPatchTask(task.id, { status: 'done' })}>✓ Done</button>
@@ -384,7 +419,7 @@ const TaskRow = React.memo(function TaskRow({
       {/* Inline edit form */}
       {isEditing && (
         <tr>
-          <td colSpan={7} style={{ background: '#f8fafc', padding: '1rem 1rem 1rem 2.5rem', borderBottom: '2px solid #3b82f6' }}
+          <td colSpan={showCompleted ? 7 : 6} style={{ background: '#f8fafc', padding: '1rem 1rem 1rem 2.5rem', borderBottom: '2px solid #3b82f6' }}
             onKeyDown={e => e.key === 'Escape' && onCancelEdit()}>
             {/* Row 1: Title + Description */}
             <div style={{ display: 'flex', gap: '.75rem', alignItems: 'flex-end', marginBottom: '.5rem' }}>
@@ -456,10 +491,8 @@ const TaskRow = React.memo(function TaskRow({
               </div>
               <div>
                 <label style={labelStyle}>Category</label>
-                <select value={editForm.category_id} onChange={e => onEditFormChange('category_id', e.target.value)} style={inputStyle}>
-                  <option value="">None</option>
-                  {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-                </select>
+                <CategoryCombobox value={editForm.category_id} onChange={id => onEditFormChange('category_id', id)}
+                  categories={categories} style={inputStyle} />
               </div>
             </div>
           </td>
@@ -475,7 +508,7 @@ const TaskRow = React.memo(function TaskRow({
       {/* Expanded subtasks */}
       {expanded && (
         <tr>
-          <td colSpan={7} style={{ background: '#f8fafc', paddingLeft: '2.5rem', paddingBottom: '.75rem' }}>
+          <td colSpan={showCompleted ? 7 : 6} style={{ background: '#f8fafc', paddingLeft: '2.5rem', paddingBottom: '.75rem' }}>
             {task.description && (
               <p style={{ color: '#475569', fontSize: '.85rem', margin: '.4rem 0 .75rem' }}>{task.description}</p>
             )}
@@ -1012,7 +1045,7 @@ export default function TaskList() {
                 <th>Title</th>
                 <th>Priority</th>
                 <th>Due</th>
-                <th>Completed</th>
+                {filterStatus.includes('done') && <th>Completed</th>}
                 <th>Est.</th>
                 <th>Assignee</th>
                 <th>Actions</th>
@@ -1049,6 +1082,7 @@ export default function TaskList() {
                   onDeleteSubtask={handleDeleteSubtask}
                   persons={persons}
                   categories={categories}
+                  showCompleted={filterStatus.includes('done')}
                 />
               ))}
             </tbody>
