@@ -14,6 +14,16 @@ const STATUS_BG       = { todo: '#dbeafe', in_progress: '#fef3c7', done: '#dcfce
 const STATUS_FG       = { todo: '#1d4ed8', in_progress: '#92400e', done: '#15803d', cancelled: '#64748b' }
 const TASK_FETCH_LIMIT = 500
 
+const SECTION_DEFS = [
+  { key: 'done',          label: 'Done', hideWhenEmpty: true },
+  { key: 'overdue_today', label: 'Overdue / Today' },
+  { key: 'tomorrow',      label: 'Tomorrow' },
+  { key: 'this_week',     label: 'This Week' },
+  { key: 'next_week',     label: 'Next Week' },
+  { key: 'later',         label: 'Later' },
+  { key: 'no_date',       label: 'No Date', hideWhenEmpty: true },
+]
+
 // #12: stable style objects outside the component — no per-render allocation
 const inputStyle = {
   border: '1px solid #cbd5e1', borderRadius: '6px', padding: '.35rem .65rem',
@@ -641,8 +651,7 @@ export default function TaskList() {
   const [filterStatus, setFilterStatus]     = useState(['todo', 'in_progress'])
   const [filterAssignee, setFilterAssignee] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
-  const [filterTomorrow, setFilterTomorrow] = useState(false)
-  const [filterToday, setFilterToday]       = useState(false)
+  const [collapsedSections, setCollapsedSections] = useState({})
   const [expanded, setExpanded]             = useState({})
   const [newSubtask, setNewSubtask]         = useState({})
   const [addingTask, setAddingTask]         = useState(false)
@@ -713,6 +722,8 @@ export default function TaskList() {
 
   const today    = localDate(0)
   const tomorrow = localDate(1)
+  const week1end = localDate(7)
+  const week2end = localDate(14)
 
   // #11: memoised filter + sort — only recomputes when tasks or filter state changes
   const visible = useMemo(() => tasks
@@ -720,8 +731,6 @@ export default function TaskList() {
       if (filterStatus.length && !filterStatus.includes(t.status)) return false
       if (filterAssignee === 'unassigned') { if (t.assignee_id != null) return false }
       else if (filterAssignee && String(t.assignee_id) !== filterAssignee) return false
-      if (filterToday    && t.due_date !== today)    return false
-      if (filterTomorrow && t.due_date !== tomorrow) return false
       if (filterCategory && String(t.category_id) !== filterCategory) return false
       return true
     })
@@ -731,12 +740,41 @@ export default function TaskList() {
       if (!b.due_date) return -1
       return a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0
     }),
-  [tasks, filterStatus, filterAssignee, filterCategory, filterToday, filterTomorrow, today, tomorrow])
+  [tasks, filterStatus, filterAssignee, filterCategory])
+
+  const grouped = useMemo(() => {
+    const result = { done: [], overdue_today: [], tomorrow: [], this_week: [], next_week: [], later: [], no_date: [] }
+    for (const task of visible) {
+      if (task.status === 'done') {
+        result.done.push(task)
+      } else if (!task.due_date) {
+        result.no_date.push(task)
+      } else if (task.due_date <= today) {
+        result.overdue_today.push(task)
+      } else if (task.due_date === tomorrow) {
+        result.tomorrow.push(task)
+      } else if (task.due_date <= week1end) {
+        result.this_week.push(task)
+      } else if (task.due_date <= week2end) {
+        result.next_week.push(task)
+      } else {
+        result.later.push(task)
+      }
+    }
+    return result
+  }, [visible, today, tomorrow, week1end, week2end])
 
   // ── Stable event handlers ──────────────────────────────────────────────
 
   const toggleStatus = useCallback((s) =>
     setFilterStatus(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]),
+  [])
+
+  const toggleSection = useCallback((key, isEmpty) =>
+    setCollapsedSections(p => {
+      const current = p[key] !== undefined ? p[key] : isEmpty
+      return { ...p, [key]: !current }
+    }),
   [])
 
   // #6, #8, #16, #17: error handling, server response, logging
@@ -954,32 +992,6 @@ export default function TaskList() {
           </button>
         ))}
 
-        <button
-          className="btn"
-          onClick={() => setFilterToday(v => !v)}
-          title="Show only tasks due today"
-          style={{
-            background: filterToday ? '#ede9fe' : '#f1f5f9',
-            color: filterToday ? '#6d28d9' : '#64748b',
-            border: filterToday ? '1px solid #6d28d9' : '1px solid #e2e8f0',
-          }}
-        >
-          Today
-        </button>
-
-        <button
-          className="btn"
-          onClick={() => setFilterTomorrow(v => !v)}
-          title="Show only tasks due tomorrow"
-          style={{
-            background: filterTomorrow ? '#ede9fe' : '#f1f5f9',
-            color: filterTomorrow ? '#6d28d9' : '#64748b',
-            border: filterTomorrow ? '1px solid #6d28d9' : '1px solid #e2e8f0',
-          }}
-        >
-          Tomorrow
-        </button>
-
         <label style={{ fontSize: '.875rem', color: '#475569' }}>
           Category&nbsp;
           <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} style={inputStyle}>
@@ -1063,59 +1075,95 @@ export default function TaskList() {
         <div className="empty">All status filters are off — enable at least one to see tasks.</div>
       ) : visible.length === 0 ? (
         <div className="empty">No tasks match the current filters.</div>
-      ) : (
-        <div className="tbl-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Title</th>
-                <th>Priority</th>
-                <th>Due</th>
-                {filterStatus.includes('done') && <th>Completed</th>}
-                <th>Est.</th>
-                <th>Assignee</th>
-                <th style={{ position: 'sticky', right: 0, background: '#f8fafc', zIndex: 1, boxShadow: '-2px 0 4px rgba(0,0,0,.06)' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map(task => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  expanded={!!expanded[task.id]}
-                  onToggleExpand={toggleExpand}
-                  isEditing={editingId === task.id}
-                  // Pass editForm only to the editing row so other rows don't
-                  // re-render when the user types (#14 perf)
-                  editForm={editingId === task.id ? editForm : undefined}
-                  onEditFormChange={handleEditFormChange}
-                  onStartEdit={startEdit}
-                  onSaveEdit={saveEdit}
-                  onCancelEdit={cancelEdit}
-                  // Same scoping for subtask edit state
-                  editingSubtaskId={editingSubtask?.taskId === task.id ? editingSubtask.subtaskId : null}
-                  editSubForm={editingSubtask?.taskId === task.id ? editSubForm : undefined}
-                  onEditSubFormChange={handleEditSubFormChange}
-                  onStartEditSubtask={startEditSubtask}
-                  onSaveEditSubtask={saveEditSubtask}
-                  onCancelEditSubtask={cancelEditSubtask}
-                  newSubtaskTitle={newSubtask[task.id] || ''}
-                  onNewSubtaskChange={changeNewSubtask}
-                  onAddSubtask={handleAddSubtask}
-                  onPatchTask={patchTask}
-                  onDeleteTask={handleDeleteTask}
-                  onPatchSubtask={patchSubtask}
-                  onDeleteSubtask={handleDeleteSubtask}
-                  persons={persons}
-                  categories={categories}
-                  showCompleted={filterStatus.includes('done')}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      ) : (() => {
+        const showCompleted = filterStatus.includes('done')
+        return (
+          <div>
+            {SECTION_DEFS.map(({ key, label, hideWhenEmpty }) => {
+              const sectionTasks = grouped[key]
+              const isEmpty = sectionTasks.length === 0
+              if (hideWhenEmpty && isEmpty) return null
+              const isCollapsed = collapsedSections[key] !== undefined ? collapsedSections[key] : isEmpty
+              return (
+                <div key={key} style={{ marginBottom: '.25rem' }}>
+                  <div
+                    onClick={() => toggleSection(key, isEmpty)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '.5rem',
+                      padding: '.45rem .75rem',
+                      background: '#f1f5f9',
+                      borderRadius: isCollapsed ? '6px' : '6px 6px 0 0',
+                      cursor: 'pointer',
+                      border: '1px solid #e2e8f0',
+                      borderBottom: isCollapsed ? '1px solid #e2e8f0' : 'none',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <span style={{ fontSize: '.8rem', color: '#64748b', lineHeight: 1 }}>{isCollapsed ? '▸' : '▾'}</span>
+                    <span style={{ fontWeight: 600, fontSize: '.875rem', color: '#1e293b' }}>{label}</span>
+                    <span style={{
+                      fontSize: '.75rem', background: '#e2e8f0', color: '#475569',
+                      borderRadius: '10px', padding: '.1rem .45rem', fontWeight: 600,
+                    }}>
+                      {sectionTasks.length}
+                    </span>
+                  </div>
+                  {!isCollapsed && !isEmpty && (
+                    <div className="tbl-wrap" style={{ borderRadius: '0 0 6px 6px', border: '1px solid #e2e8f0', borderTop: 'none' }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Status</th>
+                            <th>Title</th>
+                            <th>Priority</th>
+                            <th>Due</th>
+                            {showCompleted && <th>Completed</th>}
+                            <th>Est.</th>
+                            <th>Assignee</th>
+                            <th style={{ position: 'sticky', right: 0, background: '#f8fafc', zIndex: 1, boxShadow: '-2px 0 4px rgba(0,0,0,.06)' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sectionTasks.map(task => (
+                            <TaskRow
+                              key={task.id}
+                              task={task}
+                              expanded={!!expanded[task.id]}
+                              onToggleExpand={toggleExpand}
+                              isEditing={editingId === task.id}
+                              editForm={editingId === task.id ? editForm : undefined}
+                              onEditFormChange={handleEditFormChange}
+                              onStartEdit={startEdit}
+                              onSaveEdit={saveEdit}
+                              onCancelEdit={cancelEdit}
+                              editingSubtaskId={editingSubtask?.taskId === task.id ? editingSubtask.subtaskId : null}
+                              editSubForm={editingSubtask?.taskId === task.id ? editSubForm : undefined}
+                              onEditSubFormChange={handleEditSubFormChange}
+                              onStartEditSubtask={startEditSubtask}
+                              onSaveEditSubtask={saveEditSubtask}
+                              onCancelEditSubtask={cancelEditSubtask}
+                              newSubtaskTitle={newSubtask[task.id] || ''}
+                              onNewSubtaskChange={changeNewSubtask}
+                              onAddSubtask={handleAddSubtask}
+                              onPatchTask={patchTask}
+                              onDeleteTask={handleDeleteTask}
+                              onPatchSubtask={patchSubtask}
+                              onDeleteSubtask={handleDeleteSubtask}
+                              persons={persons}
+                              categories={categories}
+                              showCompleted={showCompleted}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )
+      })()}
     </div>
   )
 }
