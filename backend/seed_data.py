@@ -161,6 +161,59 @@ def fetch_nhl_schedule(season_year: int) -> list[tuple]:
     return games
 
 
+def fetch_scsu_hockey_schedule(season_year: int) -> list[tuple]:
+    """Fetch the St. Cloud State Huskies Men's Ice Hockey schedule for the given season start year."""
+    url = (
+        f"https://site.api.espn.com/apis/site/v2/sports/hockey/mens-college-hockey"
+        f"/teams/2594/schedule?season={season_year}"
+    )
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read())
+    except Exception as e:
+        print(f"WARNING: Could not fetch SCSU hockey schedule ({e}) — skipping Huskies games.")
+        return []
+
+    games = []
+    for event in data.get("events", []):
+        raw_date = event.get("date", "")
+        if not raw_date:
+            continue
+        try:
+            dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        ct_time = _to_ct(dt)
+        year = dt.year
+        mar_second_sun = date(year, 3, 8 + (6 - date(year, 3, 1).weekday()) % 7)
+        nov_first_sun  = date(year, 11, 1 + (6 - date(year, 11, 1).weekday()) % 7)
+        dst_start = datetime(year, mar_second_sun.month, mar_second_sun.day, 8, 0, tzinfo=timezone.utc)
+        dst_end   = datetime(year, nov_first_sun.month,  nov_first_sun.day,  7, 0, tzinfo=timezone.utc)
+        offset = timedelta(hours=-5) if dst_start <= dt < dst_end else timedelta(hours=-6)
+        local_dt = dt + offset
+        comp = event.get("competitions", [{}])[0]
+        venue = comp.get("venue", {}).get("fullName", "")
+        competitors = comp.get("competitors", [])
+        scsu = next((c for c in competitors if c.get("team", {}).get("id") == "2594"), None)
+        opp  = next((c for c in competitors if c.get("team", {}).get("id") != "2594"), None)
+        if not scsu or not opp:
+            continue
+        is_home = scsu.get("homeAway") == "home"
+        opp_name = opp.get("team", {}).get("displayName", "Unknown")
+        y, m, d = local_dt.year, local_dt.month, local_dt.day
+        if is_home:
+            title = f"Huskies vs {opp_name}"
+            desc  = f"St. Cloud State Huskies vs {opp_name} at {venue} — {ct_time}"
+        else:
+            title = f"Huskies @ {opp_name}"
+            desc  = f"St. Cloud State Huskies at {opp_name} ({venue}) — {ct_time}"
+        games.append((title, "college_hockey", None, date(y, m, d), desc, Priority.low, [], None, venue))
+
+    print(f"Fetched {len(games)} SCSU hockey games ({season_year}-{str(season_year + 1)[-2:]} season).")
+    return games
+
+
 # ── Seed data constants ───────────────────────────────────────────────────────
 
 CATEGORIES = settings.categories
@@ -701,6 +754,7 @@ def reconcile_events(db, cat_map: dict[str, int]) -> None:
         + fetch_mlb_schedule(mlb_year)
         + fetch_nba_schedule(sports_season_year)
         + fetch_nhl_schedule(sports_season_year)
+        + fetch_scsu_hockey_schedule(sports_season_year)
     )
 
     # Build seed dict keyed by (title, dtstart)
