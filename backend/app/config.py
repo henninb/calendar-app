@@ -77,6 +77,9 @@ class Settings:
         self.cc_history_days           = int(os.environ.get("CC_HISTORY_DAYS", "31"))
         self.default_person_name       = os.environ.get("DEFAULT_PERSON_NAME", "")
         self.categories                = _load_yaml()["categories"]
+        self.api_key                   = os.environ.get("API_KEY", "")
+        if "*" in self.allowed_origins:
+            raise ValueError("Wildcard '*' cannot be used in ALLOWED_ORIGINS — specify explicit origins.")
 
     def _init_from_gopass(self):
         _log.info("Config loaded from gopass + config.yml")
@@ -106,6 +109,9 @@ class Settings:
         self.cc_history_days      = int(cfg["credit_cards"]["history_days"])
         self.default_person_name  = cfg.get("default_person_name", "")
         self.categories           = cfg["categories"]
+        self.api_key              = cfg.get("api_key", "") or os.environ.get("API_KEY", "")
+        if "*" in self.allowed_origins:
+            raise ValueError("Wildcard '*' cannot be used in ALLOWED_ORIGINS — specify explicit origins.")
 
 
 settings = Settings()

@@ -185,8 +185,8 @@ class CreditCardOut(CreditCardBase):
 class CreditCardTrackerRow(BaseModel):
     id: int
     name: str
-    issuer: Optional[str]
-    last_four: Optional[str]
+    issuer: str | None = None
+    last_four: str | None = None
     grace: str
     prev_close: str
     prev_due: str
@@ -194,8 +194,8 @@ class CreditCardTrackerRow(BaseModel):
     next_close_days: int
     next_due: str
     next_due_days: int
-    annual_fee_date: Optional[str]
-    annual_fee_days: Optional[int]
+    annual_fee_date: str | None = None
+    annual_fee_days: int | None = None
     prev_due_overdue: bool
 
 

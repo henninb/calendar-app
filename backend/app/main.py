@@ -7,10 +7,12 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from fastapi import Depends
 from .config import settings
 from .database import Base, engine, SessionLocal
 from .models import CreditCard, Person
 from .routers import categories, events, occurrences, sync, credit_cards, persons, tasks
+from .security import require_api_key
 from .services.credit_card import generate_credit_card_occurrences
 from .services.recurrence import generate_all_occurrences, mark_overdue
 from .services.scheduler import start_scheduler, stop_scheduler
@@ -102,13 +104,14 @@ async def log_requests(request: Request, call_next):
     log.info("%s %s %d %.3fs", request.method, request.url.path, response.status_code, elapsed)
     return response
 
-app.include_router(categories.router, prefix="/api")
-app.include_router(events.router, prefix="/api")
-app.include_router(occurrences.router, prefix="/api")
-app.include_router(sync.router, prefix="/api")
-app.include_router(credit_cards.router, prefix="/api")
-app.include_router(persons.router, prefix="/api")
-app.include_router(tasks.router, prefix="/api")
+_auth = [Depends(require_api_key)]
+app.include_router(categories.router, prefix="/api", dependencies=_auth)
+app.include_router(events.router, prefix="/api", dependencies=_auth)
+app.include_router(occurrences.router, prefix="/api", dependencies=_auth)
+app.include_router(sync.router, prefix="/api", dependencies=_auth)
+app.include_router(credit_cards.router, prefix="/api", dependencies=_auth)
+app.include_router(persons.router, prefix="/api", dependencies=_auth)
+app.include_router(tasks.router, prefix="/api", dependencies=_auth)
 
 
 @app.get("/health")

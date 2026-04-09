@@ -132,10 +132,11 @@ def next_annual_fee_date(card: CreditCard, ref_date: Optional[date] = None) -> O
     return None
 
 
-def grace_str(card: CreditCard) -> str:
+def grace_str(card: CreditCard, today: Optional[date] = None) -> str:
     """Return the display string for the grace period column."""
     if card.due_day_same_month or card.due_day_next_month:
-        today = date.today()
+        if today is None:
+            today = date.today()
         prev = previous_statement_close(card, today)
         due = due_date_for_close(prev, card)
         return f"{(due - prev).days}V"
@@ -159,7 +160,7 @@ def tracker_row(card: CreditCard, today: Optional[date] = None) -> dict:
         "name": card.name,
         "issuer": card.issuer,
         "last_four": card.last_four,
-        "grace": grace_str(card),
+        "grace": grace_str(card, today),
         "prev_close": prev_close.isoformat(),
         "prev_due": prev_due.isoformat(),
         "next_close": next_close.isoformat(),
