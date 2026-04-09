@@ -36,7 +36,8 @@ _pending_flow: Optional[Flow] = None
 
 # Persisted alongside the token file so the PKCE code_verifier survives
 # a server restart or multi-worker deployment between /auth and /auth/callback.
-_CODE_VERIFIER_FILE = Path(settings.google_token_file).parent / ".pending_code_verifier"
+def _code_verifier_file() -> Path:
+    return Path(settings.google_token_file).parent / ".pending_code_verifier"
 
 SCOPES = [
     "https://www.googleapis.com/auth/calendar",
@@ -96,7 +97,7 @@ def get_auth_url(state: str = "", redirect_uri: Optional[str] = None) -> str:
         "redirect_uri": redirect_uri or settings.google_redirect_uri,
         "state": state,
     })
-    fd = os.open(str(_CODE_VERIFIER_FILE), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = os.open(str(_code_verifier_file()), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(state_data)
     return auth_url
@@ -109,17 +110,18 @@ def exchange_code(code: str, redirect_uri: Optional[str] = None) -> Credentials:
     # Restore persisted state when the callback lands on a different process.
     saved_cv: Optional[str] = None
     saved_uri: Optional[str] = None
-    if _CODE_VERIFIER_FILE.exists():
+    cvf = _code_verifier_file()
+    if cvf.exists():
         try:
-            data = json.loads(_CODE_VERIFIER_FILE.read_text())
+            data = json.loads(cvf.read_text())
             saved_cv = data.get("code_verifier")
             saved_uri = data.get("redirect_uri")
         except Exception:
-            pass
+            log.warning("Failed to read code verifier file", exc_info=True)
         try:
-            _CODE_VERIFIER_FILE.unlink(missing_ok=True)
+            cvf.unlink(missing_ok=True)
         except Exception:
-            pass
+            log.warning("Failed to delete code verifier file", exc_info=True)
 
     effective_uri = redirect_uri or saved_uri or settings.google_redirect_uri
     if _pending_flow is not None:
@@ -147,10 +149,11 @@ def exchange_code(code: str, redirect_uri: Optional[str] = None) -> Credentials:
 
 def validate_state(state: str) -> bool:
     """Validate the OAuth state parameter against the persisted expected value."""
-    if not _CODE_VERIFIER_FILE.exists():
+    cvf = _code_verifier_file()
+    if not cvf.exists():
         return False
     try:
-        data = json.loads(_CODE_VERIFIER_FILE.read_text())
+        data = json.loads(cvf.read_text())
         expected = data.get("state", "")
         return bool(expected) and secrets.compare_digest(state, expected)
     except Exception:
@@ -231,7 +234,7 @@ def is_authenticated() -> tuple[bool, Optional[str]]:
         return result
 
 
-def sync_occurrence(db: Session, occurrence: Occurrence, creds=None) -> str:
+def sync_occurrence(db: Session, occurrence: Occurrence, creds: Credentials | None = None) -> str:
     """
     Push a single Occurrence to Google Calendar as an all-day event.
     Updates occurrence.gcal_event_id and occurrence.synced_at on success.

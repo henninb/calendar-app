@@ -115,17 +115,3 @@ def sync_task(db: Session, task: Task, svc=None, tasklist_id: Optional[str] = No
         return action
     except HttpError as e:
         raise RuntimeError(f"Google Tasks API error: {e}") from e
-
-
-def sync_all_tasks(db: Session) -> dict:
-    """Push all non-cancelled tasks to Google Tasks. Returns summary dict."""
-    tasks = db.query(Task).filter(Task.status != TaskStatus.cancelled).all()
-    synced, failed, errors = 0, 0, []
-    for task in tasks:
-        try:
-            sync_task(db, task)
-            synced += 1
-        except Exception as exc:
-            failed += 1
-            errors.append(f"task {task.id}: {exc}")
-    return {"synced": synced, "failed": failed, "errors": errors}

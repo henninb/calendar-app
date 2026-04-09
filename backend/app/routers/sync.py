@@ -15,10 +15,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from typing import Generator, Optional
 
-log = logging.getLogger(__name__)
-
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
+from google.oauth2.credentials import Credentials
 from icalendar import Calendar, Event as ICalEvent
 from sqlalchemy.orm import Session, joinedload
 
@@ -28,6 +27,8 @@ from ..models import Event, Occurrence, OccurrenceStatus, Task, TaskStatus
 from ..schemas import AuthStatus, SyncResult
 from ..services import google_calendar as gcal
 from ..services import google_tasks as gtasks
+
+log = logging.getLogger(__name__)
 
 _GCAL_SYNC_WORKERS = 10
 _GTASKS_SYNC_WORKERS = 1   # Tasks API: 5 QPS per user; each task makes 2-4 calls so must be sequential
@@ -43,13 +44,25 @@ def _redirect_uri(request: Request) -> str:
     Respects X-Forwarded-Proto / X-Forwarded-Host set by the reverse proxy so
     the URI is correct whether the app is reached via localhost,
     calendar.bhenning.com, or any other domain.
+
+    The computed URI is validated against the configured google_redirect_uri.
+    If they differ (e.g. a spoofed X-Forwarded-Host header), the configured
+    value is used and a warning is logged.
     """
     proto = request.headers.get("x-forwarded-proto", request.url.scheme)
     host = request.headers.get(
         "x-forwarded-host",
         request.headers.get("host", request.url.netloc),
     )
-    return f"{proto}://{host}/api/sync/auth/callback"
+    computed = f"{proto}://{host}/api/sync/auth/callback"
+    configured = settings.google_redirect_uri
+    if computed != configured:
+        log.warning(
+            "Computed redirect URI %r differs from configured %r — using configured value",
+            computed, configured,
+        )
+        return configured
+    return computed
 
 
 @router.get("/auth")
@@ -80,7 +93,7 @@ def auth_status():
 
 # ── Sync ──────────────────────────────────────────────────────────────────────
 
-def _sync_one(occ_id: int, creds=None) -> tuple[int, str, str, str, str]:
+def _sync_one(occ_id: int, creds: Credentials | None = None) -> tuple[int, str, str, str, str]:
     """
     Per-thread worker — owns its own DB session; credentials are shared from caller.
     Returns (occ_id, action, occ_date_str, gcal_id, error_msg).
@@ -250,7 +263,8 @@ def wipe_all_gcal_events(
         )
         db.commit()
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        log.exception("GCal wipe failed")
+        raise HTTPException(status_code=500, detail="Google Calendar wipe failed — check server logs") from exc
     return SyncResult(
         synced=deleted,
         failed=0,

@@ -1,12 +1,11 @@
 from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from .models import Priority, OccurrenceStatus, TaskRecurrence, TaskStatus, WeekendShift
 
 
-def _normalize_rrule(v: Optional[str]) -> Optional[str]:
+def _normalize_rrule(v: str | None) -> str | None:
     if v is None:
         return v
     v = v.strip()
@@ -18,10 +17,10 @@ def _normalize_rrule(v: Optional[str]) -> Optional[str]:
 # ── Category ────────────────────────────────────────────────────────────────
 
 class CategoryBase(BaseModel):
-    name: str
+    name: str = Field(..., max_length=100)
     color: str = Field("#3b82f6", pattern=r'^#[0-9a-fA-F]{6}$')
-    icon: str = "📅"
-    description: Optional[str] = None
+    icon: str = Field("📅", max_length=10)
+    description: str | None = Field(None, max_length=1000)
 
 
 class CategoryCreate(CategoryBase):
@@ -29,10 +28,10 @@ class CategoryCreate(CategoryBase):
 
 
 class CategoryUpdate(BaseModel):
-    name: Optional[str] = None
-    color: Optional[str] = Field(None, pattern=r'^#[0-9a-fA-F]{6}$')
-    icon: Optional[str] = None
-    description: Optional[str] = None
+    name: str | None = Field(None, max_length=100)
+    color: str | None = Field(None, pattern=r'^#[0-9a-fA-F]{6}$')
+    icon: str | None = Field(None, max_length=10)
+    description: str | None = Field(None, max_length=1000)
 
 
 class CategoryOut(CategoryBase):
@@ -44,24 +43,24 @@ class CategoryOut(CategoryBase):
 # ── Event ───────────────────────────────────────────────────────────────────
 
 class EventBase(BaseModel):
-    title: str
+    title: str = Field(..., max_length=255)
     category_id: int
-    rrule: Optional[str] = None          # None → one-time
+    rrule: str | None = Field(None, max_length=500)   # None → one-time
     dtstart: date
-    dtend_rule: Optional[date] = None
+    dtend_rule: date | None = None
     duration_days: int = Field(1, ge=1)
-    description: Optional[str] = None
-    location: Optional[str] = None
-    reminder_days: list[int] = [7, 1]
+    description: str | None = Field(None, max_length=4096)
+    location: str | None = Field(None, max_length=512)
+    reminder_days: list[int] = Field(default_factory=lambda: [7, 1])
     priority: Priority = Priority.medium
-    amount: Optional[Decimal] = None
+    amount: Decimal | None = None
     is_active: bool = True
     generates_tasks: bool = False
-    gcal_calendar_id: Optional[str] = None
+    gcal_calendar_id: str | None = Field(None, max_length=255)
 
     @field_validator("rrule")
     @classmethod
-    def normalize_rrule(cls, v: Optional[str]) -> Optional[str]:
+    def normalize_rrule(cls, v: str | None) -> str | None:
         return _normalize_rrule(v)
 
 
@@ -70,24 +69,24 @@ class EventCreate(EventBase):
 
 
 class EventUpdate(BaseModel):
-    title: Optional[str] = None
-    category_id: Optional[int] = None
-    rrule: Optional[str] = None
-    dtstart: Optional[date] = None
-    dtend_rule: Optional[date] = None
-    duration_days: Optional[int] = None
-    description: Optional[str] = None
-    location: Optional[str] = None
-    reminder_days: Optional[list[int]] = None
-    priority: Optional[Priority] = None
-    amount: Optional[Decimal] = None
-    is_active: Optional[bool] = None
-    generates_tasks: Optional[bool] = None
-    gcal_calendar_id: Optional[str] = None
+    title: str | None = Field(None, max_length=255)
+    category_id: int | None = None
+    rrule: str | None = Field(None, max_length=500)
+    dtstart: date | None = None
+    dtend_rule: date | None = None
+    duration_days: int | None = None
+    description: str | None = Field(None, max_length=4096)
+    location: str | None = Field(None, max_length=512)
+    reminder_days: list[int] | None = None
+    priority: Priority | None = None
+    amount: Decimal | None = None
+    is_active: bool | None = None
+    generates_tasks: bool | None = None
+    gcal_calendar_id: str | None = Field(None, max_length=255)
 
     @field_validator("rrule")
     @classmethod
-    def normalize_rrule(cls, v: Optional[str]) -> Optional[str]:
+    def normalize_rrule(cls, v: str | None) -> str | None:
         return _normalize_rrule(v)
 
 
@@ -111,21 +110,21 @@ class EventWithOccurrences(EventOut):
 class OccurrenceBase(BaseModel):
     occurrence_date: date
     status: OccurrenceStatus = OccurrenceStatus.upcoming
-    notes: Optional[str] = None
+    notes: str | None = Field(None, max_length=2000)
 
 
 class OccurrenceUpdate(BaseModel):
-    status: Optional[OccurrenceStatus] = None
-    notes: Optional[str] = None
+    status: OccurrenceStatus | None = None
+    notes: str | None = Field(None, max_length=2000)
 
 
 class OccurrenceOut(OccurrenceBase):
     id: int
     event_id: int
-    gcal_event_id: Optional[str] = None
-    synced_at: Optional[datetime] = None
+    gcal_event_id: str | None = None
+    synced_at: datetime | None = None
     created_at: datetime
-    event: Optional[EventOut] = None
+    event: EventOut | None = None
 
     model_config = {"from_attributes": True}
 
@@ -138,21 +137,21 @@ EventWithOccurrences.model_rebuild()
 
 class CreditCardBase(BaseModel):
     name: str
-    issuer: Optional[str] = None
-    last_four: Optional[str] = Field(None, pattern=r'^\d{4}$')
-    statement_close_day: Optional[int] = Field(None, ge=1, le=31)
-    grace_period_days: Optional[int] = Field(None, ge=0)
-    weekend_shift: Optional[WeekendShift] = None
-    cycle_days: Optional[int] = None
-    cycle_reference_date: Optional[date] = None
-    due_day_same_month: Optional[int] = Field(None, ge=1, le=31)
-    due_day_next_month: Optional[int] = Field(None, ge=1, le=31)
-    annual_fee_month: Optional[int] = Field(None, ge=1, le=12)
+    issuer: str | None = None
+    last_four: str | None = Field(None, pattern=r'^\d{4}$')
+    statement_close_day: int | None = Field(None, ge=1, le=31)
+    grace_period_days: int | None = Field(None, ge=0)
+    weekend_shift: WeekendShift | None = None
+    cycle_days: int | None = None
+    cycle_reference_date: date | None = None
+    due_day_same_month: int | None = Field(None, ge=1, le=31)
+    due_day_next_month: int | None = Field(None, ge=1, le=31)
+    annual_fee_month: int | None = Field(None, ge=1, le=12)
     is_active: bool = True
 
     @field_validator('is_active', mode='before')
     @classmethod
-    def coerce_is_active(cls, v):
+    def coerce_is_active(cls, v: bool | None) -> bool:
         return True if v is None else v
 
 
@@ -161,24 +160,24 @@ class CreditCardCreate(CreditCardBase):
 
 
 class CreditCardUpdate(BaseModel):
-    name: Optional[str] = None
-    issuer: Optional[str] = None
-    last_four: Optional[str] = Field(None, pattern=r'^\d{4}$')
-    statement_close_day: Optional[int] = Field(None, ge=1, le=31)
-    grace_period_days: Optional[int] = Field(None, ge=0)
-    weekend_shift: Optional[WeekendShift] = None
-    cycle_days: Optional[int] = None
-    cycle_reference_date: Optional[date] = None
-    due_day_same_month: Optional[int] = Field(None, ge=1, le=31)
-    due_day_next_month: Optional[int] = Field(None, ge=1, le=31)
-    annual_fee_month: Optional[int] = Field(None, ge=1, le=12)
-    is_active: Optional[bool] = None
+    name: str | None = None
+    issuer: str | None = None
+    last_four: str | None = Field(None, pattern=r'^\d{4}$')
+    statement_close_day: int | None = Field(None, ge=1, le=31)
+    grace_period_days: int | None = Field(None, ge=0)
+    weekend_shift: WeekendShift | None = None
+    cycle_days: int | None = None
+    cycle_reference_date: date | None = None
+    due_day_same_month: int | None = Field(None, ge=1, le=31)
+    due_day_next_month: int | None = Field(None, ge=1, le=31)
+    annual_fee_month: int | None = Field(None, ge=1, le=12)
+    is_active: bool | None = None
 
 
 class CreditCardOut(CreditCardBase):
     id: int
-    created_at: Optional[datetime] = None
-    last_four: Optional[str] = None  # no pattern constraint — existing data may not be 4 digits
+    created_at: datetime | None = None
+    last_four: str | None = None  # no pattern constraint — existing data may not be 4 digits
 
     model_config = {"from_attributes": True}
 
@@ -211,19 +210,19 @@ class SyncResult(BaseModel):
     synced: int
     failed: int
     errors: list[str] = []
-    message: Optional[str] = None
+    message: str | None = None
 
 
 class AuthStatus(BaseModel):
     authenticated: bool
-    email: Optional[str] = None
+    email: str | None = None
 
 
 # ── Person ───────────────────────────────────────────────────────────────────
 
 class PersonBase(BaseModel):
-    name: str
-    email: Optional[EmailStr] = None
+    name: str = Field(..., max_length=255)
+    email: EmailStr | None = None
 
 
 class PersonCreate(PersonBase):
@@ -231,8 +230,8 @@ class PersonCreate(PersonBase):
 
 
 class PersonUpdate(BaseModel):
-    name: Optional[str] = None
-    email: Optional[EmailStr] = None
+    name: str | None = Field(None, max_length=255)
+    email: EmailStr | None = None
 
 
 class PersonOut(PersonBase):
@@ -244,9 +243,9 @@ class PersonOut(PersonBase):
 # ── Subtask ──────────────────────────────────────────────────────────────────
 
 class SubtaskBase(BaseModel):
-    title: str
+    title: str = Field(..., max_length=255)
     status: TaskStatus = TaskStatus.todo
-    due_date: Optional[date] = None
+    due_date: date | None = None
     order: int = 0
 
 
@@ -255,16 +254,16 @@ class SubtaskCreate(SubtaskBase):
 
 
 class SubtaskUpdate(BaseModel):
-    title: Optional[str] = None
-    status: Optional[TaskStatus] = None
-    due_date: Optional[date] = None
-    order: Optional[int] = None
+    title: str | None = Field(None, max_length=255)
+    status: TaskStatus | None = None
+    due_date: date | None = None
+    order: int | None = None
 
 
 class SubtaskOut(SubtaskBase):
     id: int
     task_id: int
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -274,16 +273,16 @@ class SubtaskOut(SubtaskBase):
 # ── Task ─────────────────────────────────────────────────────────────────────
 
 class TaskBase(BaseModel):
-    title: str
-    description: Optional[str] = None
+    title: str = Field(..., max_length=255)
+    description: str | None = Field(None, max_length=4096)
     status: TaskStatus = TaskStatus.todo
     priority: Priority = Priority.medium
-    assignee_id: Optional[int] = None
-    category_id: Optional[int] = None
-    due_date: Optional[date] = None
-    estimated_minutes: Optional[int] = None
+    assignee_id: int | None = None
+    category_id: int | None = None
+    due_date: date | None = None
+    estimated_minutes: int | None = None
     recurrence: TaskRecurrence = TaskRecurrence.none
-    occurrence_id: Optional[int] = None
+    occurrence_id: int | None = None
 
 
 class TaskCreate(TaskBase):
@@ -291,26 +290,26 @@ class TaskCreate(TaskBase):
 
 
 class TaskUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    status: Optional[TaskStatus] = None
-    priority: Optional[Priority] = None
-    assignee_id: Optional[int] = None
-    category_id: Optional[int] = None
-    due_date: Optional[date] = None
-    estimated_minutes: Optional[int] = None
-    recurrence: Optional[TaskRecurrence] = None
+    title: str | None = Field(None, max_length=255)
+    description: str | None = Field(None, max_length=4096)
+    status: TaskStatus | None = None
+    priority: Priority | None = None
+    assignee_id: int | None = None
+    category_id: int | None = None
+    due_date: date | None = None
+    estimated_minutes: int | None = None
+    recurrence: TaskRecurrence | None = None
 
 
 class TaskOut(TaskBase):
     id: int
-    gtask_id: Optional[str] = None
-    synced_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    gtask_id: str | None = None
+    synced_at: datetime | None = None
+    completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
-    assignee: Optional[PersonOut] = None
-    category: Optional[CategoryOut] = None
+    assignee: PersonOut | None = None
+    category: CategoryOut | None = None
     subtasks: list[SubtaskOut] = []
 
     model_config = {"from_attributes": True}

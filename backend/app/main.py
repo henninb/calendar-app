@@ -7,21 +7,21 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from .config import settings
+from .database import Base, engine, SessionLocal
+from .models import CreditCard, Person
+from .routers import categories, events, occurrences, sync, credit_cards, persons, tasks
+from .services.credit_card import generate_credit_card_occurrences
+from .services.recurrence import generate_all_occurrences, mark_overdue
+from .services.scheduler import start_scheduler, stop_scheduler
+from .services.task_generation import generate_pending_tasks
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
 log = logging.getLogger(__name__)
-
-from .database import Base, engine, SessionLocal
-from .models import CreditCard, Person
-from .config import settings
-from .routers import categories, events, occurrences, sync, credit_cards, persons, tasks
-from .services.recurrence import generate_all_occurrences, mark_overdue
-from .services.credit_card import generate_credit_card_occurrences
-from .services.task_generation import generate_pending_tasks
-from .services.scheduler import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager

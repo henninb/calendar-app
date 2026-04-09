@@ -97,13 +97,13 @@ class Settings:
         self.google_redirect_uri  = google["redirect_uri"]
 
         scheduler = cfg["scheduler"]
-        self.occurrence_lookahead_days = scheduler["occurrence_lookahead_days"]
-        self.scheduler_interval_hours  = scheduler["interval_hours"]
+        self.occurrence_lookahead_days = int(scheduler["occurrence_lookahead_days"])
+        self.scheduler_interval_hours  = int(scheduler["interval_hours"])
 
         self.timezone        = cfg["timezone"]
         self.allowed_origins = cfg["cors"]["allowed_origins"]
-        self.gcal_max_results     = cfg["google"]["gcal_max_results"]
-        self.cc_history_days      = cfg["credit_cards"]["history_days"]
+        self.gcal_max_results     = int(cfg["google"]["gcal_max_results"])
+        self.cc_history_days      = int(cfg["credit_cards"]["history_days"])
         self.default_person_name  = cfg.get("default_person_name", "")
         self.categories           = cfg["categories"]
 

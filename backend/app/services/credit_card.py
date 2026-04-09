@@ -22,7 +22,7 @@ from ..models import CreditCard, Event, Occurrence, OccurrenceStatus, Priority, 
 
 # ── Date calculation helpers (mirrors credit-card-tracker.py) ─────────────────
 
-def adjust_weekend(d: date, shift: str) -> date:
+def adjust_weekend(d: date, shift: WeekendShift) -> date:
     if shift == WeekendShift.back_sat_only:
         return d - timedelta(days=1) if d.weekday() == 5 else d
     if shift == WeekendShift.nearest:

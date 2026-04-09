@@ -2,17 +2,15 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
-
-log = logging.getLogger(__name__)
+from sqlalchemy.orm import Session, joinedload
 
 from ..config import settings
 from ..database import get_db
-from sqlalchemy.orm import joinedload
-
 from ..models import Category, Event
 from ..schemas import EventCreate, EventOut, EventUpdate, EventWithOccurrences, GenerateResult
 from ..services.recurrence import generate_occurrences
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/events", tags=["events"])
 
