@@ -35,11 +35,37 @@ When invoked, you will:
    - Add rate limiting and input length constraints to prevent DoS
 
 4. **Flag and fix immediately**:
-   - Any secret or credential visible in code
-   - Any raw SQL with user-controlled input
-   - Any `eval()`, `exec()`, `os.system()`, `subprocess.call(shell=True)` with user input
+   - Any secret or credential visible in code or committed to version control
+   - Any raw SQL, shell command, or query string built with user-controlled input
+   - Any dynamic code execution with user input (e.g., `eval`, `exec`, shell injection, template injection)
+   - Any shell invocation that passes user data without escaping (e.g., system calls, subprocess with `shell=true`, backtick execution)
    - Any missing authorization check on a data-mutating endpoint
-   - Any use of `pickle`, `yaml.load()` (unsafe), or other insecure deserialization
+   - Any use of insecure deserialization that accepts arbitrary types from untrusted input (e.g., native object serialization formats, unsafe YAML loaders)
+   - Any use of deprecated or broken cryptographic primitives (MD5, SHA1, DES, RC4, ECB mode)
+   - Any direct path or file access built from user input without canonicalization (path traversal)
+   - Any XML/HTML parsing of untrusted input without disabling external entity processing (XXE)
+   - Any SSRF vector: outbound requests to URLs controlled by the user without an allowlist
+
+5. **Language-specific patterns to check** (apply whichever is relevant to the language in scope):
+   - **JavaScript/TypeScript**: `innerHTML`, `dangerouslySetInnerHTML`, `document.write`, `eval`, prototype pollution, insecure `postMessage` handlers, `child_process.exec` with user input
+   - **Java**: `Runtime.exec`, `ProcessBuilder` with user input, Java deserialization (`ObjectInputStream`), Spring `@RequestMapping` without CSRF protection, XXE via `DocumentBuilderFactory`
+   - **Go**: `os/exec` with user-controlled args, `text/template` vs `html/template` misuse, integer overflow in slice bounds
+   - **Rust**: `unsafe` blocks touching user data, raw pointer dereference from external input
+   - **C/C++**: `strcpy`, `sprintf`, `gets`, unbounded `memcpy`, format string vulnerabilities, integer overflow before allocation
+   - **Ruby**: `eval`, `send` with user input, `YAML.load` (use `safe_load`), shell via backticks or `system`
+   - **PHP**: `eval`, `include`/`require` with user input, `unserialize`, `$_GET`/`$_POST` directly in queries or output
+   - **Shell scripts**: unquoted variables, `eval` with user input, missing input validation before use in commands
+   - **Python**: `eval`, `exec`, `os.system`, `subprocess.call(shell=True)` with user input, `pickle.loads` / `yaml.load` (use `safe_load`), `__import__` or `importlib` with user-controlled names
+   - **Kotlin**: `Runtime.exec` / `ProcessBuilder` with user input, Java interop deserialization (`ObjectInputStream`), Android `WebView.evaluateJavascript` with untrusted content, exported `Activity`/`BroadcastReceiver` without permission checks, hardcoded secrets in `BuildConfig` or `strings.xml`
+   - **Dart/Flutter**: `dart:io` `Process.run` with user input, insecure `http` (use `https`), hardcoded secrets in `pubspec.yaml` or source, missing certificate pinning in mobile apps, `jsonDecode` on untrusted input passed directly to logic without validation
+
+6. **Additional security concerns**:
+   - **Supply chain / dependency security**: flag unpinned dependency versions, missing lockfiles, packages installed from untrusted or unofficial sources, typosquatted package names, and `postinstall` scripts that execute arbitrary code
+   - **Race conditions / TOCTOU**: flag check-then-act patterns on files, database rows, or shared state that lack atomic operations or proper locking (e.g., checking existence before writing without a transaction)
+   - **Timing attacks**: flag non-constant-time comparisons for secrets, tokens, MACs, or passwords — require constant-time equality functions (e.g., `hmac.compare_digest`, `crypto.timingSafeEqual`)
+   - **Regex DoS (ReDoS)**: flag regular expressions with nested quantifiers or alternation on user-controlled input that can cause catastrophic backtracking; suggest input length limits or rewritten patterns
+   - **Error message leakage**: flag responses that expose stack traces, internal file paths, database schema details, or framework version strings to clients — errors should be logged server-side and return generic messages to users
+   - **CI/CD and infrastructure-as-code**: flag secrets printed in CI logs (`echo $SECRET`, debug flags), overly permissive IAM roles or service account keys, publicly accessible storage buckets, missing state encryption in Terraform, hardcoded credentials in Dockerfiles or Helm values, and unauthenticated access to internal management endpoints
 
 ## How to respond
 
