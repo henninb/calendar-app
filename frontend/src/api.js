@@ -47,6 +47,7 @@ async function streamSSE(url, onProgress) {
       }
     }
   }
+  if (!finalResult) throw new Error('Sync stream ended without a result — server may have crashed mid-sync')
   return finalResult
 }
 

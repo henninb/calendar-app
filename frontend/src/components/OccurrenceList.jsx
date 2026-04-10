@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { fetchOccurrences, fetchCategories, updateOccurrence, createTaskFromOccurrence } from '../api'
 
 
@@ -29,7 +29,7 @@ export default function OccurrenceList() {
   const [statusFilter, setStatusFilter] = useState('upcoming,overdue')
   const [days, setDays]       = useState(60)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       const params = { start_date: today(), end_date: daysOut(days) }
@@ -43,14 +43,18 @@ export default function OccurrenceList() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [catFilter, statusFilter, days])
 
   useEffect(() => { fetchCategories().then(setCats) }, [])
-  useEffect(() => { load() }, [catFilter, statusFilter, days])
+  useEffect(() => { load() }, [load])
 
   const mark = async (occ, status) => {
-    const updated = await updateOccurrence(occ.id, { status })
-    setOccs(prev => prev.map(o => o.id === updated.id ? updated : o))
+    try {
+      const updated = await updateOccurrence(occ.id, { status })
+      setOccs(prev => prev.map(o => o.id === updated.id ? updated : o))
+    } catch (e) {
+      console.error('Failed to update occurrence:', e)
+    }
   }
 
   const makeTask = async (occ) => {

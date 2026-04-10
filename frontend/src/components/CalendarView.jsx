@@ -17,6 +17,7 @@ export default function CalendarView() {
   const [selected, setSelected]   = useState(null)
   const [saving, setSaving]       = useState(false)
   const [activeFilter, setFilter] = useState(null)
+  const [error, setError]         = useState(null)
 
   useEffect(() => { fetchCategories().then(setCats) }, [])
 
@@ -55,10 +56,13 @@ export default function CalendarView() {
   const markStatus = async (status) => {
     if (!selected) return
     setSaving(true)
+    setError(null)
     try {
       const updated = await updateOccurrence(selected.id, { status })
       setSelected(updated)
       setOccs(prev => prev.map(o => o.id === updated.id ? updated : o))
+    } catch (e) {
+      setError(`Failed to update status: ${e.message}`)
     } finally {
       setSaving(false)
     }
@@ -68,10 +72,13 @@ export default function CalendarView() {
     if (!selected) return
     if (!window.confirm(`Delete "${selected.event?.title}" on ${fmt(selected.occurrence_date)}? This cannot be undone.`)) return
     setSaving(true)
+    setError(null)
     try {
       await deleteOccurrence(selected.id)
       setOccs(prev => prev.filter(o => o.id !== selected.id))
       setSelected(null)
+    } catch (e) {
+      setError(`Failed to delete occurrence: ${e.message}`)
     } finally {
       setSaving(false)
     }
@@ -79,6 +86,11 @@ export default function CalendarView() {
 
   return (
     <div>
+      {error && (
+        <div style={{ background: '#fee2e2', color: '#dc2626', padding: '.5rem 1rem', borderRadius: '6px', marginBottom: '.5rem', fontSize: '.875rem' }}>
+          {error}
+        </div>
+      )}
       <div className="card">
         <FullCalendar
           plugins={[dayGridPlugin, listPlugin, interactionPlugin]}

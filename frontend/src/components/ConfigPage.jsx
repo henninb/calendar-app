@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 
 export const CONFIG_DEFAULTS = {
   gcalSyncDays: 365,
@@ -16,12 +16,16 @@ export function loadConfig() {
 export default function ConfigPage({ config, onSave, gcalAuth }) {
   const [form, setForm] = useState(config)
   const [saved, setSaved] = useState(false)
+  const savedTimerRef = useRef(null)
+
+  useEffect(() => () => clearTimeout(savedTimerRef.current), [])
 
   const handleSave = () => {
     localStorage.setItem('calendarConfig', JSON.stringify(form))
     onSave(form)
     setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    clearTimeout(savedTimerRef.current)
+    savedTimerRef.current = setTimeout(() => setSaved(false), 2000)
   }
 
   const handleReset = () => {

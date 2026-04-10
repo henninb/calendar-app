@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import CalendarView from './components/CalendarView'
 import OccurrenceList from './components/OccurrenceList'
 import CreditCardTracker from './components/CreditCardTracker'
 import TaskList from './components/TaskList'
 import ConfigPage, { loadConfig } from './components/ConfigPage'
 import { generateAll, gcalAuthStatus, syncToGcal, deleteAllGcalEvents, wipeAllGcalEvents, syncToGtasks } from './api'
+
+const LOG_COLOR = { info: '#93c5fd', ok: '#86efac', warn: '#fde68a', error: '#fca5a5' }
 
 const TABS = [
   { id: 'calendar',  label: '📅 Calendar' },
@@ -30,6 +32,16 @@ export default function App() {
   const [logs, setLogs]                 = useState([])
   const logEndRef                       = useRef(null)
 
+  const addLog = useCallback((level, text) => {
+    const id = Date.now() + Math.random()
+    setLogs(prev => [...prev, { id, level, text, time: timestamp() }])
+    return id
+  }, [])
+
+  const updateLog = useCallback((id, text) => {
+    setLogs(prev => prev.map(entry => entry.id === id ? { ...entry, text } : entry))
+  }, [])
+
   useEffect(() => {
     gcalAuthStatus()
       .then(s => {
@@ -37,21 +49,11 @@ export default function App() {
         addLog('info', `Google auth status: ${s.authenticated ? `authenticated (${s.email || 'no email'})` : 'not authenticated'}`)
       })
       .catch(() => setGcalAuth(false))
-  }, [])
+  }, [addLog])
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logs])
-
-  const addLog = (level, text) => {
-    const id = Date.now() + Math.random()
-    setLogs(prev => [...prev, { id, level, text, time: timestamp() }])
-    return id
-  }
-
-  const updateLog = (id, text) => {
-    setLogs(prev => prev.map(entry => entry.id === id ? { ...entry, text } : entry))
-  }
 
   const handleGenerate = async () => {
     setSyncing(true)
@@ -170,8 +172,6 @@ export default function App() {
     }
   }
 
-  const logColor = { info: '#93c5fd', ok: '#86efac', warn: '#fde68a', error: '#fca5a5' }
-
   return (
     <div className="app">
       <header>
@@ -264,7 +264,7 @@ export default function App() {
           fontFamily: 'monospace', fontSize: '.78rem',
         }}>
           {logs.map(entry => (
-            <div key={entry.id} style={{ color: logColor[entry.level], lineHeight: '1.6' }}>
+            <div key={entry.id} style={{ color: LOG_COLOR[entry.level], lineHeight: '1.6' }}>
               <span style={{ opacity: 0.5, marginRight: '.75rem' }}>{entry.time}</span>
               {entry.text}
             </div>

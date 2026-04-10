@@ -53,7 +53,7 @@ def get_event(event_id: int, db: Session = Depends(get_db)):
     return event
 
 
-@router.put("/{event_id}", response_model=EventOut)
+@router.patch("/{event_id}", response_model=EventOut)
 def update_event(event_id: int, body: EventUpdate, db: Session = Depends(get_db)):
     event = db.get(Event, event_id)
     if not event:
