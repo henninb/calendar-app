@@ -90,6 +90,9 @@ body {
 .app { display: flex; flex-direction: column; min-height: 100vh; }
 
 header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   background: #1e293b;
   color: #fff;
   padding: 0 1.5rem;
