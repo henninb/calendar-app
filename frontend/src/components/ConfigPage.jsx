@@ -34,8 +34,8 @@ export default function ConfigPage({ config, onSave, gcalAuth }) {
 
   const fieldLabel = (label, description) => (
     <div style={{ marginBottom: '.2rem' }}>
-      <div style={{ fontWeight: 600, color: '#475569', fontSize: '.875rem' }}>{label}</div>
-      <div style={{ fontSize: '.75rem', color: '#94a3b8' }}>{description}</div>
+      <div style={{ fontWeight: 600, color: 'var(--color-text-muted)', fontSize: '.875rem' }}>{label}</div>
+      <div style={{ fontSize: '.75rem', color: 'var(--color-text-dim)' }}>{description}</div>
     </div>
   )
 
@@ -46,8 +46,8 @@ export default function ConfigPage({ config, onSave, gcalAuth }) {
       <div style={{ marginBottom: '1.5rem' }}>
         <div style={{
           fontSize: '.7rem', textTransform: 'uppercase', letterSpacing: '.08em',
-          color: '#94a3b8', fontWeight: 700, marginBottom: '1rem',
-          borderBottom: '1px solid #e2e8f0', paddingBottom: '.4rem',
+          color: 'var(--color-text-dim)', fontWeight: 700, marginBottom: '1rem',
+          borderBottom: '1px solid var(--color-border)', paddingBottom: '.4rem',
         }}>
           Google Account
         </div>
@@ -68,8 +68,8 @@ export default function ConfigPage({ config, onSave, gcalAuth }) {
       <div style={{ marginBottom: '1.5rem' }}>
         <div style={{
           fontSize: '.7rem', textTransform: 'uppercase', letterSpacing: '.08em',
-          color: '#94a3b8', fontWeight: 700, marginBottom: '1rem',
-          borderBottom: '1px solid #e2e8f0', paddingBottom: '.4rem',
+          color: 'var(--color-text-dim)', fontWeight: 700, marginBottom: '1rem',
+          borderBottom: '1px solid var(--color-border)', paddingBottom: '.4rem',
         }}>
           Google Calendar Sync
         </div>
@@ -87,9 +87,9 @@ export default function ConfigPage({ config, onSave, gcalAuth }) {
                 gcalSyncDays: Math.max(1, Math.min(730, parseInt(e.target.value) || 1)),
               }))}
               style={{
-                border: '1px solid #cbd5e1', borderRadius: 6,
+                border: '1px solid var(--color-input-border)', borderRadius: 6,
                 padding: '.35rem .65rem', fontSize: '.875rem',
-                background: '#fff', width: 100,
+                background: 'var(--color-input-bg)', color: 'var(--color-text)', width: 100,
               }}
             />
           </label>

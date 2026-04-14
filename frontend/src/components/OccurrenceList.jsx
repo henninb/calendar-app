@@ -119,7 +119,7 @@ export default function OccurrenceList() {
               {occs.map(occ => (
                 <tr key={occ.id}>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmt(occ.occurrence_date)}</td>
-                  <td style={{ whiteSpace: 'nowrap', color: '#64748b' }}>{daysUntil(occ.occurrence_date)}</td>
+                  <td style={{ whiteSpace: 'nowrap', color: 'var(--color-text-dim)' }}>{daysUntil(occ.occurrence_date)}</td>
                   <td>{occ.event?.title}</td>
                   <td>
                     <span
@@ -129,7 +129,7 @@ export default function OccurrenceList() {
                       {occ.event?.category?.name?.replace(/_/g, ' ')}
                     </span>
                   </td>
-                  <td style={{ textTransform: 'capitalize', color: '#64748b' }}>
+                  <td style={{ textTransform: 'capitalize', color: 'var(--color-text-dim)' }}>
                     {occ.event?.priority}
                   </td>
                   <td><span className={`status ${occ.status}`}>{occ.status}</span></td>

@@ -87,7 +87,7 @@ export default function CalendarView() {
   return (
     <div>
       {error && (
-        <div style={{ background: '#fee2e2', color: '#dc2626', padding: '.5rem 1rem', borderRadius: '6px', marginBottom: '.5rem', fontSize: '.875rem' }}>
+        <div style={{ background: 'var(--color-error-bg)', color: 'var(--color-error-text)', border: '1px solid var(--color-error-border)', padding: '.5rem 1rem', borderRadius: '6px', marginBottom: '.5rem', fontSize: '.875rem' }}>
           {error}
         </div>
       )}

@@ -10,8 +10,8 @@ import {
 const STATUS_OPTIONS  = ['todo', 'in_progress', 'done', 'cancelled']
 const STATUS_LABELS   = { todo: 'To Do', in_progress: 'In Progress', done: 'Done', cancelled: 'Cancelled' }
 const PRIORITY_COLORS = { low: '#64748b', medium: '#d97706', high: '#dc2626' }
-const STATUS_BG       = { todo: '#dbeafe', in_progress: '#fef3c7', done: '#dcfce7', cancelled: '#f1f5f9' }
-const STATUS_FG       = { todo: '#1d4ed8', in_progress: '#92400e', done: '#15803d', cancelled: '#64748b' }
+const STATUS_BG       = { todo: 'var(--status-todo-bg)', in_progress: 'var(--status-inprogress-bg)', done: 'var(--status-done-bg)', cancelled: 'var(--status-cancelled-bg)' }
+const STATUS_FG       = { todo: 'var(--status-todo-fg)', in_progress: 'var(--status-inprogress-fg)', done: 'var(--status-done-fg)', cancelled: 'var(--status-cancelled-fg)' }
 const TASK_FETCH_LIMIT = 500
 
 const SECTION_DEFS = [
@@ -26,10 +26,10 @@ const SECTION_DEFS = [
 
 // #12: stable style objects outside the component — no per-render allocation
 const inputStyle = {
-  border: '1px solid #cbd5e1', borderRadius: '6px', padding: '.35rem .65rem',
-  fontSize: '.875rem', background: '#fff', color: '#1e293b',
+  border: '1px solid var(--color-input-border)', borderRadius: '6px', padding: '.35rem .65rem',
+  fontSize: '.875rem', background: 'var(--color-input-bg)', color: 'var(--color-text)',
 }
-const labelStyle = { fontSize: '.8rem', color: '#475569', display: 'block', marginBottom: '.2rem' }
+const labelStyle = { fontSize: '.8rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '.2rem' }
 
 // ── Pure helpers ───────────────────────────────────────────────────────────
 
@@ -121,7 +121,7 @@ const NewTaskForm = React.memo(function NewTaskForm({
 }) {
   return (
     <div style={{
-      background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px',
+      background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', borderRadius: '8px',
       padding: '1rem', marginBottom: '1rem', display: 'flex', gap: '.75rem',
       flexWrap: 'wrap', alignItems: 'flex-end',
     }}>
@@ -241,7 +241,7 @@ const TaskRow = React.memo(function TaskRow({
 
   return (
     <React.Fragment>
-      <tr style={isOverdue(task) ? { background: '#fee2e2' } : {}}>
+      <tr style={isOverdue(task) ? { background: 'var(--color-overdue-row)' } : {}}>
         <td style={{ whiteSpace: 'nowrap' }}>
           {editingField === 'status' ? (
             <select
@@ -278,7 +278,7 @@ const TaskRow = React.memo(function TaskRow({
             onClick={handleToggleExpand}
             title={expanded ? 'Collapse subtasks' : 'Expand subtasks'}
             style={{
-              background: 'none', border: 'none', color: '#1e293b', cursor: 'pointer',
+              background: 'none', border: 'none', color: 'var(--color-text)', cursor: 'pointer',
               padding: 0, textAlign: 'left', fontSize: '.875rem', fontWeight: 500, whiteSpace: 'nowrap',
             }}
           >
@@ -301,7 +301,7 @@ const TaskRow = React.memo(function TaskRow({
             </span>
           )}
           {task.subtasks?.length > 0 && (
-            <span style={{ fontSize: '.75rem', color: '#64748b', marginLeft: '.4rem' }}>
+            <span style={{ fontSize: '.75rem', color: 'var(--color-text-dim)', marginLeft: '.4rem' }}>
               {task.subtasks.filter(s => s.status === 'done').length}/{task.subtasks.length}
             </span>
           )}
@@ -364,11 +364,11 @@ const TaskRow = React.memo(function TaskRow({
           )}
         </td>
         {showCompleted && (
-          <td style={{ whiteSpace: 'nowrap', fontSize: '.875rem', color: '#15803d' }}>
+          <td style={{ whiteSpace: 'nowrap', fontSize: '.875rem', color: 'var(--status-done-fg)' }}>
             {task.completed_at ? new Date(task.completed_at).toLocaleString() : '—'}
           </td>
         )}
-        <td style={{ color: '#64748b', fontSize: '.875rem' }}>
+        <td style={{ color: 'var(--color-text-dim)', fontSize: '.875rem' }}>
           {editingField === 'estimated_minutes' ? (
             <input
               autoFocus
@@ -401,7 +401,7 @@ const TaskRow = React.memo(function TaskRow({
             </span>
           )}
         </td>
-        <td style={{ color: '#475569', fontSize: '.875rem' }}>
+        <td style={{ color: 'var(--color-text-muted)', fontSize: '.875rem' }}>
           {editingField === 'assignee_id' ? (
             <select
               autoFocus
@@ -426,7 +426,7 @@ const TaskRow = React.memo(function TaskRow({
             </span>
           )}
         </td>
-        <td style={{ whiteSpace: 'nowrap', position: 'sticky', right: 0, background: '#fff', zIndex: 1, boxShadow: '-2px 0 4px rgba(0,0,0,.06)' }}>
+        <td style={{ whiteSpace: 'nowrap', position: 'sticky', right: 0, background: 'var(--color-surface)', zIndex: 1, boxShadow: '-2px 0 4px rgba(0,0,0,.06)' }}>
           <div style={{ display: 'flex', gap: '.35rem', flexWrap: 'nowrap' }}>
             {task.status !== 'done' && (
               <button className="btn btn-green" title="Mark this task as done"
@@ -434,7 +434,7 @@ const TaskRow = React.memo(function TaskRow({
             )}
             {task.status === 'todo' && (
               <button className="btn" title="Mark this task as in progress"
-                style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #d97706' }}
+                style={{ background: 'var(--status-inprogress-bg)', color: 'var(--status-inprogress-fg)', border: '1px solid var(--status-inprogress-fg)' }}
                 onClick={() => onPatchTask(task.id, { status: 'in_progress' })}>Start</button>
             )}
             {task.status !== 'cancelled' && task.status !== 'done' && (
@@ -451,7 +451,7 @@ const TaskRow = React.memo(function TaskRow({
       {/* Inline edit form */}
       {isEditing && (
         <tr>
-          <td colSpan={showCompleted ? 7 : 6} style={{ background: '#f8fafc', padding: '1rem 1rem 1rem 2.5rem', borderBottom: '2px solid #3b82f6' }}
+          <td colSpan={showCompleted ? 7 : 6} style={{ background: 'var(--color-surface-raised)', padding: '1rem 1rem 1rem 2.5rem', borderBottom: '2px solid #3b82f6' }}
             onKeyDown={e => e.key === 'Escape' && onCancelEdit()}>
             {/* Row 1: Title + Description */}
             <div style={{ display: 'flex', gap: '.75rem', alignItems: 'flex-end', marginBottom: '.5rem' }}>
@@ -528,7 +528,7 @@ const TaskRow = React.memo(function TaskRow({
               </div>
             </div>
           </td>
-          <td style={{ background: '#f8fafc', borderBottom: '2px solid #3b82f6', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+          <td style={{ background: 'var(--color-surface-raised)', borderBottom: '2px solid #3b82f6', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
             <div style={{ display: 'flex', gap: '.5rem' }}>
               <button onClick={handleSaveEdit} className="btn btn-green" title="Save changes to this task">Save</button>
               <button onClick={onCancelEdit} className="btn btn-gray" title="Discard changes and close the edit form">Cancel</button>
@@ -540,11 +540,11 @@ const TaskRow = React.memo(function TaskRow({
       {/* Expanded subtasks */}
       {expanded && (
         <tr>
-          <td colSpan={showCompleted ? 7 : 6} style={{ background: '#f8fafc', paddingLeft: '2.5rem', paddingBottom: '.75rem' }}>
+          <td colSpan={showCompleted ? 7 : 6} style={{ background: 'var(--color-surface-raised)', paddingLeft: '2.5rem', paddingBottom: '.75rem' }}>
             {task.description && (
-              <p style={{ color: '#475569', fontSize: '.85rem', margin: '.4rem 0 .75rem' }}>{task.description}</p>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '.85rem', margin: '.4rem 0 .75rem' }}>{task.description}</p>
             )}
-            <div style={{ fontSize: '.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: '.5rem' }}>
+            <div style={{ fontSize: '.78rem', fontWeight: 700, color: 'var(--color-text-dim)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: '.5rem' }}>
               Subtasks
             </div>
             {(task.subtasks || []).sort((a, b) => a.order - b.order).map(sub => (
@@ -583,24 +583,24 @@ const TaskRow = React.memo(function TaskRow({
                       style={{ cursor: 'pointer', accentColor: '#22c55e', width: '16px', height: '16px' }}
                     />
                     <span style={{
-                      color: sub.status === 'done' ? '#94a3b8' : '#1e293b',
+                      color: sub.status === 'done' ? 'var(--color-text-dim)' : 'var(--color-text)',
                       textDecoration: sub.status === 'done' ? 'line-through' : 'none',
                       flex: 1, fontSize: '.875rem',
                     }}>
                       {sub.title}
                     </span>
                     {sub.due_date && (
-                      <span style={{ fontSize: '.78rem', color: '#64748b' }}>{fmt(sub.due_date)}</span>
+                      <span style={{ fontSize: '.78rem', color: 'var(--color-text-dim)' }}>{fmt(sub.due_date)}</span>
                     )}
                     {sub.completed_at && (
-                      <span style={{ fontSize: '.78rem', color: '#15803d' }}>
+                      <span style={{ fontSize: '.78rem', color: 'var(--status-done-fg)' }}>
                         Completed: {new Date(sub.completed_at).toLocaleString()}
                       </span>
                     )}
                     <select
                       value={sub.status}
                       onChange={e => onPatchSubtask(task.id, sub.id, { status: e.target.value })}
-                      style={{ fontSize: '.78rem', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '.15rem .3rem', background: STATUS_BG[sub.status], color: STATUS_FG[sub.status], fontWeight: 600, cursor: 'pointer' }}
+                      style={{ fontSize: '.78rem', border: '1px solid var(--color-input-border)', borderRadius: '4px', padding: '.15rem .3rem', background: STATUS_BG[sub.status], color: STATUS_FG[sub.status], fontWeight: 600, cursor: 'pointer' }}
                     >
                       {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
                     </select>
@@ -974,7 +974,7 @@ export default function TaskList() {
     <div className="card">
       {/* Toolbar */}
       <div className="toolbar">
-        <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '.95rem' }}>Filter:</span>
+        <span style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '.95rem' }}>Filter:</span>
 
         {STATUS_OPTIONS.map(s => (
           <button
@@ -983,16 +983,16 @@ export default function TaskList() {
             className="btn"
             title={`${filterStatus.includes(s) ? 'Hide' : 'Show'} tasks with status: ${STATUS_LABELS[s]}`}
             style={{
-              background: filterStatus.includes(s) ? STATUS_BG[s] : '#f1f5f9',
-              color: filterStatus.includes(s) ? STATUS_FG[s] : '#64748b',
-              border: filterStatus.includes(s) ? `1px solid ${STATUS_FG[s]}` : '1px solid #e2e8f0',
+              background: filterStatus.includes(s) ? STATUS_BG[s] : 'var(--color-section-bg)',
+              color: filterStatus.includes(s) ? STATUS_FG[s] : 'var(--color-text-dim)',
+              border: filterStatus.includes(s) ? `1px solid ${STATUS_FG[s]}` : '1px solid var(--color-border)',
             }}
           >
             {STATUS_LABELS[s]}
           </button>
         ))}
 
-        <label style={{ fontSize: '.875rem', color: '#475569' }}>
+        <label style={{ fontSize: '.875rem', color: 'var(--color-text-muted)' }}>
           Category&nbsp;
           <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} style={inputStyle}>
             <option value="">All</option>
@@ -1000,7 +1000,7 @@ export default function TaskList() {
           </select>
         </label>
 
-        <label style={{ fontSize: '.875rem', color: '#475569' }}>
+        <label style={{ fontSize: '.875rem', color: 'var(--color-text-muted)' }}>
           Assignee&nbsp;
           <select value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)} style={inputStyle}>
             <option value="">All</option>
@@ -1031,7 +1031,7 @@ export default function TaskList() {
       {/* #5, #6, #16: error banner — shown when any load or CRUD operation fails */}
       {error && (
         <div style={{
-          background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5',
+          background: 'var(--color-error-bg)', color: 'var(--color-error-text)', border: '1px solid var(--color-error-border)',
           borderRadius: '6px', padding: '.6rem 1rem', marginBottom: '1rem', fontSize: '.875rem',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
@@ -1039,7 +1039,7 @@ export default function TaskList() {
           <button
             onClick={() => setError(null)}
             aria-label="Dismiss error"
-            style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', fontSize: '1.1rem', padding: '0 .25rem' }}
+            style={{ background: 'none', border: 'none', color: 'var(--color-error-text)', cursor: 'pointer', fontSize: '1.1rem', padding: '0 .25rem' }}
           >
             ✕
           </button>
@@ -1049,7 +1049,7 @@ export default function TaskList() {
       {/* #15: visible hint when the server-side fetch limit is reached */}
       {!loading && tasks.length >= TASK_FETCH_LIMIT && (
         <div style={{
-          background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a',
+          background: 'var(--color-warn-bg)', color: 'var(--color-warn-text)', border: '1px solid var(--color-warn-border)',
           borderRadius: '6px', padding: '.5rem 1rem', marginBottom: '1rem', fontSize: '.85rem',
         }}>
           Showing the first {TASK_FETCH_LIMIT} tasks — some may not be visible.
@@ -1091,25 +1091,25 @@ export default function TaskList() {
                     style={{
                       display: 'flex', alignItems: 'center', gap: '.5rem',
                       padding: '.45rem .75rem',
-                      background: '#f1f5f9',
+                      background: 'var(--color-section-bg)',
                       borderRadius: isCollapsed ? '6px' : '6px 6px 0 0',
                       cursor: 'pointer',
-                      border: '1px solid #e2e8f0',
-                      borderBottom: isCollapsed ? '1px solid #e2e8f0' : 'none',
+                      border: '1px solid var(--color-border)',
+                      borderBottom: isCollapsed ? '1px solid var(--color-border)' : 'none',
                       userSelect: 'none',
                     }}
                   >
-                    <span style={{ fontSize: '.8rem', color: '#64748b', lineHeight: 1 }}>{isCollapsed ? '▸' : '▾'}</span>
-                    <span style={{ fontWeight: 600, fontSize: '.875rem', color: '#1e293b' }}>{label}</span>
+                    <span style={{ fontSize: '.8rem', color: 'var(--color-text-dim)', lineHeight: 1 }}>{isCollapsed ? '▸' : '▾'}</span>
+                    <span style={{ fontWeight: 600, fontSize: '.875rem', color: 'var(--color-text)' }}>{label}</span>
                     <span style={{
-                      fontSize: '.75rem', background: '#e2e8f0', color: '#475569',
+                      fontSize: '.75rem', background: 'var(--color-count-badge-bg)', color: 'var(--color-count-badge-text)',
                       borderRadius: '10px', padding: '.1rem .45rem', fontWeight: 600,
                     }}>
                       {sectionTasks.length}
                     </span>
                   </div>
                   {!isCollapsed && !isEmpty && (
-                    <div className="tbl-wrap" style={{ borderRadius: '0 0 6px 6px', border: '1px solid #e2e8f0', borderTop: 'none' }}>
+                    <div className="tbl-wrap" style={{ borderRadius: '0 0 6px 6px', border: '1px solid var(--color-border)', borderTop: 'none' }}>
                       <table>
                         <thead>
                           <tr>
@@ -1120,7 +1120,7 @@ export default function TaskList() {
                             {showCompleted && <th>Completed</th>}
                             <th>Est.</th>
                             <th>Assignee</th>
-                            <th style={{ position: 'sticky', right: 0, background: '#f8fafc', zIndex: 1, boxShadow: '-2px 0 4px rgba(0,0,0,.06)' }}>Actions</th>
+                            <th style={{ position: 'sticky', right: 0, background: 'var(--color-table-header)', zIndex: 1, boxShadow: '-2px 0 4px rgba(0,0,0,.06)' }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>

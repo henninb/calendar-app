@@ -16,6 +16,28 @@
   --color-subtask-hover: #e2e8f0;
   --color-btn-gray-bg: #e2e8f0;
   --color-btn-gray-text: #475569;
+  /* Form inputs */
+  --color-surface-raised: #f8fafc;
+  --color-section-bg: #f1f5f9;
+  --color-input-bg: #fff;
+  --color-input-border: #cbd5e1;
+  /* Overdue row */
+  --color-overdue-row: #fee2e2;
+  /* Count badges */
+  --color-count-badge-bg: #e2e8f0;
+  --color-count-badge-text: #475569;
+  /* Error / warn banners */
+  --color-error-bg: #fee2e2;
+  --color-error-text: #b91c1c;
+  --color-error-border: #fca5a5;
+  --color-warn-bg: #fef3c7;
+  --color-warn-text: #92400e;
+  --color-warn-border: #fde68a;
+  /* Task status semantic colors */
+  --status-todo-bg: #dbeafe;       --status-todo-fg: #1d4ed8;
+  --status-inprogress-bg: #fef3c7; --status-inprogress-fg: #92400e;
+  --status-done-bg: #dcfce7;       --status-done-fg: #15803d;
+  --status-cancelled-bg: #f1f5f9;  --status-cancelled-fg: #64748b;
 }
 
 html[data-theme='dark'] {
@@ -33,6 +55,28 @@ html[data-theme='dark'] {
   --color-subtask-hover: #334155;
   --color-btn-gray-bg: #334155;
   --color-btn-gray-text: #94a3b8;
+  /* Form inputs */
+  --color-surface-raised: #0f172a;
+  --color-section-bg: #334155;
+  --color-input-bg: #1e293b;
+  --color-input-border: #475569;
+  /* Overdue row */
+  --color-overdue-row: rgba(220,38,38,.15);
+  /* Count badges */
+  --color-count-badge-bg: #334155;
+  --color-count-badge-text: #94a3b8;
+  /* Error / warn banners */
+  --color-error-bg: rgba(220,38,38,.15);
+  --color-error-text: #fca5a5;
+  --color-error-border: rgba(220,38,38,.4);
+  --color-warn-bg: rgba(251,191,36,.1);
+  --color-warn-text: #fde68a;
+  --color-warn-border: rgba(251,191,36,.3);
+  /* Task status semantic colors — muted for dark backgrounds */
+  --status-todo-bg: rgba(29,78,216,.2);     --status-todo-fg: #93c5fd;
+  --status-inprogress-bg: rgba(146,64,14,.2); --status-inprogress-fg: #fde68a;
+  --status-done-bg: rgba(21,128,61,.2);     --status-done-fg: #86efac;
+  --status-cancelled-bg: rgba(51,65,85,.5); --status-cancelled-fg: #94a3b8;
 }
 
 body {
@@ -105,6 +149,9 @@ main { flex: 1; padding: 1.5rem; max-width: 1400px; margin: 0 auto; width: 100%;
 .status.overdue   { background: #fee2e2; color: #b91c1c; }
 .status.completed { background: #dcfce7; color: #15803d; }
 .status.skipped   { background: var(--color-border-subtle); color: var(--color-text-dim); }
+html[data-theme='dark'] .status.upcoming  { background: rgba(29,78,216,.2);  color: #93c5fd; }
+html[data-theme='dark'] .status.overdue   { background: rgba(185,28,28,.2);  color: #fca5a5; }
+html[data-theme='dark'] .status.completed { background: rgba(21,128,61,.2);  color: #86efac; }
 
 /* ── Tables ── */
 .tbl-wrap { overflow-x: auto; }
@@ -165,6 +212,21 @@ tr:hover td[style*='sticky'] { background: var(--color-row-hover); }
 .fc .fc-today-button { background: #64748b !important; border-color: #64748b !important; }
 .fc .fc-daygrid-day.fc-day-today { background: #eff6ff; }
 .fc-event { cursor: pointer; font-size: .78rem !important; border: none !important; }
+
+/* ── FullCalendar dark mode ── */
+html[data-theme='dark'] .fc .fc-daygrid-day.fc-day-today { background: rgba(59,130,246,.15); }
+html[data-theme='dark'] .fc-theme-standard td,
+html[data-theme='dark'] .fc-theme-standard th { border-color: var(--color-border); }
+html[data-theme='dark'] .fc-theme-standard .fc-scrollgrid { border-color: var(--color-border); background: var(--color-surface); }
+html[data-theme='dark'] .fc .fc-daygrid-day-number,
+html[data-theme='dark'] .fc .fc-col-header-cell-cushion { color: var(--color-text); }
+html[data-theme='dark'] .fc .fc-day-other .fc-daygrid-day-number { color: var(--color-text-dim); }
+html[data-theme='dark'] .fc .fc-list-day-cushion { background: var(--color-section-bg); }
+html[data-theme='dark'] .fc .fc-list-event:hover td { background: var(--color-row-hover); }
+html[data-theme='dark'] .fc .fc-list-empty { background: var(--color-surface); color: var(--color-text-dim); }
+html[data-theme='dark'] .fc .fc-list-event td { border-color: var(--color-border); color: var(--color-text); }
+html[data-theme='dark'] .fc .fc-list-day-text,
+html[data-theme='dark'] .fc .fc-list-day-side-text { color: var(--color-text); }
 
 /* ── Inline-editable cell affordance ── */
 .editable-cell { cursor: pointer; border-bottom: 1px dashed transparent; }

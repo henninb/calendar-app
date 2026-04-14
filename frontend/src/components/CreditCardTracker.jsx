@@ -104,41 +104,41 @@ export default function CreditCardTracker() {
 
       {adding && (
         <form onSubmit={handleSubmit} style={{
-          background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8,
+          background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', borderRadius: 8,
           padding: '1rem', marginBottom: '1rem',
         }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '.65rem .75rem' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: '#475569' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: 'var(--color-text-muted)' }}>
               Name <span style={{ color: '#dc2626' }}>*</span>
               <input value={form.name} onChange={set('name')} placeholder="e.g. Chase Sapphire"
-                style={{ border: '1px solid #cbd5e1', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem' }} />
+                style={{ border: '1px solid var(--color-input-border)', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem', background: 'var(--color-input-bg)', color: 'var(--color-text)' }} />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: '#475569' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: 'var(--color-text-muted)' }}>
               Issuer
               <input value={form.issuer} onChange={set('issuer')} placeholder="e.g. Chase"
-                style={{ border: '1px solid #cbd5e1', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem' }} />
+                style={{ border: '1px solid var(--color-input-border)', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem', background: 'var(--color-input-bg)', color: 'var(--color-text)' }} />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: '#475569' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: 'var(--color-text-muted)' }}>
               Last Four
               <input value={form.last_four} onChange={set('last_four')} placeholder="e.g. 1234" maxLength={4}
-                style={{ border: '1px solid #cbd5e1', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem' }} />
+                style={{ border: '1px solid var(--color-input-border)', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem', background: 'var(--color-input-bg)', color: 'var(--color-text)' }} />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: '#475569' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: 'var(--color-text-muted)' }}>
               Statement Close Day
               <input type="number" min={1} max={31} value={form.statement_close_day} onChange={set('statement_close_day')}
                 placeholder="1–31"
-                style={{ border: '1px solid #cbd5e1', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem' }} />
+                style={{ border: '1px solid var(--color-input-border)', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem', background: 'var(--color-input-bg)', color: 'var(--color-text)' }} />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: '#475569' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: 'var(--color-text-muted)' }}>
               Grace Period (days)
               <input type="number" min={0} value={form.grace_period_days} onChange={set('grace_period_days')}
                 placeholder="e.g. 25"
-                style={{ border: '1px solid #cbd5e1', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem' }} />
+                style={{ border: '1px solid var(--color-input-border)', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem', background: 'var(--color-input-bg)', color: 'var(--color-text)' }} />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: '#475569' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: 'var(--color-text-muted)' }}>
               Weekend Shift
               <select value={form.weekend_shift} onChange={set('weekend_shift')}
-                style={{ border: '1px solid #cbd5e1', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem' }}>
+                style={{ border: '1px solid var(--color-input-border)', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem', background: 'var(--color-input-bg)', color: 'var(--color-text)' }}>
                 <option value="">None</option>
                 <option value="back">Back (Sat/Sun → Friday)</option>
                 <option value="forward">Forward (Sat/Sun → Monday)</option>
@@ -146,23 +146,23 @@ export default function CreditCardTracker() {
                 <option value="nearest">Nearest weekday</option>
               </select>
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: '#475569' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: 'var(--color-text-muted)' }}>
               Due Day (same month)
               <input type="number" min={1} max={31} value={form.due_day_same_month} onChange={set('due_day_same_month')}
                 placeholder="1–31"
-                style={{ border: '1px solid #cbd5e1', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem' }} />
+                style={{ border: '1px solid var(--color-input-border)', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem', background: 'var(--color-input-bg)', color: 'var(--color-text)' }} />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: '#475569' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: 'var(--color-text-muted)' }}>
               Due Day (next month)
               <input type="number" min={1} max={31} value={form.due_day_next_month} onChange={set('due_day_next_month')}
                 placeholder="1–31"
-                style={{ border: '1px solid #cbd5e1', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem' }} />
+                style={{ border: '1px solid var(--color-input-border)', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem', background: 'var(--color-input-bg)', color: 'var(--color-text)' }} />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: '#475569' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '.25rem', fontSize: '.85rem', color: 'var(--color-text-muted)' }}>
               Annual Fee Month
               <input type="number" min={1} max={12} value={form.annual_fee_month} onChange={set('annual_fee_month')}
                 placeholder="1–12"
-                style={{ border: '1px solid #cbd5e1', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem' }} />
+                style={{ border: '1px solid var(--color-input-border)', borderRadius: 5, padding: '.3rem .5rem', fontSize: '.85rem', background: 'var(--color-input-bg)', color: 'var(--color-text)' }} />
             </label>
           </div>
           {formError && (
@@ -208,7 +208,7 @@ export default function CreditCardTracker() {
                       </span>
                     )}
                   </td>
-                  <td style={{ whiteSpace: 'nowrap', color: '#475569' }}>{row.issuer}</td>
+                  <td style={{ whiteSpace: 'nowrap', color: 'var(--color-text-muted)' }}>{row.issuer}</td>
                   <td style={{ textAlign: 'center' }}>{row.grace}</td>
                   <td>{fmt(row.prev_close)}</td>
                   <td className={row.prev_due_overdue ? 'cc-overdue' : ''}>
