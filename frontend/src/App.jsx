@@ -30,7 +30,16 @@ export default function App() {
   const [gtasksSyncing, setGtasksSyncing]   = useState(false)
   const [gcalAuth, setGcalAuth]         = useState(null)
   const [logs, setLogs]                 = useState([])
+  const [darkMode, setDarkMode]         = useState(() => {
+    const saved = localStorage.getItem('theme')
+    return saved !== null ? saved === 'dark' : true
+  })
   const logEndRef                       = useRef(null)
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+    localStorage.setItem('theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
 
   const addLog = useCallback((level, text) => {
     const id = Date.now() + Math.random()
@@ -187,6 +196,13 @@ export default function App() {
               {t.label}
             </button>
           ))}
+          <button
+            onClick={() => setDarkMode(d => !d)}
+            title="Toggle dark/light mode"
+            style={{ marginLeft: '.5rem' }}
+          >
+            {darkMode ? '☀️ Light' : '🌙 Dark'}
+          </button>
         </nav>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '.75rem' }}>
           {tab === 'calendar' && (
