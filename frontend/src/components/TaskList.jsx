@@ -657,6 +657,7 @@ export default function TaskList() {
   const [filterStatus, setFilterStatus]     = useState(['todo', 'in_progress'])
   const [filterAssignee, setFilterAssignee] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
+  const [searchQuery, setSearchQuery]       = useState('')
   const [collapsedSections, setCollapsedSections] = useState({})
   const [expanded, setExpanded]             = useState({})
   const [newSubtask, setNewSubtask]         = useState({})
@@ -732,12 +733,15 @@ export default function TaskList() {
   const week2end = localDate(14)
 
   // #11: memoised filter + sort — only recomputes when tasks or filter state changes
-  const visible = useMemo(() => tasks
+  const visible = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return tasks
     .filter(t => {
       if (filterStatus.length && !filterStatus.includes(t.status)) return false
       if (filterAssignee === 'unassigned') { if (t.assignee_id != null) return false }
       else if (filterAssignee && String(t.assignee_id) !== filterAssignee) return false
       if (filterCategory && String(t.category_id) !== filterCategory) return false
+      if (q && !t.title.toLowerCase().includes(q) && !(t.description || '').toLowerCase().includes(q)) return false
       return true
     })
     .sort((a, b) => {
@@ -745,8 +749,8 @@ export default function TaskList() {
       if (!a.due_date) return 1
       if (!b.due_date) return -1
       return a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0
-    }),
-  [tasks, filterStatus, filterAssignee, filterCategory])
+    })
+  }, [tasks, filterStatus, filterAssignee, filterCategory, searchQuery])
 
   const grouped = useMemo(() => {
     const result = { done: [], overdue_today: [], tomorrow: [], this_week: [], next_week: [], later: [], no_date: [] }
@@ -980,6 +984,15 @@ export default function TaskList() {
     <div className="card">
       {/* Toolbar */}
       <div className="toolbar">
+        <input
+          type="search"
+          placeholder="Search tasks…"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          style={{ ...inputStyle, width: '200px' }}
+          title="Search tasks by title or description"
+        />
+
         <span style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '.95rem' }}>Filter:</span>
 
         {STATUS_OPTIONS.map(s => (
