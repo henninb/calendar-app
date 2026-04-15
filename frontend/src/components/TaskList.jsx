@@ -339,6 +339,12 @@ const TaskRow = React.memo(function TaskRow({
               autoFocus
               type="date"
               defaultValue={task.due_date ?? ''}
+              onChange={e => {
+                if (e.target.value) {
+                  onPatchTask(task.id, { due_date: e.target.value })
+                  setEditingField(null)
+                }
+              }}
               onKeyDown={e => {
                 if (e.key === 'Enter') {
                   onPatchTask(task.id, { due_date: e.target.value || null })
