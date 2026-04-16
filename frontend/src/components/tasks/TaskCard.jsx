@@ -66,6 +66,82 @@ function OverflowMenu({ items }) {
   )
 }
 
+function SubtaskConfirmModal({ task, incompleteSubtasks, onCompleteAll, onDoneAnyway, onCancel }) {
+  // Close on Escape
+  useEffect(() => {
+    function handle(e) { if (e.key === 'Escape') onCancel() }
+    document.addEventListener('keydown', handle)
+    return () => document.removeEventListener('keydown', handle)
+  }, [onCancel])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={e => { if (e.target === e.currentTarget) onCancel() }}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+
+      {/* Card */}
+      <div className="relative w-full max-w-sm bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        {/* Header */}
+        <div className="px-5 pt-5 pb-4">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="mt-0.5 w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-500/15 flex items-center justify-center flex-shrink-0">
+              <span className="text-amber-600 dark:text-amber-400 text-base">⚠</span>
+            </div>
+            <div>
+              <p className="font-semibold text-slate-800 dark:text-slate-100 text-sm leading-snug">
+                Incomplete subtasks
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                "{task.title}" has {incompleteSubtasks.length} subtask{incompleteSubtasks.length !== 1 ? 's' : ''} still open.
+              </p>
+            </div>
+          </div>
+
+          {/* Subtask list */}
+          <ul className="space-y-1.5 pl-1">
+            {incompleteSubtasks.map(sub => (
+              <li key={sub.id} className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                <span className="w-3.5 h-3.5 rounded border-2 border-slate-300 dark:border-slate-600 flex-shrink-0" />
+                <span className="truncate">{sub.title}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Actions */}
+        <div className="px-5 pb-5 flex flex-col gap-2">
+          <button
+            onClick={onCompleteAll}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold
+              bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700
+              text-white transition-colors shadow-sm"
+          >
+            <span>✓</span> Complete all &amp; mark done
+          </button>
+          <button
+            onClick={onDoneAnyway}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold
+              bg-slate-100 hover:bg-slate-200 active:bg-slate-300
+              dark:bg-slate-700 dark:hover:bg-slate-600 dark:active:bg-slate-500
+              text-slate-700 dark:text-slate-200 transition-colors"
+          >
+            Mark done anyway
+          </button>
+          <button
+            onClick={onCancel}
+            className="w-full px-4 py-2 text-sm text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function TaskCard({
   task,
   expanded,
@@ -77,15 +153,33 @@ export default function TaskCard({
   persons,
 }) {
   const [editingField, setEditingField] = useState(null)
+  const [showSubtaskConfirm, setShowSubtaskConfirm] = useState(false)
 
   const overdue = isOverdue(task)
   const subtaskCount = task.subtasks?.length ?? 0
   const doneSubtasks = task.subtasks?.filter(s => s.status === 'done').length ?? 0
+  const incompleteSubtasks = task.subtasks?.filter(s => s.status !== 'done' && s.status !== 'cancelled') ?? []
 
-  const handleDone = useCallback(
-    () => onPatchTask(task.id, { status: 'done' }),
-    [onPatchTask, task.id],
-  )
+  const handleDone = useCallback(() => {
+    if (incompleteSubtasks.length > 0) {
+      setShowSubtaskConfirm(true)
+    } else {
+      onPatchTask(task.id, { status: 'done' })
+    }
+  }, [onPatchTask, task.id, incompleteSubtasks.length])
+
+  const handleCompleteAllAndDone = useCallback(async () => {
+    setShowSubtaskConfirm(false)
+    for (const sub of incompleteSubtasks) {
+      await onPatchSubtask(task.id, sub.id, { status: 'done' })
+    }
+    onPatchTask(task.id, { status: 'done' })
+  }, [onPatchSubtask, onPatchTask, task.id, incompleteSubtasks])
+
+  const handleDoneAnyway = useCallback(() => {
+    setShowSubtaskConfirm(false)
+    onPatchTask(task.id, { status: 'done' })
+  }, [onPatchTask, task.id])
 
   const daysBadge = (() => {
     if (!task.due_date || task.status === 'done' || task.status === 'cancelled') return null
@@ -342,8 +436,8 @@ export default function TaskCard({
           </div>
         )}
 
-        {/* Row 4: subtask progress bar + expand toggle */}
-        {subtaskCount > 0 && (
+        {/* Row 4: subtask progress bar + expand toggle — or add-subtask nudge */}
+        {subtaskCount > 0 ? (
           <div className="flex items-center gap-2.5 mt-3.5 ml-9">
             <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
               <div
@@ -361,8 +455,26 @@ export default function TaskCard({
               {expanded ? '▾ hide' : '▸ subtasks'}
             </button>
           </div>
+        ) : !isDimmed && (
+          <button
+            onClick={() => onEdit(task)}
+            className="mt-3 ml-9 flex items-center gap-1 text-xs text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100"
+          >
+            <span>+</span> Add subtask
+          </button>
         )}
       </div>
+
+      {/* Subtask completion confirmation modal */}
+      {showSubtaskConfirm && (
+        <SubtaskConfirmModal
+          task={task}
+          incompleteSubtasks={incompleteSubtasks}
+          onCompleteAll={handleCompleteAllAndDone}
+          onDoneAnyway={handleDoneAnyway}
+          onCancel={() => setShowSubtaskConfirm(false)}
+        />
+      )}
 
       {/* Expanded: description + subtask checklist */}
       {expanded && subtaskCount > 0 && (
