@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import CalendarView from './components/CalendarView'
 import OccurrenceList from './components/OccurrenceList'
 import CreditCardTracker from './components/CreditCardTracker'
-import TaskList from './components/TaskList'
+import TaskList from './components/tasks/TaskList'
 import ConfigPage, { loadConfig } from './components/ConfigPage'
 import { generateAll, gcalAuthStatus, syncToGcal, deleteAllGcalEvents, wipeAllGcalEvents, syncToGtasks } from './api'
 

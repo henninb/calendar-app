@@ -1,0 +1,435 @@
+import React, {
+  useState, useEffect, useCallback, useMemo, useRef, useReducer,
+} from 'react'
+import {
+  fetchTasks, fetchPersons, fetchCategories,
+  createTask, updateTask, deleteTask,
+  createSubtask, updateSubtask, deleteSubtask,
+} from '../../api'
+import {
+  SECTION_DEFS, TASK_FETCH_LIMIT, STATUS_OPTIONS, localDate,
+} from './helpers'
+import TaskToolbar from './TaskToolbar'
+import TaskSection from './TaskSection'
+import TaskPanel from './TaskPanel'
+import UndoToast from './UndoToast'
+import { useUndoStack } from './useUndoStack'
+
+// ── Undo helpers ───────────────────────────────────────────────────────────
+
+function undoDescription(title, data) {
+  if (data.status === 'done')        return `"${title}" marked as done`
+  if (data.status === 'in_progress') return `"${title}" started`
+  if (data.status === 'cancelled')   return `"${title}" cancelled`
+  if (data.status === 'todo')        return `"${title}" reopened`
+  if ('due_date' in data)            return `Due date changed on "${title}"`
+  if ('assignee_id' in data)         return `Assignee changed on "${title}"`
+  if ('estimated_minutes' in data)   return `Duration changed on "${title}"`
+  return `"${title}" updated`
+}
+
+// Builds the reverse payload by mapping each changed key back to its prior value
+function reversePayload(prior, data) {
+  const rev = {}
+  for (const key of Object.keys(data)) rev[key] = prior[key] ?? null
+  return rev
+}
+
+export default function TaskList() {
+  const [tasks, setTasks]                   = useState([])
+  const [persons, setPersons]               = useState([])
+  const [categories, setCategories]         = useState([])
+  const [filterStatus, setFilterStatus]     = useState(['todo', 'in_progress'])
+  const [filterAssignee, setFilterAssignee] = useState('')
+  const [filterCategory, setFilterCategory] = useState('')
+  const [searchQuery, setSearchQuery]       = useState('')
+  const [collapsedSections, setCollapsedSections] = useState({})
+  const [expandedCards, setExpandedCards]   = useState({})
+  const [panel, setPanel]                   = useState({ open: false, mode: 'create', task: null })
+  const [loading, setLoading]               = useState(true)
+  const [error, setError]                   = useState(null)
+
+  // Mirror tasks into a ref so stable callbacks can read the latest value
+  // without declaring tasks as a dependency (avoids callback churn).
+  const tasksRef = useRef(tasks)
+  tasksRef.current = tasks
+
+  const { push: pushUndo, undo, canUndo, lastAction, dismissToast } = useUndoStack()
+
+  // Ctrl+Z / Cmd+Z — undo is a no-op when the stack is empty
+  useEffect(() => {
+    function handle(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undo()
+      }
+    }
+    document.addEventListener('keydown', handle)
+    return () => document.removeEventListener('keydown', handle)
+  }, [undo])
+
+  // Tick every minute so urgency badges stay accurate on idle tabs
+  const [, tick] = useReducer(x => x + 1, 0)
+  useEffect(() => {
+    const id = setInterval(tick, 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const abortRef = useRef(null)
+
+  const load = useCallback(async () => {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    const { signal } = controller
+
+    setLoading(true)
+    setError(null)
+    try {
+      const [t, p, c] = await Promise.all([
+        fetchTasks({}, signal),
+        fetchPersons(signal),
+        fetchCategories(signal),
+      ])
+      if (t.length >= TASK_FETCH_LIMIT) {
+        console.warn(`[TaskList] hit fetch limit (${TASK_FETCH_LIMIT})`)
+      }
+      setTasks(t)
+      setPersons(p)
+      setCategories(c)
+    } catch (err) {
+      if (err.name === 'AbortError') return
+      console.error('[TaskList] load failed:', err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+    return () => abortRef.current?.abort()
+  }, [load])
+
+  // ── Date anchors (recomputed on each tick) ─────────────────────────────────
+  const today    = localDate(0)
+  const tomorrow = localDate(1)
+  const week1end = localDate(7)
+  const week2end = localDate(14)
+
+  // ── Filtered + sorted tasks ───────────────────────────────────────────────
+  const visible = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return tasks
+      .filter(t => {
+        if (filterStatus.length && !filterStatus.includes(t.status)) return false
+        if (filterAssignee === 'unassigned') { if (t.assignee_id != null) return false }
+        else if (filterAssignee && String(t.assignee_id) !== filterAssignee) return false
+        if (filterCategory && String(t.category_id) !== filterCategory) return false
+        if (q && !t.title.toLowerCase().includes(q) && !(t.description || '').toLowerCase().includes(q)) return false
+        return true
+      })
+      .sort((a, b) => {
+        if (!a.due_date && !b.due_date) return 0
+        if (!a.due_date) return 1
+        if (!b.due_date) return -1
+        return a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0
+      })
+  }, [tasks, filterStatus, filterAssignee, filterCategory, searchQuery])
+
+  const grouped = useMemo(() => {
+    const result = { done: [], overdue_today: [], tomorrow: [], this_week: [], next_week: [], later: [], no_date: [] }
+    for (const task of visible) {
+      if (task.status === 'done') {
+        result.done.push(task)
+      } else if (!task.due_date) {
+        result.no_date.push(task)
+      } else if (task.due_date <= today) {
+        result.overdue_today.push(task)
+      } else if (task.due_date === tomorrow) {
+        result.tomorrow.push(task)
+      } else if (task.due_date <= week1end) {
+        result.this_week.push(task)
+      } else if (task.due_date <= week2end) {
+        result.next_week.push(task)
+      } else {
+        result.later.push(task)
+      }
+    }
+    return result
+  }, [visible, today, tomorrow, week1end, week2end])
+
+  // ── Stable event handlers ─────────────────────────────────────────────────
+
+  const toggleStatus = useCallback(s =>
+    setFilterStatus(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]),
+  [])
+
+  const toggleSection = useCallback((key, isEmpty) =>
+    setCollapsedSections(p => {
+      const current = p[key] !== undefined ? p[key] : isEmpty
+      return { ...p, [key]: !current }
+    }),
+  [])
+
+  const toggleExpand = useCallback(id =>
+    setExpandedCards(p => ({ ...p, [id]: !p[id] })),
+  [])
+
+  const openCreate = useCallback(() => setPanel({ open: true, mode: 'create', task: null }), [])
+  const openEdit   = useCallback(task => setPanel({ open: true, mode: 'edit', task }), [])
+  const closePanel = useCallback(() => setPanel(p => ({ ...p, open: false })), [])
+
+  const handleCreateTask = useCallback(async payload => {
+    try {
+      const created = await createTask(payload)
+      setTasks(prev => [created, ...prev])
+      closePanel()
+    } catch (err) {
+      console.error('[TaskList] createTask failed:', err)
+      setError(err.message)
+    }
+  }, [closePanel])
+
+  const handleUpdateTask = useCallback(async (taskId, payload) => {
+    try {
+      const updated = await updateTask(taskId, payload)
+      if (payload.status === 'done') {
+        await load() // reload for recurrence
+      } else {
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updated } : t))
+        // Sync panel task reference so subtasks stay current
+        setPanel(p => p.task?.id === taskId ? { ...p, task: { ...p.task, ...updated } } : p)
+      }
+      closePanel()
+    } catch (err) {
+      console.error(`[TaskList] updateTask(${taskId}) failed:`, err)
+      setError(err.message)
+    }
+  }, [load, closePanel])
+
+  const patchTask = useCallback(async (taskId, data) => {
+    const prevTask = tasksRef.current.find(t => t.id === taskId)
+    try {
+      const updated = await updateTask(taskId, data)
+      if (data.status === 'done') {
+        await load()
+      } else {
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updated } : t))
+      }
+      // Only push undo after the API call succeeds
+      if (prevTask) {
+        pushUndo({
+          description: undoDescription(prevTask.title, data),
+          undo: async () => {
+            const revert = reversePayload(prevTask, data)
+            const reverted = await updateTask(taskId, revert)
+            setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...reverted } : t))
+          },
+        })
+      }
+    } catch (err) {
+      console.error(`[TaskList] patchTask(${taskId}) failed:`, err)
+      setError(err.message)
+    }
+  }, [load, pushUndo])
+
+  const deleteTaskCb = useCallback(async taskId => {
+    if (!window.confirm('Delete this task?')) return
+    try {
+      await deleteTask(taskId)
+      setTasks(prev => prev.filter(t => t.id !== taskId))
+    } catch (err) {
+      console.error(`[TaskList] deleteTask(${taskId}) failed:`, err)
+      setError(err.message)
+    }
+  }, [])
+
+  const patchSubtask = useCallback(async (taskId, subtaskId, data) => {
+    const prevTask = tasksRef.current.find(t => t.id === taskId)
+    const prevSub  = prevTask?.subtasks?.find(s => s.id === subtaskId)
+    try {
+      const updated = await updateSubtask(taskId, subtaskId, data)
+      const applyUpdate = subs => subs.map(s => s.id === subtaskId ? updated : s)
+      setTasks(prev => prev.map(t =>
+        t.id === taskId ? { ...t, subtasks: applyUpdate(t.subtasks) } : t
+      ))
+      setPanel(p =>
+        p.task?.id === taskId
+          ? { ...p, task: { ...p.task, subtasks: applyUpdate(p.task.subtasks) } }
+          : p
+      )
+      // Push undo after success
+      if (prevSub) {
+        const desc = data.status === 'done'
+          ? `Subtask "${prevSub.title}" checked`
+          : data.status === 'todo'
+          ? `Subtask "${prevSub.title}" unchecked`
+          : `Subtask "${prevSub.title}" updated`
+        pushUndo({
+          description: desc,
+          undo: async () => {
+            const revert  = reversePayload(prevSub, data)
+            const reverted = await updateSubtask(taskId, subtaskId, revert)
+            const applyRevert = subs => subs.map(s => s.id === subtaskId ? reverted : s)
+            setTasks(prev => prev.map(t =>
+              t.id === taskId ? { ...t, subtasks: applyRevert(t.subtasks) } : t
+            ))
+            setPanel(p =>
+              p.task?.id === taskId
+                ? { ...p, task: { ...p.task, subtasks: applyRevert(p.task.subtasks) } }
+                : p
+            )
+          },
+        })
+      }
+    } catch (err) {
+      console.error(`[TaskList] patchSubtask failed:`, err)
+      setError(err.message)
+    }
+  }, [pushUndo])
+
+  const addSubtask = useCallback(async (taskId, title) => {
+    try {
+      const sub = await createSubtask(taskId, { title })
+      const updater = t => t.id === taskId ? { ...t, subtasks: [...(t.subtasks ?? []), sub] } : t
+      setTasks(prev => prev.map(updater))
+      setPanel(p => p.task?.id === taskId ? { ...p, task: updater(p.task) } : p)
+    } catch (err) {
+      console.error(`[TaskList] createSubtask(${taskId}) failed:`, err)
+      setError(err.message)
+    }
+  }, [])
+
+  const deleteSubtaskCb = useCallback(async (taskId, subtaskId) => {
+    try {
+      await deleteSubtask(taskId, subtaskId)
+      const updater = t => t.id === taskId ? { ...t, subtasks: t.subtasks.filter(s => s.id !== subtaskId) } : t
+      setTasks(prev => prev.map(updater))
+      setPanel(p => p.task?.id === taskId ? { ...p, task: updater(p.task) } : p)
+    } catch (err) {
+      console.error(`[TaskList] deleteSubtask failed:`, err)
+      setError(err.message)
+    }
+  }, [])
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <div className="max-w-4xl mx-auto">
+      <TaskToolbar
+        searchQuery={searchQuery}
+        onSearch={setSearchQuery}
+        filterStatus={filterStatus}
+        onToggleStatus={toggleStatus}
+        filterAssignee={filterAssignee}
+        onFilterAssignee={setFilterAssignee}
+        filterCategory={filterCategory}
+        onFilterCategory={setFilterCategory}
+        persons={persons}
+        categories={categories}
+        loading={loading}
+        onRefresh={load}
+        onNewTask={openCreate}
+      />
+
+      {/* Error banner */}
+      {error && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 mb-4 rounded-xl
+          bg-red-50 dark:bg-red-950/30
+          border border-red-200 dark:border-red-900/60
+          text-red-700 dark:text-red-400 text-sm">
+          <span>{error}</span>
+          <button
+            onClick={() => setError(null)}
+            aria-label="Dismiss error"
+            className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors flex-shrink-0"
+          >✕</button>
+        </div>
+      )}
+
+      {/* Fetch-limit warning */}
+      {!loading && tasks.length >= TASK_FETCH_LIMIT && (
+        <div className="px-4 py-3 mb-4 rounded-xl
+          bg-amber-50 dark:bg-amber-950/20
+          border border-amber-200 dark:border-amber-900/50
+          text-amber-700 dark:text-amber-400 text-sm">
+          Showing the first {TASK_FETCH_LIMIT} tasks — some may not be visible.
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="py-16 text-center text-slate-400 dark:text-slate-500 text-sm animate-pulse">
+          Loading tasks…
+        </div>
+      )}
+
+      {/* All filters off */}
+      {!loading && filterStatus.length === 0 && (
+        <div className="py-16 text-center text-slate-400 dark:text-slate-500 text-sm italic">
+          All status filters are off — enable at least one to see tasks.
+        </div>
+      )}
+
+      {/* No results */}
+      {!loading && filterStatus.length > 0 && visible.length === 0 && (
+        <div className="py-16 text-center text-slate-400 dark:text-slate-500 text-sm italic">
+          No tasks match the current filters.
+        </div>
+      )}
+
+      {/* Sections */}
+      {!loading && filterStatus.length > 0 && visible.length > 0 && (
+        <div>
+          {SECTION_DEFS.map(({ key, label, hideWhenEmpty }) => {
+            const sectionTasks = grouped[key]
+            const isEmpty = sectionTasks.length === 0
+            if (hideWhenEmpty && isEmpty) return null
+            const isCollapsed = collapsedSections[key] !== undefined
+              ? collapsedSections[key]
+              : key !== 'overdue_today'
+            return (
+              <TaskSection
+                key={key}
+                sectionKey={key}
+                label={label}
+                tasks={sectionTasks}
+                collapsed={isCollapsed}
+                onToggleCollapse={() => toggleSection(key, isEmpty)}
+                expandedCards={expandedCards}
+                onToggleExpand={toggleExpand}
+                onEdit={openEdit}
+                onPatchTask={patchTask}
+                onDeleteTask={deleteTaskCb}
+                onPatchSubtask={patchSubtask}
+                persons={persons}
+              />
+            )
+          })}
+        </div>
+      )}
+
+      {/* Side panel */}
+      <TaskPanel
+        open={panel.open}
+        mode={panel.mode}
+        task={panel.task}
+        onClose={closePanel}
+        onCreateTask={handleCreateTask}
+        onUpdateTask={handleUpdateTask}
+        persons={persons}
+        categories={categories}
+        onPatchSubtask={patchSubtask}
+        onAddSubtask={addSubtask}
+        onDeleteSubtask={deleteSubtaskCb}
+      />
+
+      {/* Undo toast — appears after every undoable action */}
+      <UndoToast
+        action={lastAction}
+        onUndo={undo}
+        onDismiss={dismissToast}
+      />
+    </div>
+  )
+}

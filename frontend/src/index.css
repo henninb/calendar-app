@@ -1,3 +1,8 @@
+@import "tailwindcss";
+
+/* Tie Tailwind's dark: variant to the existing data-theme attribute */
+@variant dark ([data-theme=dark] &);
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 /* ── Theme tokens ── */
