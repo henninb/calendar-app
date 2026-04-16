@@ -116,3 +116,7 @@ categories:
     color: "#f97316"
     icon: "📍"
     description: "Local community events and activities"
+  - name: health
+    color: "#10b981"
+    icon: "💪"
+    description: "Health, fitness, and wellness activities"

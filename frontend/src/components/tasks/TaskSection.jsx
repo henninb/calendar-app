@@ -76,7 +76,11 @@ export default function TaskSection({
   onPatchTask,
   onDeleteTask,
   onPatchSubtask,
+  onAddSubtask,
+  onDeleteSubtask,
+  onReorderSubtasks,
   persons,
+  categories,
 }) {
   const count = tasks.length
   const accent = SECTION_ACCENT[sectionKey] ?? SECTION_ACCENT.later
@@ -133,7 +137,11 @@ export default function TaskSection({
               onPatchTask={onPatchTask}
               onDeleteTask={onDeleteTask}
               onPatchSubtask={onPatchSubtask}
+              onAddSubtask={onAddSubtask}
+              onDeleteSubtask={onDeleteSubtask}
+              onReorderSubtasks={onReorderSubtasks}
               persons={persons}
+              categories={categories}
             />
           ))}
         </div>

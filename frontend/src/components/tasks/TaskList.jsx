@@ -8,32 +8,13 @@ import {
 } from '../../api'
 import {
   SECTION_DEFS, TASK_FETCH_LIMIT, STATUS_OPTIONS, localDate,
+  undoDescription, reversePayload,
 } from './helpers'
 import TaskToolbar from './TaskToolbar'
 import TaskSection from './TaskSection'
 import TaskPanel from './TaskPanel'
 import UndoToast from './UndoToast'
 import { useUndoStack } from './useUndoStack'
-
-// ── Undo helpers ───────────────────────────────────────────────────────────
-
-function undoDescription(title, data) {
-  if (data.status === 'done')        return `"${title}" marked as done`
-  if (data.status === 'in_progress') return `"${title}" started`
-  if (data.status === 'cancelled')   return `"${title}" cancelled`
-  if (data.status === 'todo')        return `"${title}" reopened`
-  if ('due_date' in data)            return `Due date changed on "${title}"`
-  if ('assignee_id' in data)         return `Assignee changed on "${title}"`
-  if ('estimated_minutes' in data)   return `Duration changed on "${title}"`
-  return `"${title}" updated`
-}
-
-// Builds the reverse payload by mapping each changed key back to its prior value
-function reversePayload(prior, data) {
-  const rev = {}
-  for (const key of Object.keys(data)) rev[key] = prior[key] ?? null
-  return rev
-}
 
 export default function TaskList() {
   const [tasks, setTasks]                   = useState([])
@@ -302,13 +283,56 @@ export default function TaskList() {
   }, [])
 
   const deleteSubtaskCb = useCallback(async (taskId, subtaskId) => {
+    const prevTask = tasksRef.current.find(t => t.id === taskId)
+    const prevSub  = prevTask?.subtasks?.find(s => s.id === subtaskId)
     try {
       await deleteSubtask(taskId, subtaskId)
       const updater = t => t.id === taskId ? { ...t, subtasks: t.subtasks.filter(s => s.id !== subtaskId) } : t
       setTasks(prev => prev.map(updater))
       setPanel(p => p.task?.id === taskId ? { ...p, task: updater(p.task) } : p)
+      if (prevSub) {
+        pushUndo({
+          description: `Subtask "${prevSub.title}" deleted`,
+          undo: async () => {
+            const restored = await createSubtask(taskId, {
+              title:     prevSub.title,
+              status:    prevSub.status,
+              due_date:  prevSub.due_date ?? null,
+              order:     prevSub.order,
+            })
+            const applyRestore = t => t.id === taskId
+              ? { ...t, subtasks: [...(t.subtasks ?? []), restored] }
+              : t
+            setTasks(prev => prev.map(applyRestore))
+            setPanel(p => p.task?.id === taskId ? { ...p, task: applyRestore(p.task) } : p)
+          },
+        })
+      }
     } catch (err) {
       console.error(`[TaskList] deleteSubtask failed:`, err)
+      setError(err.message)
+    }
+  }, [pushUndo])
+
+  const reorderSubtasks = useCallback(async (taskId, reorderedSubs) => {
+    // Optimistic update — assign order by position index
+    const withOrder = reorderedSubs.map((s, i) => ({ ...s, order: i }))
+    const updater = t => t.id === taskId ? { ...t, subtasks: withOrder } : t
+    setTasks(prev => prev.map(updater))
+    setPanel(p => p.task?.id === taskId ? { ...p, task: updater(p.task) } : p)
+    // Persist — only patch subtasks whose order actually changed
+    const original = tasksRef.current.find(t => t.id === taskId)?.subtasks ?? []
+    try {
+      await Promise.all(
+        withOrder
+          .filter(s => {
+            const prev = original.find(o => o.id === s.id)
+            return prev && prev.order !== s.order
+          })
+          .map(s => updateSubtask(taskId, s.id, { order: s.order }))
+      )
+    } catch (err) {
+      console.error(`[TaskList] reorderSubtasks failed:`, err)
       setError(err.message)
     }
   }, [])
@@ -402,7 +426,11 @@ export default function TaskList() {
                 onPatchTask={patchTask}
                 onDeleteTask={deleteTaskCb}
                 onPatchSubtask={patchSubtask}
+                onAddSubtask={addSubtask}
+                onDeleteSubtask={deleteSubtaskCb}
+                onReorderSubtasks={reorderSubtasks}
                 persons={persons}
+                categories={categories}
               />
             )
           })}

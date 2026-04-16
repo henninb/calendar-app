@@ -12,5 +12,9 @@ export default defineConfig({
     proxy: {
       '/api': `http://localhost:${backendPort}`
     }
-  }
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+  },
 })

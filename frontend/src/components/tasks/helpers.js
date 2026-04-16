@@ -52,3 +52,31 @@ export function emptyTask() {
     assignee_id: '', category_id: '', recurrence: 'none',
   }
 }
+
+export function undoDescription(title, data) {
+  if (data.status === 'done')        return `"${title}" marked as done`
+  if (data.status === 'in_progress') return `"${title}" started`
+  if (data.status === 'cancelled')   return `"${title}" cancelled`
+  if (data.status === 'todo')        return `"${title}" reopened`
+  if ('title' in data)               return `"${title}" renamed`
+  if ('category_id' in data)         return `Category changed on "${title}"`
+  if ('due_date' in data)            return `Due date changed on "${title}"`
+  if ('assignee_id' in data)         return `Assignee changed on "${title}"`
+  if ('estimated_minutes' in data)   return `Duration changed on "${title}"`
+  return `"${title}" updated`
+}
+
+export function reversePayload(prior, data) {
+  const rev = {}
+  for (const key of Object.keys(data)) rev[key] = prior[key] ?? null
+  return rev
+}
+
+export function getDaysBadge(task, now = new Date()) {
+  if (!task.due_date || task.status === 'done' || task.status === 'cancelled') return null
+  const diff = Math.ceil((new Date(task.due_date + 'T00:00:00') - now) / 86400000)
+  if (diff < 0) return { text: `${Math.abs(diff)}d overdue`, cls: 'text-red-500 dark:text-red-400 font-semibold' }
+  if (diff === 0) return { text: 'today', cls: 'text-amber-500 dark:text-amber-400 font-semibold' }
+  if (diff <= 3) return { text: `${diff}d`, cls: 'text-amber-500 dark:text-amber-400' }
+  return { text: `${diff}d`, cls: 'text-slate-400 dark:text-slate-500' }
+}
