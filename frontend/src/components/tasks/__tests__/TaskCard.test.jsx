@@ -1,0 +1,380 @@
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent, within } from '@testing-library/react'
+import TaskCard from '../TaskCard'
+
+// Mock DnD-kit so jsdom doesn't need a real pointer-events implementation.
+vi.mock('@dnd-kit/core', () => ({
+  DndContext: ({ children }) => children,
+  closestCenter: {},
+  MouseSensor: class {},
+  TouchSensor: class {},
+  useSensor: () => ({}),
+  useSensors: () => [],
+}))
+vi.mock('@dnd-kit/sortable', () => ({
+  SortableContext: ({ children }) => children,
+  verticalListSortingStrategy: {},
+  useSortable: () => ({
+    attributes: {}, listeners: {}, setNodeRef: () => {},
+    transform: null, transition: undefined, isDragging: false,
+  }),
+  arrayMove: (arr, from, to) => {
+    const a = [...arr]; a.splice(to, 0, a.splice(from, 1)[0]); return a
+  },
+}))
+vi.mock('@dnd-kit/utilities', () => ({
+  CSS: { Transform: { toString: () => undefined } },
+}))
+
+// ── Fixtures ──────────────────────────────────────────────────────────────────
+
+const baseTask = {
+  id: 1, title: 'Buy groceries', description: null,
+  priority: 'medium', status: 'todo',
+  due_date: '2099-12-31', estimated_minutes: null,
+  assignee_id: null, assignee: null,
+  category_id: null, category: null,
+  recurrence: 'none', subtasks: [],
+}
+
+const baseCallbacks = {
+  expanded: false,
+  onToggleExpand: vi.fn(),
+  onEdit: vi.fn(),
+  onPatchTask: vi.fn(),
+  onDeleteTask: vi.fn(),
+  onPatchSubtask: vi.fn(),
+  onAddSubtask: vi.fn(),
+  onDeleteSubtask: vi.fn(),
+  onReorderSubtasks: vi.fn(),
+  persons: [],
+  categories: [],
+}
+
+function renderCard(taskOverrides = {}, propOverrides = {}) {
+  const task = { ...baseTask, ...taskOverrides }
+  const cbs  = {
+    ...baseCallbacks,
+    // give each test fresh mocks so call counts don't bleed between tests
+    onToggleExpand:   vi.fn(),
+    onEdit:           vi.fn(),
+    onPatchTask:      vi.fn(),
+    onDeleteTask:     vi.fn(),
+    onPatchSubtask:   vi.fn(),
+    onAddSubtask:     vi.fn(),
+    onDeleteSubtask:  vi.fn(),
+    onReorderSubtasks: vi.fn(),
+    ...propOverrides,
+  }
+  return { ...render(<TaskCard task={task} {...cbs} />), task, cbs }
+}
+
+// ── Basic rendering ───────────────────────────────────────────────────────────
+
+describe('TaskCard — basic rendering', () => {
+  it('renders the task title', () => {
+    renderCard()
+    expect(screen.getByText('Buy groceries')).toBeInTheDocument()
+  })
+
+  it('renders the correct status pill label for each status', () => {
+    const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', done: 'Done', cancelled: 'Cancelled' }
+    for (const [status, label] of Object.entries(STATUS_LABELS)) {
+      const { unmount } = renderCard({ status })
+      expect(screen.getByText(label)).toBeInTheDocument()
+      unmount()
+    }
+  })
+
+  it('shows the circular done-button for active tasks', () => {
+    renderCard({ status: 'todo' })
+    expect(screen.getByTitle('Mark as done')).toBeInTheDocument()
+  })
+
+  it('shows a checkmark icon instead of done-button for done tasks', () => {
+    renderCard({ status: 'done' })
+    // Action button replaced by filled circle indicator; ✓ also appears in status pill
+    expect(screen.queryByTitle('Mark as done')).not.toBeInTheDocument()
+    expect(screen.getAllByText('✓').length).toBeGreaterThan(0)
+  })
+
+  it('renders a category badge when task has a category', () => {
+    const task = {
+      ...baseTask,
+      category: { name: 'medical', icon: '🏥', color: '#ec4899' },
+    }
+    renderCard(task)
+    expect(screen.getByText('🏥 medical')).toBeInTheDocument()
+  })
+
+  it('renders a recurrence badge when recurrence is set', () => {
+    renderCard({ recurrence: 'weekly' })
+    expect(screen.getByText('↻ weekly')).toBeInTheDocument()
+  })
+})
+
+// ── Mark-done flow ────────────────────────────────────────────────────────────
+
+describe('TaskCard — mark-done flow', () => {
+  it('calls onPatchTask with status done when no incomplete subtasks', () => {
+    const { cbs } = renderCard({ subtasks: [] })
+    fireEvent.click(screen.getByTitle('Mark as done'))
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'done' })
+  })
+
+  it('opens the SubtaskConfirmModal when there are incomplete subtasks', () => {
+    renderCard({
+      subtasks: [
+        { id: 10, title: 'Step A', status: 'todo', order: 0, due_date: null },
+      ],
+    })
+    fireEvent.click(screen.getByTitle('Mark as done'))
+    expect(screen.getByText('Incomplete subtasks')).toBeInTheDocument()
+  })
+
+  it('modal lists incomplete subtask titles', () => {
+    renderCard({
+      subtasks: [
+        { id: 10, title: 'Step A', status: 'todo',      order: 0, due_date: null },
+        { id: 11, title: 'Step B', status: 'done',      order: 1, due_date: null },
+        { id: 12, title: 'Step C', status: 'cancelled', order: 2, due_date: null },
+      ],
+    })
+    fireEvent.click(screen.getByTitle('Mark as done'))
+    expect(screen.getByText('Step A')).toBeInTheDocument()
+    expect(screen.queryByText('Step B')).not.toBeInTheDocument()
+    expect(screen.queryByText('Step C')).not.toBeInTheDocument()
+  })
+
+  it('"Mark done anyway" button patches task and closes modal', () => {
+    const { cbs } = renderCard({
+      subtasks: [{ id: 10, title: 'Step A', status: 'todo', order: 0, due_date: null }],
+    })
+    fireEvent.click(screen.getByTitle('Mark as done'))
+    fireEvent.click(screen.getByText('Mark done anyway'))
+
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'done' })
+    expect(screen.queryByText('Incomplete subtasks')).not.toBeInTheDocument()
+  })
+
+  it('"Cancel" button closes modal without calling onPatchTask', () => {
+    const { cbs } = renderCard({
+      subtasks: [{ id: 10, title: 'Step A', status: 'todo', order: 0, due_date: null }],
+    })
+    fireEvent.click(screen.getByTitle('Mark as done'))
+    fireEvent.click(screen.getByText('Cancel'))
+
+    expect(cbs.onPatchTask).not.toHaveBeenCalled()
+    expect(screen.queryByText('Incomplete subtasks')).not.toBeInTheDocument()
+  })
+
+  it('Escape key closes the modal', () => {
+    renderCard({
+      subtasks: [{ id: 10, title: 'Step A', status: 'todo', order: 0, due_date: null }],
+    })
+    fireEvent.click(screen.getByTitle('Mark as done'))
+    expect(screen.getByText('Incomplete subtasks')).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByText('Incomplete subtasks')).not.toBeInTheDocument()
+  })
+})
+
+// ── Start button ──────────────────────────────────────────────────────────────
+
+describe('TaskCard — Start button', () => {
+  it('shows Start button for todo tasks', () => {
+    renderCard({ status: 'todo' })
+    expect(screen.getByTitle('Start task')).toBeInTheDocument()
+  })
+
+  it('hides Start button for in_progress tasks', () => {
+    renderCard({ status: 'in_progress' })
+    expect(screen.queryByTitle('Start task')).not.toBeInTheDocument()
+  })
+
+  it('hides Start button for done tasks', () => {
+    renderCard({ status: 'done' })
+    expect(screen.queryByTitle('Start task')).not.toBeInTheDocument()
+  })
+
+  it('clicking Start button calls onPatchTask with in_progress', () => {
+    const { cbs } = renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('Start task'))
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'in_progress' })
+  })
+})
+
+// ── Inline title editing ──────────────────────────────────────────────────────
+
+describe('TaskCard — inline title editing', () => {
+  it('double-clicking the title enters edit mode (shows input)', () => {
+    renderCard({ status: 'todo' })
+    const titleSpan = screen.getByText('Buy groceries')
+    fireEvent.dblClick(titleSpan)
+    expect(screen.getByDisplayValue('Buy groceries')).toBeInTheDocument()
+  })
+
+  it('pressing Escape cancels editing without calling onPatchTask', () => {
+    const { cbs } = renderCard({ status: 'todo' })
+    fireEvent.dblClick(screen.getByText('Buy groceries'))
+    fireEvent.keyDown(screen.getByDisplayValue('Buy groceries'), { key: 'Escape' })
+
+    expect(cbs.onPatchTask).not.toHaveBeenCalled()
+    expect(screen.queryByDisplayValue('Buy groceries')).not.toBeInTheDocument()
+  })
+
+  it('pressing Enter with a changed title calls onPatchTask', () => {
+    const { cbs } = renderCard({ status: 'todo' })
+    fireEvent.dblClick(screen.getByText('Buy groceries'))
+    const input = screen.getByDisplayValue('Buy groceries')
+    fireEvent.change(input, { target: { value: 'Buy organic groceries' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { title: 'Buy organic groceries' })
+  })
+
+  it('pressing Enter with an unchanged title does NOT call onPatchTask', () => {
+    const { cbs } = renderCard({ status: 'todo' })
+    fireEvent.dblClick(screen.getByText('Buy groceries'))
+    fireEvent.keyDown(screen.getByDisplayValue('Buy groceries'), { key: 'Enter' })
+
+    expect(cbs.onPatchTask).not.toHaveBeenCalled()
+  })
+
+  it('does NOT enter edit mode on double-click for done tasks', () => {
+    renderCard({ status: 'done' })
+    const titleSpan = screen.getByText('Buy groceries')
+    fireEvent.dblClick(titleSpan)
+    expect(screen.queryByDisplayValue('Buy groceries')).not.toBeInTheDocument()
+  })
+
+  it('does NOT enter edit mode on double-click for cancelled tasks', () => {
+    renderCard({ status: 'cancelled' })
+    const titleSpan = screen.getByText('Buy groceries')
+    fireEvent.dblClick(titleSpan)
+    expect(screen.queryByDisplayValue('Buy groceries')).not.toBeInTheDocument()
+  })
+})
+
+// ── Subtask progress & expansion ──────────────────────────────────────────────
+
+describe('TaskCard — subtasks', () => {
+  const subtasks = [
+    { id: 10, title: 'Milk', status: 'done', order: 0, due_date: null },
+    { id: 11, title: 'Eggs', status: 'todo', order: 1, due_date: null },
+  ]
+
+  it('shows a subtask progress counter when subtasks exist', () => {
+    renderCard({ subtasks })
+    expect(screen.getByText('1/2')).toBeInTheDocument()
+  })
+
+  it('shows the expand toggle when subtasks exist', () => {
+    renderCard({ subtasks })
+    expect(screen.getByText('▸ subtasks')).toBeInTheDocument()
+  })
+
+  it('clicking expand toggle calls onToggleExpand with task id', () => {
+    const { cbs } = renderCard({ subtasks })
+    fireEvent.click(screen.getByText('▸ subtasks'))
+    expect(cbs.onToggleExpand).toHaveBeenCalledWith(1)
+  })
+
+  it('renders subtask titles when expanded', () => {
+    renderCard({ subtasks }, { expanded: true })
+    expect(screen.getByText('Milk')).toBeInTheDocument()
+    expect(screen.getByText('Eggs')).toBeInTheDocument()
+  })
+
+  it('renders the add-subtask input when expanded', () => {
+    renderCard({ subtasks }, { expanded: true })
+    expect(screen.getByPlaceholderText('Add subtask…')).toBeInTheDocument()
+  })
+
+  it('add-subtask button is disabled when the input is empty', () => {
+    renderCard({ subtasks }, { expanded: true })
+    const addBtn = screen.getByText('Add').closest('button')
+    expect(addBtn).toBeDisabled()
+  })
+
+  it('add-subtask button is enabled after typing in the input', () => {
+    renderCard({ subtasks }, { expanded: true })
+    fireEvent.change(screen.getByPlaceholderText('Add subtask…'), {
+      target: { value: 'Bread' },
+    })
+    const addBtn = screen.getByText('Add').closest('button')
+    expect(addBtn).not.toBeDisabled()
+  })
+
+  it('pressing Enter in the add-subtask input calls onAddSubtask', () => {
+    const { cbs } = renderCard({ subtasks }, { expanded: true })
+    fireEvent.change(screen.getByPlaceholderText('Add subtask…'), {
+      target: { value: 'Bread' },
+    })
+    fireEvent.keyDown(screen.getByPlaceholderText('Add subtask…'), { key: 'Enter' })
+    expect(cbs.onAddSubtask).toHaveBeenCalledWith(1, 'Bread')
+  })
+
+  it('shows task description when expanded and description is present', () => {
+    renderCard({ subtasks, description: 'From the corner store' }, { expanded: true })
+    expect(screen.getByText('From the corner store')).toBeInTheDocument()
+  })
+})
+
+// ── Overflow menu ─────────────────────────────────────────────────────────────
+
+describe('TaskCard — overflow menu', () => {
+  it('overflow menu is hidden by default', () => {
+    renderCard()
+    expect(screen.queryByText('Edit')).not.toBeInTheDocument()
+  })
+
+  it('clicking "···" opens the overflow menu', () => {
+    renderCard()
+    fireEvent.click(screen.getByTitle('More actions'))
+    expect(screen.getByText('Edit')).toBeInTheDocument()
+  })
+
+  it('"Edit" menu item calls onEdit with the task', () => {
+    const { cbs, task } = renderCard()
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(screen.getByText('Edit'))
+    expect(cbs.onEdit).toHaveBeenCalledWith(task)
+  })
+
+  it('"Delete" menu item calls onDeleteTask with task id', () => {
+    const { cbs } = renderCard()
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(screen.getByText('Delete'))
+    expect(cbs.onDeleteTask).toHaveBeenCalledWith(1)
+  })
+
+  it('"Cancel" menu item appears for active tasks', () => {
+    renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('More actions'))
+    expect(screen.getByText('Cancel')).toBeInTheDocument()
+  })
+
+  it('"Reopen" menu item appears for done tasks', () => {
+    renderCard({ status: 'done' })
+    fireEvent.click(screen.getByTitle('More actions'))
+    expect(screen.getByText('Reopen')).toBeInTheDocument()
+  })
+
+  it('"Reopen" menu item calls onPatchTask with todo status', () => {
+    const { cbs } = renderCard({ status: 'done' })
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(screen.getByText('Reopen'))
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'todo' })
+  })
+
+  it('clicking outside the overflow menu closes it', () => {
+    renderCard()
+    fireEvent.click(screen.getByTitle('More actions'))
+    expect(screen.getByText('Edit')).toBeInTheDocument()
+
+    fireEvent.mouseDown(document.body)
+    expect(screen.queryByText('Edit')).not.toBeInTheDocument()
+  })
+})
