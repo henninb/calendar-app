@@ -401,6 +401,12 @@ export default function TaskCard({
       onClick: () => onPatchTask(task.id, { status: 'in_progress' }),
     },
     {
+      label: 'Complete',
+      icon: '✓',
+      hidden: task.status === 'done' || task.status === 'cancelled',
+      onClick: handleDone,
+    },
+    {
       label: 'Reopen',
       icon: '↩',
       hidden: task.status !== 'done' && task.status !== 'cancelled',
@@ -441,17 +447,28 @@ export default function TaskCard({
       <div className="px-5 py-4">
         {/* Row 1: done-circle · title · status pill · overflow */}
         <div className="flex items-start gap-3.5">
-          {task.status !== 'done' && task.status !== 'cancelled' ? (
-            <button
-              onClick={handleDone}
-              title="Mark as done"
-              className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full border-2 border-slate-300 dark:border-slate-600 hover:border-emerald-500 dark:hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-all"
-            />
-          ) : (
-            <div className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 border-2 border-emerald-400 dark:border-emerald-500/60 flex items-center justify-center">
-              <span className="text-emerald-600 dark:text-emerald-400 text-[10px] leading-none font-bold">✓</span>
-            </div>
-          )}
+          <div className="mt-0.5 flex-shrink-0 flex items-center gap-1.5">
+            {task.status !== 'done' && task.status !== 'cancelled' ? (
+              <button
+                onClick={handleDone}
+                title="Mark as done"
+                className="w-5 h-5 rounded-full border-2 border-slate-300 dark:border-slate-600 hover:border-emerald-500 dark:hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-all"
+              />
+            ) : (
+              <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 border-2 border-emerald-400 dark:border-emerald-500/60 flex items-center justify-center">
+                <span className="text-emerald-600 dark:text-emerald-400 text-[10px] leading-none font-bold">✓</span>
+              </div>
+            )}
+            {task.status === 'todo' && (
+              <button
+                onClick={() => onPatchTask(task.id, { status: 'in_progress' })}
+                title="Start task"
+                className="w-5 h-5 flex items-center justify-center rounded-full border-2 border-blue-300 dark:border-blue-600 hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 text-blue-500 dark:text-blue-400 text-[9px] transition-all"
+              >
+                ▶
+              </button>
+            )}
+          </div>
 
           {editingTitle ? (
             <input
@@ -485,19 +502,6 @@ export default function TaskCard({
             >
               {task.title}
             </span>
-          )}
-
-          {task.status === 'todo' && editingField !== 'status' && (
-            <button
-              onClick={() => onPatchTask(task.id, { status: 'in_progress' })}
-              title="Start task"
-              className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold
-                bg-blue-600 text-white hover:bg-blue-500
-                dark:bg-blue-600 dark:hover:bg-blue-500
-                transition-colors shadow-sm"
-            >
-              ▶ Start
-            </button>
           )}
 
           {editingField === 'status' ? (
@@ -679,7 +683,10 @@ export default function TaskCard({
 
         {/* Row 4: subtask progress bar + expand toggle — or add-subtask nudge */}
         {subtaskCount > 0 ? (
-          <div className="flex items-center gap-2.5 mt-3.5 ml-9">
+          <button
+            onClick={() => onToggleExpand(task.id)}
+            className="w-full flex items-center gap-2.5 mt-3.5 pl-9 group/subtask-row cursor-pointer"
+          >
             <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-emerald-500 rounded-full transition-all duration-300"
@@ -689,17 +696,14 @@ export default function TaskCard({
             <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0 tabular-nums">
               {doneSubtasks}/{subtaskCount}
             </span>
-            <button
-              onClick={() => onToggleExpand(task.id)}
-              className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors flex-shrink-0"
-            >
+            <span className="text-xs text-slate-400 dark:text-slate-500 group-hover/subtask-row:text-slate-700 dark:group-hover/subtask-row:text-slate-300 transition-colors flex-shrink-0">
               {expanded ? '▾ hide' : '▸ subtasks'}
-            </button>
-          </div>
+            </span>
+          </button>
         ) : !isDimmed && (
           <button
             onClick={handleAddSubtaskClick}
-            className="mt-3 ml-9 flex items-center gap-1 text-xs text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100"
+            className="mt-3 w-full pl-9 flex items-center gap-1 text-xs text-left text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100"
           >
             <span>+</span> Add subtask
           </button>
