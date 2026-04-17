@@ -340,10 +340,8 @@ export default function TaskCard({
   const handleAddSubtaskClick = useCallback(() => {
     if (!expanded) {
       pendingFocusAdd.current = true
-      onToggleExpand(task.id)
-    } else {
-      newSubtaskRef.current?.focus()
     }
+    onToggleExpand(task.id)
   }, [expanded, onToggleExpand, task.id])
 
   const handleSaveNewSubtask = useCallback(async () => {
@@ -452,8 +450,10 @@ export default function TaskCard({
               <button
                 onClick={handleDone}
                 title="Mark as done"
-                className="w-5 h-5 rounded-full border-2 border-slate-300 dark:border-slate-600 hover:border-emerald-500 dark:hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-all"
-              />
+                className="w-5 h-5 flex items-center justify-center rounded-full border-2 border-slate-300 dark:border-slate-600 hover:border-emerald-500 dark:hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-slate-300 dark:text-slate-600 hover:text-emerald-500 dark:hover:text-emerald-400 text-[10px] transition-all"
+              >
+                ✓
+              </button>
             ) : (
               <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 border-2 border-emerald-400 dark:border-emerald-500/60 flex items-center justify-center">
                 <span className="text-emerald-600 dark:text-emerald-400 text-[10px] leading-none font-bold">✓</span>
@@ -463,7 +463,7 @@ export default function TaskCard({
               <button
                 onClick={() => onPatchTask(task.id, { status: 'in_progress' })}
                 title="Start task"
-                className="w-5 h-5 flex items-center justify-center rounded-full border-2 border-blue-300 dark:border-blue-600 hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 text-blue-500 dark:text-blue-400 text-[9px] transition-all"
+                className="w-5 h-5 flex items-center justify-center rounded-full border-2 border-slate-300 dark:border-slate-600 hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 text-[9px] transition-all"
               >
                 ▶
               </button>
@@ -769,8 +769,11 @@ export default function TaskCard({
                 value={newSubtaskTitle}
                 onChange={e => setNewSubtaskTitle(e.target.value)}
                 onKeyDown={e => {
-                  if (e.key === 'Enter')  handleSaveNewSubtask()
-                  if (e.key === 'Escape') setNewSubtaskTitle('')
+                  if (e.key === 'Enter') handleSaveNewSubtask()
+                  if (e.key === 'Escape') {
+                    setNewSubtaskTitle('')
+                    onToggleExpand(task.id)
+                  }
                 }}
                 className={subtaskInputCls}
               />

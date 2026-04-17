@@ -320,6 +320,27 @@ describe('TaskCard — subtasks', () => {
     renderCard({ subtasks, description: 'From the corner store' }, { expanded: true })
     expect(screen.getByText('From the corner store')).toBeInTheDocument()
   })
+
+  it('clicking "+ Add subtask" when already expanded calls onToggleExpand to collapse', () => {
+    const { cbs } = renderCard({ subtasks: [] }, { expanded: true })
+    fireEvent.click(screen.getByText('Add subtask'))
+    expect(cbs.onToggleExpand).toHaveBeenCalledWith(1)
+  })
+
+  it('Escape on empty add-subtask input calls onToggleExpand to collapse', () => {
+    const { cbs } = renderCard({ subtasks: [] }, { expanded: true })
+    const input = screen.getByPlaceholderText('Add subtask…')
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(cbs.onToggleExpand).toHaveBeenCalledWith(1)
+  })
+
+  it('Escape collapses even when add-subtask input has a value', () => {
+    const { cbs } = renderCard({ subtasks: [] }, { expanded: true })
+    const input = screen.getByPlaceholderText('Add subtask…')
+    fireEvent.change(input, { target: { value: 'Half-typed' } })
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(cbs.onToggleExpand).toHaveBeenCalledWith(1)
+  })
 })
 
 // ── Start button position ─────────────────────────────────────────────────────
