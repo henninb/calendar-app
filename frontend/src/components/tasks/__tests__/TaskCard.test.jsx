@@ -322,6 +322,42 @@ describe('TaskCard — subtasks', () => {
   })
 })
 
+// ── Start button position ─────────────────────────────────────────────────────
+
+describe('TaskCard — Start button (left-side icon)', () => {
+  it('Start button is rendered next to the done circle for todo tasks', () => {
+    renderCard({ status: 'todo' })
+    const startBtn = screen.getByTitle('Start task')
+    const doneBtn  = screen.getByTitle('Mark as done')
+    // Both should be in the DOM and the start button should follow the done button
+    expect(startBtn).toBeInTheDocument()
+    expect(doneBtn).toBeInTheDocument()
+    // They share a parent wrapper — done button comes first in the DOM
+    expect(doneBtn.compareDocumentPosition(startBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('Start button is not rendered for in_progress tasks', () => {
+    renderCard({ status: 'in_progress' })
+    expect(screen.queryByTitle('Start task')).not.toBeInTheDocument()
+  })
+
+  it('Start button is not rendered for done tasks', () => {
+    renderCard({ status: 'done' })
+    expect(screen.queryByTitle('Start task')).not.toBeInTheDocument()
+  })
+
+  it('Start button is not rendered for cancelled tasks', () => {
+    renderCard({ status: 'cancelled' })
+    expect(screen.queryByTitle('Start task')).not.toBeInTheDocument()
+  })
+
+  it('clicking the left-side Start button calls onPatchTask with in_progress', () => {
+    const { cbs } = renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('Start task'))
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'in_progress' })
+  })
+})
+
 // ── Overflow menu ─────────────────────────────────────────────────────────────
 
 describe('TaskCard — overflow menu', () => {
@@ -376,5 +412,73 @@ describe('TaskCard — overflow menu', () => {
 
     fireEvent.mouseDown(document.body)
     expect(screen.queryByText('Edit')).not.toBeInTheDocument()
+  })
+
+  it('"Complete" menu item appears for todo tasks', () => {
+    renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('More actions'))
+    expect(screen.getByText('Complete')).toBeInTheDocument()
+  })
+
+  it('"Complete" menu item appears for in_progress tasks', () => {
+    renderCard({ status: 'in_progress' })
+    fireEvent.click(screen.getByTitle('More actions'))
+    expect(screen.getByText('Complete')).toBeInTheDocument()
+  })
+
+  it('"Complete" menu item is hidden for done tasks', () => {
+    renderCard({ status: 'done' })
+    fireEvent.click(screen.getByTitle('More actions'))
+    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
+  })
+
+  it('"Complete" menu item is hidden for cancelled tasks', () => {
+    renderCard({ status: 'cancelled' })
+    fireEvent.click(screen.getByTitle('More actions'))
+    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
+  })
+
+  it('"Complete" menu item calls onPatchTask with done for a task with no incomplete subtasks', () => {
+    const { cbs } = renderCard({ status: 'todo', subtasks: [] })
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(screen.getByText('Complete'))
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'done' })
+  })
+
+  it('"Complete" menu item opens SubtaskConfirmModal when incomplete subtasks exist', () => {
+    renderCard({
+      status: 'todo',
+      subtasks: [{ id: 10, title: 'Step A', status: 'todo', order: 0, due_date: null }],
+    })
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(screen.getByText('Complete'))
+    expect(screen.getByText('Incomplete subtasks')).toBeInTheDocument()
+  })
+})
+
+// ── Subtask row full-width click target ───────────────────────────────────────
+
+describe('TaskCard — subtask row full-width click target', () => {
+  const subtasks = [
+    { id: 10, title: 'Milk', status: 'done', order: 0, due_date: null },
+    { id: 11, title: 'Eggs', status: 'todo', order: 1, due_date: null },
+  ]
+
+  it('clicking the progress bar area calls onToggleExpand', () => {
+    const { cbs } = renderCard({ subtasks })
+    // The progress bar lives inside the full-width button — click the counter label
+    fireEvent.click(screen.getByText('1/2'))
+    expect(cbs.onToggleExpand).toHaveBeenCalledWith(1)
+  })
+
+  it('clicking the chevron label also calls onToggleExpand', () => {
+    const { cbs } = renderCard({ subtasks })
+    fireEvent.click(screen.getByText('▸ subtasks'))
+    expect(cbs.onToggleExpand).toHaveBeenCalledWith(1)
+  })
+
+  it('shows "▾ hide" label when expanded', () => {
+    renderCard({ subtasks }, { expanded: true })
+    expect(screen.getByText('▾ hide')).toBeInTheDocument()
   })
 })
