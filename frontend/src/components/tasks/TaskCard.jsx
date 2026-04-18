@@ -270,6 +270,7 @@ export default function TaskCard({
   onReorderSubtasks,
   persons,
   categories,
+  dismissing = false,
 }) {
   const [editingField, setEditingField] = useState(null)
   const [showSubtaskConfirm, setShowSubtaskConfirm] = useState(false)
@@ -434,12 +435,13 @@ export default function TaskCard({
         bg-white dark:bg-slate-800/80
         border border-l-0 border-slate-200 dark:border-slate-700/60
         rounded-r-xl
-        transition-all duration-200 ease-in-out
+        transition-all duration-300 ease-out
         hover:bg-slate-50 dark:hover:bg-slate-700/50
         hover:border-slate-300 dark:hover:border-slate-500/80
         hover:shadow-sm
         ${overdue ? 'bg-red-50/40 dark:bg-red-950/20' : ''}
         ${isDimmed ? 'opacity-55' : ''}
+        ${dismissing ? 'opacity-0 scale-x-[0.98] -translate-y-1 pointer-events-none' : ''}
       `}
     >
       <div className="px-5 py-4">

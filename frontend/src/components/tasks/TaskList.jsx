@@ -29,6 +29,7 @@ export default function TaskList() {
   const [panel, setPanel]                   = useState({ open: false, mode: 'create', task: null })
   const [loading, setLoading]               = useState(true)
   const [error, setError]                   = useState(null)
+  const [dismissingIds, setDismissingIds]   = useState(new Set())
 
   // Mirror tasks into a ref so stable callbacks can read the latest value
   // without declaring tasks as a dependency (avoids callback churn).
@@ -192,9 +193,16 @@ export default function TaskList() {
   const patchTask = useCallback(async (taskId, data) => {
     const prevTask = tasksRef.current.find(t => t.id === taskId)
     try {
+      if (data.status === 'done') {
+        setDismissingIds(prev => new Set([...prev, taskId]))
+        await new Promise(r => setTimeout(r, 320))
+      }
       const updated = await updateTask(taskId, data)
       if (data.status === 'done') {
+        const scrollY = window.scrollY
         await load()
+        window.scrollTo({ top: scrollY, behavior: 'instant' })
+        setDismissingIds(prev => { const s = new Set(prev); s.delete(taskId); return s })
       } else {
         setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updated } : t))
       }
@@ -210,6 +218,7 @@ export default function TaskList() {
         })
       }
     } catch (err) {
+      setDismissingIds(prev => { const s = new Set(prev); s.delete(taskId); return s })
       console.error(`[TaskList] patchTask(${taskId}) failed:`, err)
       setError(err.message)
     }
@@ -353,7 +362,6 @@ export default function TaskList() {
         categories={categories}
         loading={loading}
         onRefresh={load}
-        onNewTask={openCreate}
       />
 
       {/* Error banner */}
@@ -431,6 +439,7 @@ export default function TaskList() {
                 onReorderSubtasks={reorderSubtasks}
                 persons={persons}
                 categories={categories}
+                dismissingIds={dismissingIds}
               />
             )
           })}
@@ -458,6 +467,25 @@ export default function TaskList() {
         onUndo={undo}
         onDismiss={dismissToast}
       />
+
+      {/* FAB — new task */}
+      <button
+        onClick={openCreate}
+        title="New task"
+        className="fixed bottom-6 right-6 z-40
+          w-14 h-14 rounded-full
+          bg-white dark:bg-slate-800
+          border border-slate-200 dark:border-slate-700
+          text-slate-600 dark:text-slate-300
+          shadow-md hover:shadow-lg
+          hover:bg-slate-50 dark:hover:bg-slate-700
+          hover:border-slate-300 dark:hover:border-slate-600
+          transition-all duration-200 active:scale-95
+          flex items-center justify-center
+          text-2xl leading-none select-none"
+      >
+        +
+      </button>
     </div>
   )
 }

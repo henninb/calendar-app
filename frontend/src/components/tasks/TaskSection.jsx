@@ -81,6 +81,7 @@ export default function TaskSection({
   onReorderSubtasks,
   persons,
   categories,
+  dismissingIds = new Set(),
 }) {
   const count = tasks.length
   const accent = SECTION_ACCENT[sectionKey] ?? SECTION_ACCENT.later
@@ -127,23 +128,32 @@ export default function TaskSection({
       {!collapsed && count > 0 && (
         <div className="border border-t-0 border-slate-200 dark:border-slate-700/50 rounded-b-xl
           bg-slate-50/50 dark:bg-slate-900/30 p-3 space-y-2.5">
-          {tasks.map(task => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              expanded={!!expandedCards[task.id]}
-              onToggleExpand={onToggleExpand}
-              onEdit={onEdit}
-              onPatchTask={onPatchTask}
-              onDeleteTask={onDeleteTask}
-              onPatchSubtask={onPatchSubtask}
-              onAddSubtask={onAddSubtask}
-              onDeleteSubtask={onDeleteSubtask}
-              onReorderSubtasks={onReorderSubtasks}
-              persons={persons}
-              categories={categories}
-            />
-          ))}
+          {tasks.map(task => {
+            const dismissing = dismissingIds.has(task.id)
+            return (
+              <div
+                key={task.id}
+                className="transition-all duration-300 ease-out overflow-hidden"
+                style={{ maxHeight: dismissing ? '0' : '2000px', marginBottom: dismissing ? '0' : undefined }}
+              >
+                <TaskCard
+                  task={task}
+                  expanded={!!expandedCards[task.id]}
+                  onToggleExpand={onToggleExpand}
+                  onEdit={onEdit}
+                  onPatchTask={onPatchTask}
+                  onDeleteTask={onDeleteTask}
+                  onPatchSubtask={onPatchSubtask}
+                  onAddSubtask={onAddSubtask}
+                  onDeleteSubtask={onDeleteSubtask}
+                  onReorderSubtasks={onReorderSubtasks}
+                  persons={persons}
+                  categories={categories}
+                  dismissing={dismissing}
+                />
+              </div>
+            )
+          })}
         </div>
       )}
 

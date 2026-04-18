@@ -126,15 +126,6 @@ describe('TaskToolbar', () => {
     expect(btn).toBeDisabled()
   })
 
-  // ── New Task ──────────────────────────────────────────────────────────────
-
-  it('calls onNewTask when the New Task button is clicked', () => {
-    const onNewTask = vi.fn()
-    renderToolbar({ onNewTask })
-    fireEvent.click(screen.getByText('New Task'))
-    expect(onNewTask).toHaveBeenCalledOnce()
-  })
-
   // ── Assignee / Category dropdowns (only when persons/categories provided) ─
 
   it('shows an Assignee dropdown in the popover when persons are provided', () => {

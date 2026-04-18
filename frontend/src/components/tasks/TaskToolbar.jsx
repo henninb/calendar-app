@@ -113,7 +113,6 @@ export default function TaskToolbar({
   categories,
   loading,
   onRefresh,
-  onNewTask,
 }) {
   const [filterOpen, setFilterOpen] = useState(false)
 
@@ -126,13 +125,12 @@ export default function TaskToolbar({
     <div className="flex items-center gap-2.5 flex-wrap mb-4">
       {/* Search */}
       <div className="relative flex-1 min-w-[180px] max-w-xs">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">🔍</span>
         <input
           type="search"
           placeholder="Search tasks…"
           value={searchQuery}
           onChange={e => onSearch(e.target.value)}
-          className="w-full pl-8 pr-3 py-2 text-sm rounded-xl
+          className="w-full px-3 py-2 text-sm rounded-xl
             bg-white dark:bg-slate-800
             border border-slate-200 dark:border-slate-700
             text-slate-800 dark:text-slate-200
@@ -193,17 +191,6 @@ export default function TaskToolbar({
         {loading ? '…' : '↻ Refresh'}
       </button>
 
-      {/* New Task */}
-      <button
-        onClick={onNewTask}
-        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold
-          bg-blue-600 hover:bg-blue-500 text-white
-          shadow-sm shadow-blue-500/25
-          transition-all active:scale-95"
-      >
-        <span className="text-base leading-none">+</span>
-        New Task
-      </button>
     </div>
   )
 }
