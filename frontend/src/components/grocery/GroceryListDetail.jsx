@@ -221,20 +221,21 @@ export default function GroceryListDetail({ list: initialList, catalogItems, onB
                   <th style={{ width: '2rem' }}></th>
                   <th>Item</th>
                   <th>Qty</th>
+                  <th>Unit</th>
                   <th>Price</th>
                   <th className="print:hidden"></th>
                 </tr>
               </thead>
               <tbody>
-                {needed.map(li => <ItemRow key={li.id} li={li} onToggle={togglePurchased} onRemove={removeItem} />)}
+                {needed.map(li => <ItemRow key={li.id} li={li} listId={list.id} onToggle={togglePurchased} onRemove={removeItem} onUpdated={reload} />)}
                 {purchased.length > 0 && needed.length > 0 && (
                   <tr>
-                    <td colSpan={5} className="py-1 px-3">
+                    <td colSpan={6} className="py-1 px-3">
                       <div className="h-px bg-slate-200 dark:bg-slate-700" />
                     </td>
                   </tr>
                 )}
-                {purchased.map(li => <ItemRow key={li.id} li={li} onToggle={togglePurchased} onRemove={removeItem} purchased />)}
+                {purchased.map(li => <ItemRow key={li.id} li={li} listId={list.id} onToggle={togglePurchased} onRemove={removeItem} onUpdated={reload} purchased />)}
               </tbody>
             </table>
           </div>
@@ -300,9 +301,105 @@ export default function GroceryListDetail({ list: initialList, catalogItems, onB
   )
 }
 
-function ItemRow({ li, onToggle, onRemove, purchased = false }) {
+function ItemRow({ li, listId, onToggle, onRemove, onUpdated, purchased = false }) {
+  const [editing, setEditing]   = useState(false)
+  const [form, setForm]         = useState({})
+  const [saving, setSaving]     = useState(false)
+
+  function startEdit(e) {
+    e.stopPropagation()
+    setForm({
+      quantity: String(parseFloat(li.quantity)),
+      unit:     li.unit,
+      price:    li.price != null ? String(parseFloat(li.price)) : '',
+    })
+    setEditing(true)
+  }
+
+  async function saveEdit() {
+    setSaving(true)
+    try {
+      await updateGroceryListItem(listId, li.item_id, {
+        quantity: form.quantity || '1',
+        unit:     form.unit,
+        price:    form.price !== '' ? form.price : null,
+      })
+      await onUpdated()
+      setEditing(false)
+    } catch (err) {
+      // bubble up — parent shows error banner
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function cancelEdit() { setEditing(false) }
+
+  function set(field, value) { setForm(p => ({ ...p, [field]: value })) }
+
+  const inputCls = 'px-2 py-1 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500'
+
+  if (editing) {
+    return (
+      <tr>
+        <td>
+          <input
+            type="checkbox"
+            checked={purchased}
+            onChange={() => onToggle(li)}
+            className="w-4 h-4 rounded accent-emerald-500 cursor-pointer"
+          />
+        </td>
+        <td className="font-medium text-slate-800 dark:text-slate-100">{li.item.name}</td>
+        <td>
+          <input
+            autoFocus
+            type="number"
+            min="0"
+            step="0.001"
+            value={form.quantity}
+            onChange={e => set('quantity', e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit() }}
+            className={`${inputCls} w-20`}
+          />
+        </td>
+        <td>
+          <select
+            value={form.unit}
+            onChange={e => set('unit', e.target.value)}
+            className={`${inputCls} w-24`}
+          >
+            {GROCERY_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+          </select>
+        </td>
+        <td>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={form.price}
+            onChange={e => set('price', e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit() }}
+            placeholder="—"
+            className={`${inputCls} w-24`}
+          />
+        </td>
+        <td className="print:hidden">
+          <div className="flex items-center gap-1">
+            <button onClick={saveEdit} disabled={saving} className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-white disabled:opacity-50 transition-colors">
+              {saving ? '…' : 'Save'}
+            </button>
+            <button onClick={cancelEdit} className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">
+              Cancel
+            </button>
+          </div>
+        </td>
+      </tr>
+    )
+  }
+
   return (
-    <tr className={purchased ? 'opacity-50' : ''}>
+    <tr className={`group ${purchased ? 'opacity-50' : ''}`}>
       <td>
         <input
           type="checkbox"
@@ -314,17 +411,32 @@ function ItemRow({ li, onToggle, onRemove, purchased = false }) {
       <td className={`font-medium ${purchased ? 'line-through text-slate-400 dark:text-slate-500' : ''}`}>
         {li.item.name}
       </td>
-      <td className="text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap">
-        {fmtQty(li.quantity, li.unit)}
+      <td
+        onClick={startEdit}
+        title="Click to edit"
+        className="editable-cell text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap cursor-pointer"
+      >
+        {parseFloat(li.quantity) % 1 === 0 ? parseFloat(li.quantity) : parseFloat(li.quantity)}
       </td>
-      <td className="text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap">
+      <td
+        onClick={startEdit}
+        title="Click to edit"
+        className="editable-cell text-slate-500 dark:text-slate-400 text-sm cursor-pointer"
+      >
+        {li.unit}
+      </td>
+      <td
+        onClick={startEdit}
+        title="Click to edit"
+        className="editable-cell text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap cursor-pointer"
+      >
         {fmtPrice(li.price)}
       </td>
       <td className="print:hidden">
         <button
           onClick={() => onRemove(li)}
           title="Remove from list"
-          className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-sm"
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-sm opacity-0 group-hover:opacity-100 transition-opacity"
         >✕</button>
       </td>
     </tr>

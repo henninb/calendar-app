@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useId } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   fetchOnHand, upsertOnHand, deleteOnHand,
-  createGroceryItem, deleteGroceryItem,
+  createGroceryItem, updateGroceryItem, deleteGroceryItem,
 } from '../../api'
 import { GROCERY_UNITS } from './helpers'
 
@@ -17,15 +17,15 @@ const labelCls = 'block text-xs font-medium text-slate-500 dark:text-slate-400 u
 const EMPTY_NEW_ITEM = { name: '', default_unit: 'each', default_store_id: '' }
 
 export default function OnHandView({ catalogItems, stores, onCatalogChange }) {
-  const [onHand, setOnHand]       = useState([])
-  const [search, setSearch]       = useState('')
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState(null)
-  const [editingId, setEditingId] = useState(null)  // item_id being edited
-  const [editForm, setEditForm]   = useState({})
+  const [onHand, setOnHand]           = useState([])
+  const [search, setSearch]           = useState('')
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState(null)
+  const [editingId, setEditingId]     = useState(null)
+  const [editForm, setEditForm]       = useState({})
   const [showNewItem, setShowNewItem] = useState(false)
-  const [newItem, setNewItem]     = useState(EMPTY_NEW_ITEM)
-  const [savingNew, setSavingNew] = useState(false)
+  const [newItem, setNewItem]         = useState(EMPTY_NEW_ITEM)
+  const [savingNew, setSavingNew]     = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -41,7 +41,6 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }) {
 
   useEffect(() => { load() }, [load])
 
-  // Build a unified view: all catalog items, merged with on-hand quantities
   const onHandMap = Object.fromEntries(onHand.map(r => [r.item_id, r]))
   const rows = catalogItems
     .filter(item => !search || item.name.toLowerCase().includes(search.toLowerCase()))
@@ -51,21 +50,26 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }) {
   function startEdit(item, record) {
     setEditingId(item.id)
     setEditForm({
-      quantity: record ? String(parseFloat(record.quantity)) : '0',
-      unit:     record ? record.unit : item.default_unit,
+      name:             item.name,
+      default_store_id: item.default_store_id != null ? String(item.default_store_id) : '',
+      quantity:         record ? String(parseFloat(record.quantity)) : '0',
+      unit:             record ? record.unit : item.default_unit,
     })
   }
 
   async function saveEdit(itemId) {
     try {
-      const updated = await upsertOnHand(itemId, {
-        quantity: editForm.quantity || '0',
-        unit:     editForm.unit,
-      })
-      setOnHand(prev => {
-        const idx = prev.findIndex(r => r.item_id === itemId)
-        return idx >= 0 ? prev.map(r => r.item_id === itemId ? updated : r) : [...prev, updated]
-      })
+      await Promise.all([
+        updateGroceryItem(itemId, {
+          name:             editForm.name.trim(),
+          default_store_id: editForm.default_store_id ? parseInt(editForm.default_store_id, 10) : null,
+        }),
+        upsertOnHand(itemId, {
+          quantity: editForm.quantity || '0',
+          unit:     editForm.unit,
+        }),
+      ])
+      await Promise.all([onCatalogChange(), load()])
     } catch (err) {
       setError(err.message)
     } finally {
@@ -105,7 +109,6 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }) {
 
   return (
     <div>
-      {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap mb-5">
         <input
           type="search"
@@ -122,7 +125,6 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }) {
         </button>
       </div>
 
-      {/* New item form */}
       {showNewItem && (
         <div className="card mb-4">
           <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
@@ -216,6 +218,7 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }) {
                     key={item.id}
                     item={item}
                     record={record}
+                    stores={stores}
                     isEditing={editingId === item.id}
                     editForm={editForm}
                     onEditFormChange={(field, val) => setEditForm(p => ({ ...p, [field]: val }))}
@@ -234,31 +237,47 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }) {
   )
 }
 
-function OnHandRow({ item, record, isEditing, editForm, onEditFormChange, onStartEdit, onSaveEdit, onCancelEdit, onDelete }) {
-  const qty = record ? parseFloat(record.quantity) : 0
-  const unit = record ? record.unit : item.default_unit
+function OnHandRow({ item, record, stores, isEditing, editForm, onEditFormChange, onStartEdit, onSaveEdit, onCancelEdit, onDelete }) {
+  const qty   = record ? parseFloat(record.quantity) : 0
+  const unit  = record ? record.unit : item.default_unit
   const isLow = qty === 0
 
   if (isEditing) {
     return (
       <tr>
-        <td className="font-medium text-slate-800 dark:text-slate-100">{item.name}</td>
-        <td className="text-slate-400 dark:text-slate-500 text-sm">{item.default_store?.name ?? '—'}</td>
         <td>
           <input
             autoFocus
-            type="number"
-            min="0"
-            step="0.001"
-            value={editForm.quantity}
-            onChange={e => onEditFormChange('quantity', e.target.value)}
+            value={editForm.name ?? ''}
+            onChange={e => onEditFormChange('name', e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') onSaveEdit(); if (e.key === 'Escape') onCancelEdit() }}
-            className="px-2 py-1 text-sm rounded-lg border border-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none w-24"
+            className="px-2 py-1 text-sm rounded-lg border border-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none w-full min-w-[120px]"
           />
         </td>
         <td>
           <select
-            value={editForm.unit}
+            value={editForm.default_store_id ?? ''}
+            onChange={e => onEditFormChange('default_store_id', e.target.value)}
+            className="px-2 py-1 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none w-full"
+          >
+            <option value="">— None —</option>
+            {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </td>
+        <td>
+          <input
+            type="number"
+            min="0"
+            step="0.001"
+            value={editForm.quantity ?? ''}
+            onChange={e => onEditFormChange('quantity', e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') onSaveEdit(); if (e.key === 'Escape') onCancelEdit() }}
+            className="px-2 py-1 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none w-24"
+          />
+        </td>
+        <td>
+          <select
+            value={editForm.unit ?? ''}
             onChange={e => onEditFormChange('unit', e.target.value)}
             className="px-2 py-1 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none"
           >
@@ -278,13 +297,13 @@ function OnHandRow({ item, record, isEditing, editForm, onEditFormChange, onStar
   return (
     <tr className="group">
       <td
-        onClick={onStartEdit}
-        title="Click to edit"
+        onDoubleClick={onStartEdit}
+        title="Double-click to edit"
         className="editable-cell font-medium text-slate-800 dark:text-slate-100 cursor-pointer"
       >{item.name}</td>
       <td
-        onClick={onStartEdit}
-        title="Click to edit"
+        onDoubleClick={onStartEdit}
+        title="Double-click to edit"
         className="editable-cell text-slate-400 dark:text-slate-500 text-sm cursor-pointer"
       >{item.default_store?.name ?? '—'}</td>
       <td
@@ -303,7 +322,7 @@ function OnHandRow({ item, record, isEditing, editForm, onEditFormChange, onStar
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={onStartEdit}
-            title="Edit on-hand quantity"
+            title="Edit item"
             className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors text-sm"
           >✎</button>
           <button
