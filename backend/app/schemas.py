@@ -2,7 +2,10 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from .models import Priority, OccurrenceStatus, TaskRecurrence, TaskStatus, WeekendShift
+from .models import (
+    Priority, OccurrenceStatus, TaskRecurrence, TaskStatus, WeekendShift,
+    GroceryUnit, GroceryListStatus, GroceryListItemStatus,
+)
 
 
 def _normalize_rrule(v: str | None) -> str | None:
@@ -311,5 +314,137 @@ class TaskOut(TaskBase):
     assignee: PersonOut | None = None
     category: CategoryOut | None = None
     subtasks: list[SubtaskOut] = []
+
+    model_config = {"from_attributes": True}
+
+
+# ── Store ─────────────────────────────────────────────────────────────────────
+
+class StoreBase(BaseModel):
+    name: str = Field(..., max_length=100)
+    location: str | None = Field(None, max_length=200)
+    is_active: bool = True
+
+
+class StoreCreate(StoreBase):
+    pass
+
+
+class StoreUpdate(BaseModel):
+    name: str | None = Field(None, max_length=100)
+    location: str | None = Field(None, max_length=200)
+    is_active: bool | None = None
+
+
+class StoreOut(StoreBase):
+    id: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── GroceryItem ───────────────────────────────────────────────────────────────
+
+class GroceryItemBase(BaseModel):
+    name: str = Field(..., max_length=200)
+    default_unit: GroceryUnit = GroceryUnit.each
+    default_store_id: int | None = None
+
+
+class GroceryItemCreate(GroceryItemBase):
+    pass
+
+
+class GroceryItemUpdate(BaseModel):
+    name: str | None = Field(None, max_length=200)
+    default_unit: GroceryUnit | None = None
+    default_store_id: int | None = None
+
+
+class GroceryItemOut(GroceryItemBase):
+    id: int
+    created_at: datetime
+    default_store: StoreOut | None = None
+
+    model_config = {"from_attributes": True}
+
+
+# ── OnHand ────────────────────────────────────────────────────────────────────
+
+class OnHandUpsert(BaseModel):
+    quantity: Decimal = Field(..., ge=0)
+    unit: GroceryUnit
+
+
+class OnHandOut(BaseModel):
+    id: int
+    item_id: int
+    quantity: Decimal
+    unit: GroceryUnit
+    updated_at: datetime
+    item: GroceryItemOut
+
+    model_config = {"from_attributes": True}
+
+
+# ── GroceryListItem ───────────────────────────────────────────────────────────
+
+class GroceryListItemBase(BaseModel):
+    item_id: int
+    quantity: Decimal = Field(Decimal("1"), ge=0)
+    unit: GroceryUnit = GroceryUnit.each
+    price: Decimal | None = None
+    status: GroceryListItemStatus = GroceryListItemStatus.needed
+    notes: str | None = Field(None, max_length=1000)
+
+
+class GroceryListItemCreate(GroceryListItemBase):
+    pass
+
+
+class GroceryListItemUpdate(BaseModel):
+    quantity: Decimal | None = Field(None, ge=0)
+    unit: GroceryUnit | None = None
+    price: Decimal | None = None
+    status: GroceryListItemStatus | None = None
+    notes: str | None = Field(None, max_length=1000)
+
+
+class GroceryListItemOut(GroceryListItemBase):
+    id: int
+    list_id: int
+    created_at: datetime
+    updated_at: datetime
+    item: GroceryItemOut
+
+    model_config = {"from_attributes": True}
+
+
+# ── GroceryList ───────────────────────────────────────────────────────────────
+
+class GroceryListBase(BaseModel):
+    name: str = Field(..., max_length=200)
+    store_id: int | None = None
+    status: GroceryListStatus = GroceryListStatus.draft
+    shopping_date: date | None = None
+
+
+class GroceryListCreate(GroceryListBase):
+    pass
+
+
+class GroceryListUpdate(BaseModel):
+    name: str | None = Field(None, max_length=200)
+    store_id: int | None = None
+    status: GroceryListStatus | None = None
+    shopping_date: date | None = None
+
+
+class GroceryListOut(GroceryListBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    store: StoreOut | None = None
+    items: list[GroceryListItemOut] = []
 
     model_config = {"from_attributes": True}

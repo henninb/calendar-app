@@ -11,7 +11,7 @@ from fastapi import Depends
 from .config import settings
 from .database import Base, engine, SessionLocal
 from .models import CreditCard, Person
-from .routers import categories, events, occurrences, sync, credit_cards, persons, tasks
+from .routers import categories, events, occurrences, sync, credit_cards, persons, tasks, stores, grocery
 from .security import require_api_key
 from .services.credit_card import generate_credit_card_occurrences
 from .services.recurrence import generate_all_occurrences, mark_overdue
@@ -112,6 +112,8 @@ app.include_router(sync.router, prefix="/api", dependencies=_auth)
 app.include_router(credit_cards.router, prefix="/api", dependencies=_auth)
 app.include_router(persons.router, prefix="/api", dependencies=_auth)
 app.include_router(tasks.router, prefix="/api", dependencies=_auth)
+app.include_router(stores.router, prefix="/api", dependencies=_auth)
+app.include_router(grocery.router, prefix="/api", dependencies=_auth)
 
 
 @app.get("/health")

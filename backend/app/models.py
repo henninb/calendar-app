@@ -46,6 +46,34 @@ class WeekendShift(str, enum.Enum):
     nearest = "nearest"             # Saturday → Friday, Sunday → Monday
 
 
+class GroceryUnit(str, enum.Enum):
+    each = "each"
+    lb = "lb"
+    oz = "oz"
+    fl_oz = "fl_oz"
+    g = "g"
+    kg = "kg"
+    liter = "liter"
+    ml = "ml"
+    bunch = "bunch"
+    bag = "bag"
+    box = "box"
+    can = "can"
+    jar = "jar"
+    pack = "pack"
+
+
+class GroceryListStatus(str, enum.Enum):
+    draft = "draft"
+    active = "active"
+    completed = "completed"
+
+
+class GroceryListItemStatus(str, enum.Enum):
+    needed = "needed"
+    purchased = "purchased"
+
+
 class Category(Base):
     __tablename__ = "categories"
 
@@ -217,3 +245,83 @@ class Subtask(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     task = relationship("Task", back_populates="subtasks")
+
+
+# ── Grocery ──────────────────────────────────────────────────────────────────
+
+class Store(Base):
+    __tablename__ = "stores"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False)
+    location = Column(String(200))
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    grocery_items = relationship("GroceryItem", back_populates="default_store")
+    grocery_lists = relationship("GroceryList", back_populates="store")
+
+
+class GroceryItem(Base):
+    """Master catalog of purchasable grocery items."""
+    __tablename__ = "grocery_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), unique=True, nullable=False)
+    default_unit = Column(Enum(GroceryUnit), default=GroceryUnit.each)
+    default_store_id = Column(Integer, ForeignKey("stores.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    default_store = relationship("Store", back_populates="grocery_items")
+    on_hand = relationship("OnHand", back_populates="item", uselist=False, cascade="all, delete-orphan")
+    list_items = relationship("GroceryListItem", back_populates="item")
+
+
+class OnHand(Base):
+    """Current inventory of a grocery item at home."""
+    __tablename__ = "on_hand"
+
+    id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, ForeignKey("grocery_items.id", ondelete="CASCADE"), nullable=False, unique=True)
+    quantity = Column(Numeric(10, 3), nullable=False, default=0)
+    unit = Column(Enum(GroceryUnit), nullable=False, default=GroceryUnit.each)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    item = relationship("GroceryItem", back_populates="on_hand")
+
+
+class GroceryList(Base):
+    """A shopping list for a single store."""
+    __tablename__ = "grocery_lists"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    store_id = Column(Integer, ForeignKey("stores.id", ondelete="SET NULL"), nullable=True)
+    status = Column(Enum(GroceryListStatus), default=GroceryListStatus.draft)
+    shopping_date = Column(Date, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    store = relationship("Store", back_populates="grocery_lists")
+    items = relationship("GroceryListItem", back_populates="grocery_list", cascade="all, delete-orphan")
+
+
+class GroceryListItem(Base):
+    __tablename__ = "grocery_list_items"
+    __table_args__ = (
+        UniqueConstraint("list_id", "item_id", name="uq_grocery_list_item"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    list_id = Column(Integer, ForeignKey("grocery_lists.id", ondelete="CASCADE"), nullable=False)
+    item_id = Column(Integer, ForeignKey("grocery_items.id", ondelete="CASCADE"), nullable=False)
+    quantity = Column(Numeric(10, 3), nullable=False, default=1)
+    unit = Column(Enum(GroceryUnit), nullable=False, default=GroceryUnit.each)
+    price = Column(Numeric(10, 2), nullable=True)
+    status = Column(Enum(GroceryListItemStatus), default=GroceryListItemStatus.needed)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    grocery_list = relationship("GroceryList", back_populates="items")
+    item = relationship("GroceryItem", back_populates="list_items")

@@ -3,6 +3,7 @@ import CalendarView from './components/CalendarView'
 import OccurrenceList from './components/OccurrenceList'
 import CreditCardTracker from './components/CreditCardTracker'
 import TaskList from './components/tasks/TaskList'
+import GroceryPage from './components/grocery/GroceryPage'
 import ConfigPage, { loadConfig } from './components/ConfigPage'
 import { generateAll, gcalAuthStatus, syncToGcal, deleteAllGcalEvents, wipeAllGcalEvents, syncToGtasks } from './api'
 
@@ -13,6 +14,7 @@ const TABS = [
   { id: 'upcoming',  label: '📋 Upcoming' },
   { id: 'cards',     label: '💳 Credit Cards' },
   { id: 'tasks',     label: '✅ Tasks' },
+  { id: 'grocery',   label: '🛒 Grocery' },
   { id: 'config',    label: '⚙️ Config' },
 ]
 
@@ -297,6 +299,7 @@ export default function App() {
         {tab === 'upcoming' && <OccurrenceList />}
         {tab === 'cards'    && <CreditCardTracker />}
         {tab === 'tasks'    && <TaskList />}
+        {tab === 'grocery'  && <GroceryPage />}
         {tab === 'config'   && <ConfigPage config={config} onSave={setConfig} gcalAuth={gcalAuth} />}
       </main>
     </div>

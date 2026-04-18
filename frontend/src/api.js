@@ -155,3 +155,47 @@ export const deleteSubtask = (taskId, subtaskId) =>
 
 // #13: signal parameter for AbortController support
 export const fetchPersons = (signal) => request('/persons', { signal })
+
+// ── Stores ────────────────────────────────────────────────────────────────
+
+const JSON_H = { 'Content-Type': 'application/json' }
+
+export const fetchStores = () => request('/stores')
+export const createStore = (data) => request('/stores', { method: 'POST', headers: JSON_H, body: JSON.stringify(data) })
+export const updateStore = (id, data) => request(`/stores/${id}`, { method: 'PATCH', headers: JSON_H, body: JSON.stringify(data) })
+export const deleteStore = (id) => request(`/stores/${id}`, { method: 'DELETE' })
+
+// ── Grocery Items (catalog) ───────────────────────────────────────────────
+
+export const fetchGroceryItems = (params = {}) => {
+  const q = new URLSearchParams(params)
+  const qs = q.toString()
+  return request(`/grocery/items${qs ? `?${qs}` : ''}`)
+}
+export const createGroceryItem = (data) => request('/grocery/items', { method: 'POST', headers: JSON_H, body: JSON.stringify(data) })
+export const updateGroceryItem = (id, data) => request(`/grocery/items/${id}`, { method: 'PATCH', headers: JSON_H, body: JSON.stringify(data) })
+export const deleteGroceryItem = (id) => request(`/grocery/items/${id}`, { method: 'DELETE' })
+
+// ── On Hand ───────────────────────────────────────────────────────────────
+
+export const fetchOnHand = () => request('/grocery/on-hand')
+export const upsertOnHand = (itemId, data) => request(`/grocery/on-hand/${itemId}`, { method: 'PUT', headers: JSON_H, body: JSON.stringify(data) })
+export const deleteOnHand = (itemId) => request(`/grocery/on-hand/${itemId}`, { method: 'DELETE' })
+
+// ── Grocery Lists ─────────────────────────────────────────────────────────
+
+export const fetchGroceryLists = (params = {}) => {
+  const q = new URLSearchParams(params)
+  const qs = q.toString()
+  return request(`/grocery/lists${qs ? `?${qs}` : ''}`)
+}
+export const fetchGroceryList = (id) => request(`/grocery/lists/${id}`)
+export const createGroceryList = (data) => request('/grocery/lists', { method: 'POST', headers: JSON_H, body: JSON.stringify(data) })
+export const updateGroceryList = (id, data) => request(`/grocery/lists/${id}`, { method: 'PATCH', headers: JSON_H, body: JSON.stringify(data) })
+export const deleteGroceryList = (id) => request(`/grocery/lists/${id}`, { method: 'DELETE' })
+
+// ── Grocery List Items ────────────────────────────────────────────────────
+
+export const addGroceryListItem = (listId, data) => request(`/grocery/lists/${listId}/items`, { method: 'POST', headers: JSON_H, body: JSON.stringify(data) })
+export const updateGroceryListItem = (listId, itemId, data) => request(`/grocery/lists/${listId}/items/${itemId}`, { method: 'PATCH', headers: JSON_H, body: JSON.stringify(data) })
+export const removeGroceryListItem = (listId, itemId) => request(`/grocery/lists/${listId}/items/${itemId}`, { method: 'DELETE' })
