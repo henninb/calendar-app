@@ -250,6 +250,9 @@ export default function App() {
             </button>
           )}
           {tab === 'tasks' && (
+            <div id="task-toolbar-slot" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }} />
+          )}
+          {tab === 'tasks' && (
             <button
               className="btn btn-blue"
               style={{ fontSize: '.8rem', background: gcalAuth ? '#7c3aed' : '#2563eb' }}
@@ -257,7 +260,7 @@ export default function App() {
               onClick={handleGtasksSync}
               title={gcalAuth ? 'Sync tasks to Google Tasks' : 'Connect your Google account to enable Google Tasks sync'}
             >
-              {gtasksSyncing ? 'Syncing…' : '✅ Sync to Google Tasks'}
+              {gtasksSyncing ? 'Syncing…' : '✅ Google Sync'}
             </button>
           )}
           {logs.length > 0 && (

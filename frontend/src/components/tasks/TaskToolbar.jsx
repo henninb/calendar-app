@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { STATUS_OPTIONS, STATUS_LABELS } from './helpers'
 
 const STATUS_PILL_ACTIVE = {
@@ -115,32 +116,33 @@ export default function TaskToolbar({
   onRefresh,
 }) {
   const [filterOpen, setFilterOpen] = useState(false)
+  const [portalTarget, setPortalTarget] = useState(null)
+
+  useLayoutEffect(() => {
+    setPortalTarget(document.getElementById('task-toolbar-slot'))
+  }, [])
 
   const activeFilterCount =
     (filterStatus.length < STATUS_OPTIONS.length ? 1 : 0) +
     (filterAssignee ? 1 : 0) +
     (filterCategory ? 1 : 0)
 
-  return (
-    <div className="flex items-center gap-2.5 flex-wrap mb-4">
-      {/* Search */}
-      <div className="relative flex-1 min-w-[180px] max-w-xs">
-        <input
-          type="search"
-          placeholder="Search tasks…"
-          value={searchQuery}
-          onChange={e => onSearch(e.target.value)}
-          className="w-full px-3 py-2 text-sm rounded-xl
-            bg-white dark:bg-slate-800
-            border border-slate-200 dark:border-slate-700
-            text-slate-800 dark:text-slate-200
-            placeholder-slate-400 dark:placeholder-slate-500
-            focus:outline-none focus:ring-2 focus:ring-blue-500/50
-            transition-shadow"
-        />
-      </div>
+  const headerControls = (
+    <>
+      <input
+        type="search"
+        placeholder="Search tasks…"
+        value={searchQuery}
+        onChange={e => onSearch(e.target.value)}
+        className="px-3 py-1.5 text-sm rounded-xl w-44
+          bg-white dark:bg-slate-700
+          border border-slate-200 dark:border-slate-600
+          text-slate-800 dark:text-slate-200
+          placeholder-slate-400 dark:placeholder-slate-400
+          focus:outline-none focus:ring-2 focus:ring-blue-500/50
+          transition-shadow"
+      />
 
-      {/* Filters button */}
       <div className="relative">
         <button
           onClick={() => setFilterOpen(o => !o)}
@@ -173,9 +175,6 @@ export default function TaskToolbar({
         )}
       </div>
 
-      <div className="flex-1" />
-
-      {/* Refresh */}
       <button
         onClick={onRefresh}
         disabled={loading}
@@ -190,7 +189,8 @@ export default function TaskToolbar({
       >
         {loading ? '…' : '↻ Refresh'}
       </button>
-
-    </div>
+    </>
   )
+
+  return portalTarget ? createPortal(headerControls, portalTarget) : headerControls
 }

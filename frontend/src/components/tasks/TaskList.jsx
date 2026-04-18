@@ -36,6 +36,7 @@ export default function TaskList() {
   const tasksRef = useRef(tasks)
   tasksRef.current = tasks
 
+
   const { push: pushUndo, undo, canUndo, lastAction, dismissToast } = useUndoStack()
 
   // Ctrl+Z / Cmd+Z — undo is a no-op when the stack is empty
@@ -58,6 +59,21 @@ export default function TaskList() {
   }, [])
 
   const abortRef = useRef(null)
+
+  const silentLoad = useCallback(async () => {
+    try {
+      const [t, p, c] = await Promise.all([fetchTasks({}), fetchPersons(), fetchCategories()])
+      if (t.length >= TASK_FETCH_LIMIT) {
+        console.warn(`[TaskList] hit fetch limit (${TASK_FETCH_LIMIT})`)
+      }
+      setTasks(t)
+      setPersons(p)
+      setCategories(c)
+    } catch (err) {
+      console.error('[TaskList] silentLoad failed:', err)
+      setError(err.message)
+    }
+  }, [])
 
   const load = useCallback(async () => {
     abortRef.current?.abort()
@@ -199,10 +215,12 @@ export default function TaskList() {
       }
       const updated = await updateTask(taskId, data)
       if (data.status === 'done') {
-        const scrollY = window.scrollY
-        await load()
-        window.scrollTo({ top: scrollY, behavior: 'instant' })
+        // Update status locally — the filter hides done tasks so the already-collapsed
+        // 0px card just vanishes from the section. No scroll position change.
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updated } : t))
         setDismissingIds(prev => { const s = new Set(prev); s.delete(taskId); return s })
+        // Fire-and-forget reload to pick up new recurring task instances
+        silentLoad()
       } else {
         setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updated } : t))
       }
@@ -222,7 +240,7 @@ export default function TaskList() {
       console.error(`[TaskList] patchTask(${taskId}) failed:`, err)
       setError(err.message)
     }
-  }, [load, pushUndo])
+  }, [silentLoad, pushUndo])
 
   const deleteTaskCb = useCallback(async taskId => {
     if (!window.confirm('Delete this task?')) return
