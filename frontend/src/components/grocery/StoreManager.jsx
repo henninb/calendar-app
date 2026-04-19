@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { createStore, updateStore, deleteStore } from '../../api'
 
 const fieldCls = `px-2.5 py-1.5 text-sm rounded-lg
@@ -8,15 +8,17 @@ const fieldCls = `px-2.5 py-1.5 text-sm rounded-lg
   focus:outline-none focus:ring-2 focus:ring-blue-500/50
   transition-shadow`
 
+const labelCls = 'block text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5'
+
 const EMPTY = { name: '', location: '' }
 
 export default function StoreManager({ stores, onStoresChange }) {
-  const [editingId, setEditingId]   = useState(null)
-  const [editForm, setEditForm]     = useState({})
-  const [showNew, setShowNew]       = useState(false)
-  const [newForm, setNewForm]       = useState(EMPTY)
-  const [saving, setSaving]         = useState(false)
-  const [error, setError]           = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm]   = useState({})
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [newForm, setNewForm]     = useState(EMPTY)
+  const [saving, setSaving]       = useState(false)
+  const [error, setError]         = useState(null)
 
   async function handleCreate() {
     if (!newForm.name.trim()) return
@@ -24,7 +26,7 @@ export default function StoreManager({ stores, onStoresChange }) {
     try {
       await createStore({ name: newForm.name.trim(), location: newForm.location.trim() || null })
       setNewForm(EMPTY)
-      setShowNew(false)
+      setPanelOpen(false)
       onStoresChange()
     } catch (err) {
       setError(err.message)
@@ -63,57 +65,6 @@ export default function StoreManager({ stores, onStoresChange }) {
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-5">
-        <button
-          onClick={() => setShowNew(v => !v)}
-          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors"
-        >
-          + Add Store
-        </button>
-      </div>
-
-      {showNew && (
-        <div className="card mb-4">
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
-            New Store
-          </p>
-          <div className="flex flex-wrap gap-3 items-end">
-            <div className="flex-1 min-w-[140px]">
-              <input
-                autoFocus
-                value={newForm.name}
-                onChange={e => setNewForm(p => ({ ...p, name: e.target.value }))}
-                onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                placeholder="Store name (e.g. ALDI)"
-                className={`${fieldCls} w-full`}
-              />
-            </div>
-            <div className="flex-1 min-w-[140px]">
-              <input
-                value={newForm.location}
-                onChange={e => setNewForm(p => ({ ...p, location: e.target.value }))}
-                onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                placeholder="Location (optional)"
-                className={`${fieldCls} w-full`}
-              />
-            </div>
-            <button
-              onClick={handleCreate}
-              disabled={saving || !newForm.name.trim()}
-              className="px-4 py-1.5 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              {saving ? '…' : 'Save'}
-            </button>
-            <button
-              onClick={() => { setShowNew(false); setNewForm(EMPTY) }}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
       {error && (
         <div className="flex items-center justify-between gap-3 px-4 py-3 mb-4 rounded-xl
           bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/60
@@ -125,7 +76,7 @@ export default function StoreManager({ stores, onStoresChange }) {
 
       {stores.length === 0 ? (
         <div className="py-16 text-center text-slate-400 dark:text-slate-500 text-sm italic">
-          No stores yet. Add one above.
+          No stores yet. Use the + button to add one.
         </div>
       ) : (
         <div className="card">
@@ -192,6 +143,125 @@ export default function StoreManager({ stores, onStoresChange }) {
           </div>
         </div>
       )}
+
+      <AddStorePanel
+        open={panelOpen}
+        onClose={() => { setPanelOpen(false); setNewForm(EMPTY) }}
+        newForm={newForm}
+        setNewForm={setNewForm}
+        onSave={handleCreate}
+        saving={saving}
+      />
+
+      {/* FAB — add store */}
+      <button
+        onClick={() => setPanelOpen(true)}
+        title="Add store"
+        className="fixed bottom-6 right-6 z-40
+          w-14 h-14 rounded-full
+          bg-white dark:bg-slate-800
+          border border-slate-200 dark:border-slate-700
+          text-slate-600 dark:text-slate-300
+          shadow-md hover:shadow-lg
+          hover:bg-slate-50 dark:hover:bg-slate-700
+          hover:border-slate-300 dark:hover:border-slate-600
+          transition-all duration-200 active:scale-95
+          flex items-center justify-center
+          text-2xl leading-none select-none"
+      >
+        +
+      </button>
     </div>
+  )
+}
+
+function AddStorePanel({ open, onClose, newForm, setNewForm, onSave, saving }) {
+  const nameRef = useRef(null)
+
+  useEffect(() => {
+    if (open) setTimeout(() => nameRef.current?.focus(), 50)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    function handle(e) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handle)
+    return () => document.removeEventListener('keydown', handle)
+  }, [open, onClose])
+
+  return (
+    <>
+      <div
+        className={`fixed inset-0 bg-black/40 dark:bg-black/60 z-40 transition-opacity duration-300 ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={onClose}
+      />
+      <div
+        className={`fixed top-0 right-0 h-full w-[400px] max-w-full z-50
+          bg-white dark:bg-slate-900
+          border-l border-slate-200 dark:border-slate-700/60
+          shadow-2xl flex flex-col
+          transition-transform duration-300 ease-in-out
+          ${open ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700/60 flex-shrink-0">
+          <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">New Store</h2>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          <div>
+            <label className={labelCls}>Name <span className="text-red-500 normal-case tracking-normal">*</span></label>
+            <input
+              ref={nameRef}
+              value={newForm.name}
+              onChange={e => setNewForm(p => ({ ...p, name: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && onSave()}
+              placeholder="e.g. ALDI"
+              className={`${fieldCls} w-full`}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Location</label>
+            <input
+              value={newForm.location}
+              onChange={e => setNewForm(p => ({ ...p, location: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && onSave()}
+              placeholder="Optional"
+              className={`${fieldCls} w-full`}
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center gap-3 px-5 py-4 border-t border-slate-200 dark:border-slate-700/60 flex-shrink-0">
+          <button
+            onClick={onSave}
+            disabled={saving || !newForm.name.trim()}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold
+              bg-blue-600 hover:bg-blue-500 text-white
+              disabled:opacity-50 disabled:cursor-not-allowed
+              shadow-sm shadow-blue-500/25
+              transition-all active:scale-[0.98]"
+          >
+            {saving ? 'Saving…' : 'Save Store'}
+          </button>
+          <button
+            onClick={onClose}
+            className="px-5 py-2.5 rounded-xl text-sm font-medium
+              bg-slate-100 dark:bg-slate-800
+              text-slate-600 dark:text-slate-300
+              hover:bg-slate-200 dark:hover:bg-slate-700
+              transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </>
   )
 }

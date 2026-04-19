@@ -30,12 +30,12 @@ export default function GroceryPage() {
   return (
     <div className="max-w-4xl mx-auto">
       {/* Sub-nav */}
-      <div className="flex gap-0 mb-6 border-b border-slate-200 dark:border-slate-700">
+      <div className="flex gap-4 mb-6 border-b border-slate-200 dark:border-slate-700">
         {SUB_TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setSubTab(t.id)}
-            className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px
+            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors -mb-px
               ${subTab === t.id
                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
