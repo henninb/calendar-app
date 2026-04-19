@@ -265,32 +265,36 @@ export default function App() {
               {gtasksSyncing ? 'Syncing…' : '✅ Google Sync'}
             </button>
           )}
-          {logs.length > 0 && (
-            <button
-              className="btn btn-gray"
-              style={{ fontSize: '.75rem' }}
-              onClick={() => setLogs([])}
-              title="Clear the activity log"
-            >
-              Clear Log
-            </button>
-          )}
         </div>
       </header>
 
       {logs.length > 0 && (
-        <div style={{
-          background: '#0f172a', borderBottom: '1px solid #1e293b',
-          padding: '.5rem 1rem', maxHeight: '10rem', overflowY: 'auto',
-          fontFamily: 'monospace', fontSize: '.78rem',
-        }}>
-          {logs.map(entry => (
-            <div key={entry.id} style={{ color: LOG_COLOR[entry.level], lineHeight: '1.6' }}>
-              <span style={{ opacity: 0.5, marginRight: '.75rem' }}>{entry.time}</span>
-              {entry.text}
-            </div>
-          ))}
-          <div ref={logEndRef} />
+        <div style={{ position: 'relative', background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
+          <button
+            onClick={() => setLogs([])}
+            title="Clear activity log"
+            aria-label="Clear activity log"
+            style={{
+              position: 'absolute', top: '.35rem', right: '.5rem',
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#64748b', fontSize: '1rem', lineHeight: 1,
+              padding: '2px 5px', borderRadius: '4px',
+            }}
+          >
+            ✕
+          </button>
+          <div style={{
+            padding: '.5rem 2rem .5rem 1rem', maxHeight: '10rem', overflowY: 'auto',
+            fontFamily: 'monospace', fontSize: '.78rem',
+          }}>
+            {logs.map(entry => (
+              <div key={entry.id} style={{ color: LOG_COLOR[entry.level], lineHeight: '1.6' }}>
+                <span style={{ opacity: 0.5, marginRight: '.75rem' }}>{entry.time}</span>
+                {entry.text}
+              </div>
+            ))}
+            <div ref={logEndRef} />
+          </div>
         </div>
       )}
 

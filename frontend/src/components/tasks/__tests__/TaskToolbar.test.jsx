@@ -116,7 +116,7 @@ describe('TaskToolbar', () => {
   it('calls onRefresh when the Refresh button is clicked', () => {
     const onRefresh = vi.fn()
     renderToolbar({ onRefresh })
-    fireEvent.click(screen.getByText('↻ Refresh'))
+    fireEvent.click(screen.getByRole('button', { name: 'Reload tasks from server' }))
     expect(onRefresh).toHaveBeenCalledOnce()
   })
 
