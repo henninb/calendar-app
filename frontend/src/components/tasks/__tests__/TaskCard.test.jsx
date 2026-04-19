@@ -426,6 +426,16 @@ describe('TaskCard — overflow menu', () => {
     expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'todo' })
   })
 
+  it('"Copy" menu item writes the task title to the clipboard', async () => {
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
+    renderCard()
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(screen.getByText('Copy'))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Buy groceries')
+  })
+
   it('clicking outside the overflow menu closes it', () => {
     renderCard()
     fireEvent.click(screen.getByTitle('More actions'))

@@ -394,6 +394,11 @@ export default function TaskCard({
       onClick: () => onEdit(task),
     },
     {
+      label: 'Copy',
+      icon: '⎘',
+      onClick: () => navigator.clipboard.writeText(task.title),
+    },
+    {
       label: 'Start',
       icon: '▶',
       hidden: task.status !== 'todo',
