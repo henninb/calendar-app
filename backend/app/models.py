@@ -214,6 +214,7 @@ class Task(Base):
     estimated_minutes = Column(Integer)
     recurrence = Column(Enum(TaskRecurrence), default=TaskRecurrence.none)
 
+    order = Column(Integer, default=0)
     gtask_id = Column(String(200))
     synced_at = Column(DateTime)
     parent_task_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)

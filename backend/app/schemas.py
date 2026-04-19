@@ -302,10 +302,12 @@ class TaskUpdate(BaseModel):
     due_date: date | None = None
     estimated_minutes: int | None = None
     recurrence: TaskRecurrence | None = None
+    order: int | None = None
 
 
 class TaskOut(TaskBase):
     id: int
+    order: int = 0
     gtask_id: str | None = None
     synced_at: datetime | None = None
     completed_at: datetime | None = None

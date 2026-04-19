@@ -154,6 +154,11 @@ export default function TaskList() {
         result.later.push(task)
       }
     }
+    for (const key of Object.keys(result)) {
+      result[key].sort((a, b) =>
+        (a.order ?? 0) - (b.order ?? 0) || a.created_at.localeCompare(b.created_at)
+      )
+    }
     return result
   }, [visible, today, tomorrow, week1end, week2end])
 
@@ -341,6 +346,26 @@ export default function TaskList() {
     }
   }, [pushUndo])
 
+  const reorderTasks = useCallback(async (reorderedSectionTasks) => {
+    const withOrder = reorderedSectionTasks.map((t, i) => ({ ...t, order: i }))
+    const byId = new Map(withOrder.map(t => [t.id, t]))
+    setTasks(prev => prev.map(t => byId.has(t.id) ? byId.get(t.id) : t))
+    const original = tasksRef.current
+    try {
+      await Promise.all(
+        withOrder
+          .filter(t => {
+            const prev = original.find(o => o.id === t.id)
+            return prev && prev.order !== t.order
+          })
+          .map(t => updateTask(t.id, { order: t.order }))
+      )
+    } catch (err) {
+      console.error('[TaskList] reorderTasks failed:', err)
+      setError(err.message)
+    }
+  }, [])
+
   const reorderSubtasks = useCallback(async (taskId, reorderedSubs) => {
     // Optimistic update — assign order by position index
     const withOrder = reorderedSubs.map((s, i) => ({ ...s, order: i }))
@@ -455,6 +480,7 @@ export default function TaskList() {
                 onAddSubtask={addSubtask}
                 onDeleteSubtask={deleteSubtaskCb}
                 onReorderSubtasks={reorderSubtasks}
+                onReorderTasks={reorderTasks}
                 persons={persons}
                 categories={categories}
                 dismissingIds={dismissingIds}

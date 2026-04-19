@@ -7,7 +7,7 @@ database:
 
 google:
   token_file: token.json
-  redirect_uri: http://localhost:8000/api/sync/auth/callback
+  redirect_uri: https://calendar.bhenning.com/api/sync/auth/callback
   gcal_max_results: 250
   gopass_client_id_path: gmail/brian.henning/client_id
   gopass_client_secret_path: gmail/brian.henning/client_secret

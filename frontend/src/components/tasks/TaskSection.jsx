@@ -1,4 +1,11 @@
-import React from 'react'
+import React, { useCallback } from 'react'
+import {
+  DndContext, closestCenter, MouseSensor, TouchSensor, useSensor, useSensors,
+} from '@dnd-kit/core'
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import TaskCard from './TaskCard'
 
 // Per-section accent: [left-border color, label color light, label color dark, bg light, bg dark]
@@ -64,6 +71,44 @@ const SECTION_ICON = {
   no_date:       '📌',
 }
 
+function SortableTaskWrapper({ task, dismissing, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+    disabled: dismissing,
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 20 : undefined,
+        opacity: isDragging ? 0.5 : 1,
+      }}
+      className="relative group/task-row"
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        tabIndex={-1}
+        title="Drag to reorder"
+        className="absolute left-0 top-0 bottom-0 z-10
+          flex items-center px-1
+          opacity-0 group-hover/task-row:opacity-100
+          cursor-grab active:cursor-grabbing
+          text-slate-300 dark:text-slate-600
+          hover:text-slate-500 dark:hover:text-slate-400
+          transition-opacity select-none text-xs
+          -translate-x-3"
+      >
+        ⠿
+      </button>
+      {children}
+    </div>
+  )
+}
+
 export default function TaskSection({
   sectionKey,
   label,
@@ -79,6 +124,7 @@ export default function TaskSection({
   onAddSubtask,
   onDeleteSubtask,
   onReorderSubtasks,
+  onReorderTasks,
   persons,
   categories,
   dismissingIds = new Set(),
@@ -86,6 +132,19 @@ export default function TaskSection({
   const count = tasks.length
   const accent = SECTION_ACCENT[sectionKey] ?? SECTION_ACCENT.later
   const icon   = SECTION_ICON[sectionKey] ?? '•'
+
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+  )
+
+  const handleDragEnd = useCallback(({ active, over }) => {
+    if (!over || active.id === over.id) return
+    const oldIndex = tasks.findIndex(t => t.id === active.id)
+    const newIndex = tasks.findIndex(t => t.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+    onReorderTasks(arrayMove(tasks, oldIndex, newIndex))
+  }, [tasks, onReorderTasks])
 
   return (
     <div className="mb-3">
@@ -128,32 +187,44 @@ export default function TaskSection({
       {!collapsed && count > 0 && (
         <div className="border border-t-0 border-slate-200 dark:border-slate-700/50 rounded-b-xl
           bg-slate-50/50 dark:bg-slate-900/30 p-3 space-y-2.5">
-          {tasks.map(task => {
-            const dismissing = dismissingIds.has(task.id)
-            return (
-              <div
-                key={task.id}
-                className="transition-all duration-300 ease-out overflow-hidden"
-                style={{ maxHeight: dismissing ? '0' : '2000px', marginBottom: dismissing ? '0' : undefined }}
-              >
-                <TaskCard
-                  task={task}
-                  expanded={!!expandedCards[task.id]}
-                  onToggleExpand={onToggleExpand}
-                  onEdit={onEdit}
-                  onPatchTask={onPatchTask}
-                  onDeleteTask={onDeleteTask}
-                  onPatchSubtask={onPatchSubtask}
-                  onAddSubtask={onAddSubtask}
-                  onDeleteSubtask={onDeleteSubtask}
-                  onReorderSubtasks={onReorderSubtasks}
-                  persons={persons}
-                  categories={categories}
-                  dismissing={dismissing}
-                />
-              </div>
-            )
-          })}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={tasks.map(t => t.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {tasks.map(task => {
+                const dismissing = dismissingIds.has(task.id)
+                return (
+                  <SortableTaskWrapper key={task.id} task={task} dismissing={dismissing}>
+                    <div
+                      className="transition-all duration-300 ease-out overflow-hidden"
+                      style={{ maxHeight: dismissing ? '0' : '2000px', marginBottom: dismissing ? '0' : undefined }}
+                    >
+                      <TaskCard
+                        task={task}
+                        expanded={!!expandedCards[task.id]}
+                        onToggleExpand={onToggleExpand}
+                        onEdit={onEdit}
+                        onPatchTask={onPatchTask}
+                        onDeleteTask={onDeleteTask}
+                        onPatchSubtask={onPatchSubtask}
+                        onAddSubtask={onAddSubtask}
+                        onDeleteSubtask={onDeleteSubtask}
+                        onReorderSubtasks={onReorderSubtasks}
+                        persons={persons}
+                        categories={categories}
+                        dismissing={dismissing}
+                      />
+                    </div>
+                  </SortableTaskWrapper>
+                )
+              })}
+            </SortableContext>
+          </DndContext>
         </div>
       )}
 

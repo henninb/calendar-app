@@ -165,6 +165,8 @@ spec:
                 secretKeyRef:
                   name: ${APP_NAME}-credentials
                   key: GOOGLE_CLIENT_SECRET
+            - name: GOOGLE_REDIRECT_URI
+              value: "https://calendar.bhenning.com/api/sync/auth/callback"
             - name: GOOGLE_TOKEN_FILE
               value: "/token/token.json"
             - name: TZ
