@@ -3,13 +3,14 @@ export const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', done: 
 export const TASK_FETCH_LIMIT = 500
 
 export const SECTION_DEFS = [
-  { key: 'done',          label: 'Done',           hideWhenEmpty: true },
-  { key: 'overdue_today', label: 'Overdue / Today' },
-  { key: 'tomorrow',      label: 'Tomorrow' },
-  { key: 'this_week',     label: 'This Week' },
-  { key: 'next_week',     label: 'Next Week' },
-  { key: 'later',         label: 'Later' },
-  { key: 'no_date',       label: 'No Date',        hideWhenEmpty: true },
+  { key: 'done',      label: 'Done',      hideWhenEmpty: true },
+  { key: 'overdue',   label: 'Overdue' },
+  { key: 'today',     label: 'Today' },
+  { key: 'tomorrow',  label: 'Tomorrow' },
+  { key: 'this_week', label: 'This Week' },
+  { key: 'next_week', label: 'Next Week' },
+  { key: 'later',     label: 'Later' },
+  { key: 'no_date',   label: 'No Date',   hideWhenEmpty: true },
 ]
 
 // Safe hex-alpha: handles #rrggbb and #rgb; passes through other formats

@@ -136,14 +136,16 @@ export default function TaskList() {
   }, [tasks, filterStatus, filterAssignee, filterCategory, searchQuery])
 
   const grouped = useMemo(() => {
-    const result = { done: [], overdue_today: [], tomorrow: [], this_week: [], next_week: [], later: [], no_date: [] }
+    const result = { done: [], overdue: [], today: [], tomorrow: [], this_week: [], next_week: [], later: [], no_date: [] }
     for (const task of visible) {
       if (task.status === 'done') {
         result.done.push(task)
       } else if (!task.due_date) {
         result.no_date.push(task)
-      } else if (task.due_date <= today) {
-        result.overdue_today.push(task)
+      } else if (task.due_date < today) {
+        result.overdue.push(task)
+      } else if (task.due_date === today) {
+        result.today.push(task)
       } else if (task.due_date === tomorrow) {
         result.tomorrow.push(task)
       } else if (task.due_date <= week1end) {
@@ -462,7 +464,7 @@ export default function TaskList() {
             if (hideWhenEmpty && isEmpty) return null
             const isCollapsed = collapsedSections[key] !== undefined
               ? collapsedSections[key]
-              : key !== 'overdue_today'
+              : key !== 'overdue' && key !== 'today'
             return (
               <TaskSection
                 key={key}
