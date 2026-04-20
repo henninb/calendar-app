@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react'
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import listPlugin from '@fullcalendar/list'
 import interactionPlugin from '@fullcalendar/interaction'
-import { fetchOccurrences, fetchCategories, updateOccurrence, deleteOccurrence } from '../api'
+import { fetchOccurrences, fetchCategories, updateOccurrence, deleteOccurrence, createEvent } from '../api'
+import EventPanel from './EventPanel'
 
 function fmt(dateStr) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
@@ -18,6 +19,8 @@ export default function CalendarView() {
   const [saving, setSaving]       = useState(false)
   const [activeFilter, setFilter] = useState(null)
   const [error, setError]         = useState(null)
+  const [panelOpen, setPanelOpen] = useState(false)
+  const dateRangeRef              = useRef(null)
 
   useEffect(() => { fetchCategories().then(setCats) }, [])
 
@@ -40,8 +43,21 @@ export default function CalendarView() {
   const handleDatesSet = useCallback(async ({ startStr, endStr }) => {
     const start = startStr.slice(0, 10)
     const end   = endStr.slice(0, 10)
+    dateRangeRef.current = { start, end }
     const data  = await fetchOccurrences({ start_date: start, end_date: end })
     setOccs(data)
+  }, [])
+
+  const handleCreateEvent = useCallback(async (payload) => {
+    await createEvent(payload)
+    if (dateRangeRef.current) {
+      const data = await fetchOccurrences({
+        start_date: dateRangeRef.current.start,
+        end_date:   dateRangeRef.current.end,
+      })
+      setOccs(data)
+    }
+    setPanelOpen(false)
   }, [])
 
   const handleEventClick = ({ event }) => setSelected(event.extendedProps.occ)
@@ -144,6 +160,32 @@ export default function CalendarView() {
           </button>
         ))}
       </div>
+
+      {/* FAB — new event */}
+      <button
+        onClick={() => setPanelOpen(true)}
+        title="New event"
+        className="fixed bottom-6 right-6 z-40
+          w-14 h-14 rounded-full
+          bg-white dark:bg-slate-800
+          border border-slate-200 dark:border-slate-700
+          text-slate-600 dark:text-slate-300
+          shadow-md hover:shadow-lg
+          hover:bg-slate-50 dark:hover:bg-slate-700
+          hover:border-slate-300 dark:hover:border-slate-600
+          transition-all duration-200 active:scale-95
+          flex items-center justify-center
+          text-2xl leading-none select-none"
+      >
+        +
+      </button>
+
+      <EventPanel
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        onCreateEvent={handleCreateEvent}
+        categories={cats}
+      />
 
       {/* Detail side panel */}
       {selected && (

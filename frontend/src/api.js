@@ -1,7 +1,20 @@
 const BASE = '/api'
 
+function apiKeyHeader() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem('calendarConfig') || '{}')
+    return cfg.apiKey ? { 'X-Api-Key': cfg.apiKey } : {}
+  } catch {
+    return {}
+  }
+}
+
 async function request(path, options = {}) {
-  const res = await fetch(`${BASE}${path}`, options)
+  const opts = {
+    ...options,
+    headers: { ...apiKeyHeader(), ...options.headers },
+  }
+  const res = await fetch(`${BASE}${path}`, opts)
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`
     try {
@@ -17,7 +30,7 @@ async function request(path, options = {}) {
 // #19, #23: shared SSE streaming helper — eliminates duplication between syncToGcal / syncToGtasks
 // and uses the same error-extraction logic as request()
 async function streamSSE(url, onProgress) {
-  const res = await fetch(url, { method: 'POST' })
+  const res = await fetch(url, { method: 'POST', headers: apiKeyHeader() })
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`
     try {
@@ -57,6 +70,13 @@ export const fetchCategories = (signal) => request('/categories', { signal })
 // Default fetch limit for list endpoints — matches backend max of 1000.
 // Callers can override via params. Increase or add pagination if datasets grow large.
 const FETCH_LIMIT = 500
+
+export const createEvent = (data) =>
+  request('/events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
 
 export const fetchOccurrences = (params = {}) => {
   const q = new URLSearchParams({ limit: FETCH_LIMIT, ...params })

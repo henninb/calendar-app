@@ -2,14 +2,17 @@ import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
-from fastapi import Depends
 from .config import settings
 from .database import Base, engine, SessionLocal
+from .limiter import limiter
 from .models import CreditCard, Person
 from .routers import categories, events, occurrences, sync, credit_cards, persons, tasks, stores, grocery
 from .security import require_api_key
@@ -73,6 +76,21 @@ async def lifespan(app: FastAPI):
 
     await asyncio.to_thread(_startup_data_generation)
 
+    if not settings.api_key:
+        log.warning(
+            "API_KEY is not configured — server is running in OPEN mode. "
+            "All endpoints are unauthenticated. Set API_KEY to require authentication."
+        )
+
+    _SUSPICIOUS_DIRS = {"static", "dist", "public", "www", "html", "frontend"}
+    token_parts = set(Path(settings.google_token_file).resolve().parts)
+    if token_parts & _SUSPICIOUS_DIRS:
+        log.warning(
+            "google_token_file %r may be inside a web-accessible directory. "
+            "Move it outside the web root to prevent token exposure.",
+            settings.google_token_file,
+        )
+
     start_scheduler()
 
     yield
@@ -88,6 +106,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -95,6 +116,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.middleware("http")
@@ -122,8 +155,11 @@ def health(response: Response):
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        return {"status": "ok"}
+        result = {"status": "ok"}
     except Exception:
         log.exception("Health check: database unreachable")
         response.status_code = 503
-        return {"status": "error", "detail": "database unavailable"}
+        result = {"status": "error", "detail": "database unavailable"}
+    if not settings.api_key:
+        result["auth"] = "open"
+    return result

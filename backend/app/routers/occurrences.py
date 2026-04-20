@@ -2,13 +2,14 @@ import logging
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session, joinedload
 
 log = logging.getLogger(__name__)
 
 from ..config import settings
 from ..database import get_db
+from ..limiter import limiter
 from ..models import Event, Occurrence, OccurrenceStatus, Task
 from ..schemas import GenerateResult, OccurrenceOut, OccurrenceUpdate, TaskOut
 from ..services.recurrence import generate_all_occurrences, mark_overdue
@@ -133,7 +134,9 @@ def delete_occurrence(occurrence_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/generate-all", response_model=GenerateResult)
+@limiter.limit("10/minute")
 def generate_all(
+    request: Request,
     lookahead_days: int = Query(settings.occurrence_lookahead_days, ge=1, le=1825),
     db: Session = Depends(get_db),
 ):

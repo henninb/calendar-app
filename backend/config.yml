@@ -12,6 +12,9 @@ google:
   gopass_client_id_path: gmail/brian.henning/client_id
   gopass_client_secret_path: gmail/brian.henning/client_secret
 
+api_key:
+  gopass_path: calendar.bhenning.com/api_key
+
 scheduler:
   occurrence_lookahead_days: 365
   interval_hours: 24

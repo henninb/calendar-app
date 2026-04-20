@@ -109,7 +109,9 @@ class Settings:
         self.cc_history_days      = int(cfg["credit_cards"]["history_days"])
         self.default_person_name  = cfg.get("default_person_name", "")
         self.categories           = cfg["categories"]
-        self.api_key              = cfg.get("api_key", "") or os.environ.get("API_KEY", "")
+        api_key_cfg               = cfg.get("api_key", {})
+        api_key_path              = api_key_cfg.get("gopass_path", "") if isinstance(api_key_cfg, dict) else ""
+        self.api_key              = _gopass(api_key_path) if api_key_path else os.environ.get("API_KEY", "")
         if "*" in self.allowed_origins:
             raise ValueError("Wildcard '*' cannot be used in ALLOWED_ORIGINS — specify explicit origins.")
 

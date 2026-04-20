@@ -32,6 +32,7 @@ export default function App() {
   const [gtasksSyncing, setGtasksSyncing]   = useState(false)
   const [gcalAuth, setGcalAuth]         = useState(null)
   const [logs, setLogs]                 = useState([])
+  const [logCount, setLogCount]         = useState(0)
   const [darkMode, setDarkMode]         = useState(() => {
     const saved = localStorage.getItem('theme')
     return saved !== null ? saved === 'dark' : true
@@ -46,6 +47,7 @@ export default function App() {
   const addLog = useCallback((level, text) => {
     const id = Date.now() + Math.random()
     setLogs(prev => [...prev, { id, level, text, time: timestamp() }])
+    setLogCount(c => c + 1)
     return id
   }, [])
 
@@ -64,7 +66,7 @@ export default function App() {
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [logs])
+  }, [logCount])
 
   const handleGenerate = async () => {
     setSyncing(true)

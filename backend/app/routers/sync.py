@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..config import settings
 from ..database import SessionLocal, get_db
+from ..limiter import limiter
 from ..models import Event, Occurrence, OccurrenceStatus, Task, TaskStatus
 from ..schemas import AuthStatus, SyncResult
 from ..services import google_calendar as gcal
@@ -116,7 +117,7 @@ def _sync_one(occ_id: int, creds: Credentials | None = None) -> tuple[int, str, 
         return occ_id, action, occ_date, occ.gcal_event_id or "", ""
     except Exception as exc:
         log.exception("Sync failed for occurrence %d", occ_id)
-        return occ_id, "failed", "", "", f"{type(exc).__name__}: {str(exc)[:200]}"
+        return occ_id, "failed", "", "", f"occ {occ_id}: sync error (see server logs)"
     finally:
         db.close()
 
@@ -186,7 +187,9 @@ def _gcal_sync_events(days_ahead: int, force: bool = False) -> Generator[str, No
 
 
 @router.post("/gcal")
+@limiter.limit("5/minute")
 def sync_to_gcal(
+    request: Request,
     days_ahead: int = Query(settings.occurrence_lookahead_days, ge=1, le=730),
     force: bool = Query(False, description="Re-sync all occurrences, overwriting existing Google Calendar events"),
 ):
@@ -293,9 +296,9 @@ def sync_single(occurrence_id: int, db: Session = Depends(get_db)):
 
 # ── Google Tasks Sync ─────────────────────────────────────────────────────────
 
-def _sync_one_task(task_id: int, tasklist_id: str) -> tuple[int, str, str, str]:
+def _sync_one_task(task_id: int, tasklist_id: str, svc=None) -> tuple[int, str, str, str]:
     """
-    Per-thread worker — owns its own DB session and Tasks service instance.
+    Per-thread worker — owns its own DB session; svc is shared from the caller.
     Returns (task_id, action, title, error_msg).
     action is one of: "inserted" | "updated" | "skipped" | "failed"
     error_msg is non-empty only when action == "failed".
@@ -307,11 +310,11 @@ def _sync_one_task(task_id: int, tasklist_id: str) -> tuple[int, str, str, str]:
         if task is None:
             return task_id, "skipped", "", ""
         title = task.title[:40]
-        action = gtasks.sync_task(db, task, tasklist_id=tasklist_id)
+        action = gtasks.sync_task(db, task, svc=svc, tasklist_id=tasklist_id)
         return task_id, action, title, ""
-    except Exception as exc:
+    except Exception:
         log.exception("Sync failed for task %d", task_id)
-        return task_id, "failed", "", f"{type(exc).__name__}: {str(exc)[:200]}"
+        return task_id, "failed", "", f"task {task_id}: sync error (see server logs)"
     finally:
         db.close()
 
@@ -337,31 +340,42 @@ def _gtasks_sync_events() -> Generator[str, None, None]:
     log.info("GTasks sync: %d tasks across %d workers", total, _GTASKS_SYNC_WORKERS)
     yield sse({"type": "start", "total": total})
 
-    _, tasklist_id = gtasks.get_or_create_tasklist()
+    try:
+        svc, tasklist_id = gtasks.get_or_create_tasklist()
+    except Exception:
+        log.exception("GTasks sync: failed to get/create tasklist")
+        yield sse({"type": "done", "synced": 0, "failed": total, "errors": ["Could not access Google Tasks — see server logs"]})
+        return
 
     synced, failed, errors = 0, 0, []
-    with ThreadPoolExecutor(max_workers=_GTASKS_SYNC_WORKERS) as pool:
-        futures = {pool.submit(_sync_one_task, task_id, tasklist_id): task_id for task_id in task_ids}
-        for i, future in enumerate(as_completed(futures), 1):
-            task_id, action, title, error_msg = future.result()
-            if action in ("inserted", "updated"):
-                synced += 1
-                msg = f"{i}/{total} task {task_id} ({title}): {action}"
-            elif action == "skipped":
-                msg = f"{i}/{total} task {task_id}: skipped"
-            else:  # "failed"
-                failed += 1
-                errors.append(f"task {task_id}: {error_msg}")
-                msg = f"{i}/{total} task {task_id}: FAILED {error_msg}"
-            log.debug("GTasks sync: %s", msg)
-            yield sse({"type": "progress", "i": i, "total": total, "action": action, "msg": msg})
+    try:
+        with ThreadPoolExecutor(max_workers=_GTASKS_SYNC_WORKERS) as pool:
+            futures = {pool.submit(_sync_one_task, task_id, tasklist_id, svc): task_id for task_id in task_ids}
+            for i, future in enumerate(as_completed(futures), 1):
+                task_id, action, title, error_msg = future.result()
+                if action in ("inserted", "updated"):
+                    synced += 1
+                    msg = f"{i}/{total} task {task_id} ({title}): {action}"
+                elif action == "skipped":
+                    msg = f"{i}/{total} task {task_id}: skipped"
+                else:  # "failed"
+                    failed += 1
+                    errors.append(f"task {task_id}: {error_msg}")
+                    msg = f"{i}/{total} task {task_id}: FAILED {error_msg}"
+                log.debug("GTasks sync: %s", msg)
+                yield sse({"type": "progress", "i": i, "total": total, "action": action, "msg": msg})
+    except Exception:
+        log.exception("GTasks sync: unexpected error in task loop")
+        errors.append("Sync interrupted — see server logs")
+        failed += total - (synced + failed)
 
     log.info("GTasks sync done — synced=%d failed=%d", synced, failed)
     yield sse({"type": "done", "synced": synced, "failed": failed, "errors": errors})
 
 
 @router.post("/gtasks")
-def sync_to_gtasks():
+@limiter.limit("5/minute")
+def sync_to_gtasks(request: Request):
     """Push all non-cancelled tasks to Google Tasks, streaming progress via Server-Sent Events."""
     return StreamingResponse(
         _gtasks_sync_events(),
@@ -385,6 +399,11 @@ def export_ics(
     today = date.today()
     start = start_date or today
     end = end_date or (today + timedelta(days=settings.occurrence_lookahead_days))
+
+    if end < start:
+        raise HTTPException(status_code=400, detail="end_date must be on or after start_date")
+    if (end - start).days > 1825:
+        raise HTTPException(status_code=400, detail="Date range cannot exceed 5 years")
 
     occs = (
         db.query(Occurrence)

@@ -67,6 +67,7 @@ DB_USERNAME=$(gopass show -o postgresql.bhenning.com/username)
 DB_PASSWORD=$(gopass show -o postgresql.bhenning.com/password)
 GOOGLE_CLIENT_ID=$(gopass show -o gmail/brian.henning/client_id)
 GOOGLE_CLIENT_SECRET=$(gopass show -o gmail/brian.henning/client_secret)
+API_KEY=$(gopass show -o calendar.bhenning.com/api_key)
 
 # --- prepare hostPath dirs on the worker ------------------------------------
 
@@ -99,6 +100,7 @@ stringData:
   DB_PASSWORD: "$DB_PASSWORD"
   GOOGLE_CLIENT_ID: "$GOOGLE_CLIENT_ID"
   GOOGLE_CLIENT_SECRET: "$GOOGLE_CLIENT_SECRET"
+  API_KEY: "$API_KEY"
 
 ---
 apiVersion: apps/v1
@@ -165,6 +167,11 @@ spec:
                 secretKeyRef:
                   name: ${APP_NAME}-credentials
                   key: GOOGLE_CLIENT_SECRET
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ${APP_NAME}-credentials
+                  key: API_KEY
             - name: GOOGLE_REDIRECT_URI
               value: "https://calendar.bhenning.com/api/sync/auth/callback"
             - name: GOOGLE_TOKEN_FILE

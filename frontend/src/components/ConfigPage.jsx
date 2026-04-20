@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react'
 export const CONFIG_DEFAULTS = {
   gcalSyncDays: 365,
   gcalSyncForce: false,
+  apiKey: '',
 }
 
 export function loadConfig() {
@@ -104,6 +105,31 @@ export default function ConfigPage({ config, onSave, gcalAuth }) {
             {fieldLabel('Force Sync', 'Re-sync all occurrences, overwriting already-synced Google Calendar events. Uncheck to only push new events.')}
           </label>
         </div>
+      </div>
+
+      <div style={{ marginBottom: '1.5rem' }}>
+        <div style={{
+          fontSize: '.7rem', textTransform: 'uppercase', letterSpacing: '.08em',
+          color: 'var(--color-text-dim)', fontWeight: 700, marginBottom: '1rem',
+          borderBottom: '1px solid var(--color-border)', paddingBottom: '.4rem',
+        }}>
+          Authentication
+        </div>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '.4rem' }}>
+          {fieldLabel('API Key', 'Sent as X-Api-Key on every request. Leave blank if the server has no API_KEY set.')}
+          <input
+            type="password"
+            value={form.apiKey}
+            onChange={e => setForm(f => ({ ...f, apiKey: e.target.value }))}
+            placeholder="(none)"
+            autoComplete="off"
+            style={{
+              border: '1px solid var(--color-input-border)', borderRadius: 6,
+              padding: '.35rem .65rem', fontSize: '.875rem',
+              background: 'var(--color-input-bg)', color: 'var(--color-text)', width: '100%',
+            }}
+          />
+        </label>
       </div>
 
       <div style={{ display: 'flex', gap: '.5rem' }}>
