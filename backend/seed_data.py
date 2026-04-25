@@ -603,7 +603,7 @@ CREDIT_CARDS = [
     CreditCard(name="Delta SkyMiles Amex",   issuer="American Express", last_four="XXXX",
                statement_close_day=17, grace_period_days=25, weekend_shift=WeekendShift.back),
     CreditCard(name="Costco Anywhere Visa",  issuer="Citi",            last_four="XXXX",
-               statement_close_day=7,  grace_period_days=28, weekend_shift=WeekendShift.back),
+               statement_close_day=7,  due_day_next_month=3),
     CreditCard(name="Target Circle Card",    issuer="Target/TD Bank",  last_four="XXXX",
                statement_close_day=1,  due_day_same_month=28, weekend_shift=WeekendShift.forward),
     CreditCard(name="Barclays Cash Forward", issuer="Barclays",        last_four="XXXX",
