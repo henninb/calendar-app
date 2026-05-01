@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
 from ..config import settings
+from ..crud import apply_patch, get_or_404
 from ..database import get_db
 from ..models import Category, Event
 from ..schemas import EventCreate, EventOut, EventUpdate, EventWithOccurrences, GenerateResult
@@ -17,11 +19,11 @@ router = APIRouter(prefix="/events", tags=["events"])
 
 @router.get("", response_model=list[EventOut])
 def list_events(
-    category_id: Optional[int] = Query(None),
-    is_active: Optional[bool] = Query(None),
-    search: Optional[str] = Query(None),
+    category_id: int | None = Query(None),
+    is_active: bool | None = Query(None),
+    search: str | None = Query(None),
     db: Session = Depends(get_db),
-):
+) -> list[Event]:
     q = db.query(Event).options(joinedload(Event.category))
     if category_id is not None:
         q = q.filter(Event.category_id == category_id)
@@ -33,7 +35,7 @@ def list_events(
 
 
 @router.post("", response_model=EventOut, status_code=status.HTTP_201_CREATED)
-def create_event(body: EventCreate, db: Session = Depends(get_db)):
+def create_event(body: EventCreate, db: Session = Depends(get_db)) -> Event:
     _assert_category(db, body.category_id)
     event = Event(**body.model_dump())
     db.add(event)
@@ -46,43 +48,30 @@ def create_event(body: EventCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/{event_id}", response_model=EventWithOccurrences)
-def get_event(event_id: int, db: Session = Depends(get_db)):
-    event = db.get(Event, event_id)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-    return event
+def get_event(event_id: int, db: Session = Depends(get_db)) -> Event:
+    return get_or_404(db, Event, event_id, "Event not found")
 
 
 @router.patch("/{event_id}", response_model=EventOut)
-def update_event(event_id: int, body: EventUpdate, db: Session = Depends(get_db)):
-    event = db.get(Event, event_id)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
+def update_event(event_id: int, body: EventUpdate, db: Session = Depends(get_db)) -> Event:
+    event = get_or_404(db, Event, event_id, "Event not found")
     changes = body.model_dump(exclude_unset=True)
     if "category_id" in changes:
         _assert_category(db, changes["category_id"])
-
-    for field, value in changes.items():
-        setattr(event, field, value)
+    apply_patch(event, changes)
     db.commit()
     db.refresh(event)
-
-    # Re-expand occurrences when the recurrence definition changes
     recurrence_fields = {"rrule", "dtstart", "dtend_rule"}
     if recurrence_fields & changes.keys():
         generate_occurrences(db, event)
         db.refresh(event)
-
     log.info("Updated event %d (%s)", event.id, event.title)
     return event
 
 
 @router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_event(event_id: int, db: Session = Depends(get_db)):
-    event = db.get(Event, event_id)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
+def delete_event(event_id: int, db: Session = Depends(get_db)) -> None:
+    event = get_or_404(db, Event, event_id, "Event not found")
     log.info("Deleted event %d (%s)", event.id, event.title)
     db.delete(event)
     db.commit()
@@ -93,11 +82,9 @@ def generate_event_occurrences(
     event_id: int,
     lookahead_days: int = Query(settings.occurrence_lookahead_days, ge=1, le=1825),
     db: Session = Depends(get_db),
-):
+) -> GenerateResult:
     """Manually trigger occurrence generation for a single event."""
-    event = db.get(Event, event_id)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
+    event = get_or_404(db, Event, event_id, "Event not found")
     created = generate_occurrences(db, event, lookahead_days)
     return GenerateResult(events_processed=1, occurrences_created=created)
 

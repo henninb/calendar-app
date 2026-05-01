@@ -1,105 +1,54 @@
-import calendar
+from __future__ import annotations
+
 import logging
-from datetime import date, datetime, timedelta, timezone
-from typing import Optional
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
+from ..crud import apply_patch, get_or_404
+from ..database import get_db
+from ..models import Category, Subtask, Task, TaskStatus
+from ..schemas import SubtaskCreate, SubtaskOut, SubtaskUpdate, TaskCreate, TaskOut, TaskUpdate
+from ..services.task_generation import spawn_recurring_task
+
 log = logging.getLogger(__name__)
 
-from ..database import get_db
-from ..models import Category, Subtask, Task, TaskRecurrence, TaskStatus
-from ..schemas import SubtaskCreate, SubtaskOut, SubtaskUpdate, TaskCreate, TaskOut, TaskUpdate
-
-_RECURRENCE_DELTA = {
-    TaskRecurrence.daily:      timedelta(days=1),
-    TaskRecurrence.weekly:     timedelta(weeks=1),
-    TaskRecurrence.biweekly:   timedelta(weeks=2),
-    TaskRecurrence.monthly:    None,   # handled separately
-    TaskRecurrence.quarterly:  None,   # handled separately
-    TaskRecurrence.semiannual: None,   # handled separately
-    TaskRecurrence.yearly:     None,   # handled separately
-}
+router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
-def _next_due(task: Task) -> Optional[date]:
-    """Return the next due date for a recurring task, or None if one-time."""
-    if task.recurrence == TaskRecurrence.none or not task.due_date:
-        return None
-    delta = _RECURRENCE_DELTA.get(task.recurrence)
-    if delta:
-        return task.due_date + delta
-    today = task.due_date
-    if task.recurrence in (TaskRecurrence.monthly, TaskRecurrence.quarterly, TaskRecurrence.semiannual):
-        months = {TaskRecurrence.monthly: 1, TaskRecurrence.quarterly: 3, TaskRecurrence.semiannual: 6}[task.recurrence]
-        month = today.month + months
-        year = today.year + (month - 1) // 12
-        month = ((month - 1) % 12) + 1
-        day = min(today.day, calendar.monthrange(year, month)[1])
-        return date(year, month, day)
-    if task.recurrence == TaskRecurrence.yearly:
-        year = today.year + 1
-        day = min(today.day, calendar.monthrange(year, today.month)[1])
-        return date(year, today.month, day)
-    return None
+def _update_completed_at(obj: Task | Subtask, new_status: TaskStatus | None) -> None:
+    """Set or clear completed_at based on the incoming status transition."""
+    if new_status == TaskStatus.done and obj.completed_at is None:
+        obj.completed_at = datetime.now(timezone.utc)
+    elif new_status is not None and new_status != TaskStatus.done:
+        obj.completed_at = None
 
 
-def _spawn_next(db: Session, task: Task) -> None:
-    """Flush (but do NOT commit) the next task for a recurring task. Caller commits.
-
-    Keeping spawn inside the caller's transaction makes the status-change and
-    the new-task creation atomic — a crash between them can no longer leave a
-    task permanently 'done' without a successor.
-    """
-    next_date = _next_due(task)
-    if not next_date:
-        return
-    already_exists = (
+def _load_task(db: Session, task_id: int) -> Task:
+    task = (
         db.query(Task)
-        .filter(Task.parent_task_id == task.id)
+        .options(joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks))
+        .filter(Task.id == task_id)
         .first()
     )
-    if already_exists:
-        log.debug("Skipping spawn for task %d — next instance already exists as task %d", task.id, already_exists.id)
-        return
-    new_task = Task(
-        parent_task_id=task.id,
-        title=task.title,
-        description=task.description,
-        priority=task.priority,
-        assignee_id=task.assignee_id,
-        category_id=task.category_id,
-        due_date=next_date,
-        estimated_minutes=task.estimated_minutes,
-        recurrence=task.recurrence,
-    )
-    db.add(new_task)
-    db.flush()  # populate new_task.id without committing
-    for subtask in task.subtasks:
-        db.add(Subtask(
-            task_id=new_task.id,
-            title=subtask.title,
-            status=TaskStatus.todo,
-            order=subtask.order,
-        ))
-    log.info("Spawned next %s task %d (due %s) from completed task %d", task.recurrence, new_task.id, next_date, task.id)
-
-router = APIRouter(prefix="/tasks", tags=["tasks"])
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
 
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=list[TaskOut])
 def list_tasks(
-    status: Optional[TaskStatus] = Query(None),
-    assignee_id: Optional[int] = Query(None),
-    category_id: Optional[int] = Query(None),
-    occurrence_id: Optional[int] = Query(None),
+    status: TaskStatus | None = Query(None),
+    assignee_id: int | None = Query(None),
+    category_id: int | None = Query(None),
+    occurrence_id: int | None = Query(None),
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-):
+) -> list[Task]:
     q = (
         db.query(Task)
         .options(joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks))
@@ -117,56 +66,35 @@ def list_tasks(
 
 
 @router.post("", response_model=TaskOut, status_code=201)
-def create_task(body: TaskCreate, db: Session = Depends(get_db)):
-    if body.category_id is not None and not db.get(Category, body.category_id):
-        raise HTTPException(status_code=404, detail="Category not found")
+def create_task(body: TaskCreate, db: Session = Depends(get_db)) -> Task:
+    if body.category_id is not None:
+        get_or_404(db, Category, body.category_id, "Category not found")
     task = Task(**body.model_dump())
     db.add(task)
     db.flush()
     task_id, task_title = task.id, task.title
     db.commit()
     log.info("Created task %d (%s)", task_id, task_title)
-    return db.query(Task).options(
-        joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks)
-    ).filter(Task.id == task_id).first()
+    return _load_task(db, task_id)
 
 
 @router.get("/{task_id}", response_model=TaskOut)
-def get_task(task_id: int, db: Session = Depends(get_db)):
-    task = (
-        db.query(Task)
-        .options(joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks))
-        .filter(Task.id == task_id)
-        .first()
-    )
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return task
+def get_task(task_id: int, db: Session = Depends(get_db)) -> Task:
+    return _load_task(db, task_id)
 
 
 @router.patch("/{task_id}", response_model=TaskOut)
-def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)):
-    task = (
-        db.query(Task)
-        .options(joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks))
-        .filter(Task.id == task_id)
-        .first()
-    )
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)) -> Task:
+    task = _load_task(db, task_id)
     changes = body.model_dump(exclude_unset=True)
     new_status = changes.get("status")
-    for field, value in changes.items():
-        setattr(task, field, value)
-    if new_status == TaskStatus.done and task.completed_at is None:
-        task.completed_at = datetime.now(timezone.utc)
-    elif new_status is not None and new_status != TaskStatus.done:
-        task.completed_at = None
+    apply_patch(task, changes)
+    _update_completed_at(task, new_status)
     task_title, task_status = task.title, task.status
     # Spawn before commit so the status change and the new task are atomic.
     # Cancelling a recurring task should also advance the chain, not terminate it.
     if new_status in (TaskStatus.done, TaskStatus.cancelled):
-        _spawn_next(db, task)
+        spawn_recurring_task(db, task)
     db.commit()
     db.refresh(task)
     log.info("Updated task %d (%s) → status=%s", task_id, task_title, task_status)
@@ -174,10 +102,8 @@ def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)):
 
 
 @router.delete("/{task_id}", status_code=204)
-def delete_task(task_id: int, db: Session = Depends(get_db)):
-    task = db.get(Task, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+def delete_task(task_id: int, db: Session = Depends(get_db)) -> None:
+    task = get_or_404(db, Task, task_id, "Task not found")
     log.info("Deleted task %d (%s)", task.id, task.title)
     db.delete(task)
     db.commit()
@@ -186,9 +112,8 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
 # ── Subtasks ──────────────────────────────────────────────────────────────────
 
 @router.post("/{task_id}/subtasks", response_model=SubtaskOut, status_code=201)
-def create_subtask(task_id: int, body: SubtaskCreate, db: Session = Depends(get_db)):
-    if not db.get(Task, task_id):
-        raise HTTPException(status_code=404, detail="Task not found")
+def create_subtask(task_id: int, body: SubtaskCreate, db: Session = Depends(get_db)) -> Subtask:
+    get_or_404(db, Task, task_id, "Task not found")
     subtask = Subtask(task_id=task_id, **body.model_dump())
     db.add(subtask)
     db.commit()
@@ -199,7 +124,7 @@ def create_subtask(task_id: int, body: SubtaskCreate, db: Session = Depends(get_
 @router.patch("/{task_id}/subtasks/{subtask_id}", response_model=SubtaskOut)
 def update_subtask(
     task_id: int, subtask_id: int, body: SubtaskUpdate, db: Session = Depends(get_db)
-):
+) -> Subtask:
     subtask = db.query(Subtask).filter(
         Subtask.id == subtask_id, Subtask.task_id == task_id
     ).first()
@@ -207,19 +132,15 @@ def update_subtask(
         raise HTTPException(status_code=404, detail="Subtask not found")
     update_data = body.model_dump(exclude_unset=True)
     new_status = update_data.get("status")
-    if new_status == TaskStatus.done and subtask.status != TaskStatus.done:
-        subtask.completed_at = datetime.now(timezone.utc)
-    elif new_status is not None and new_status != TaskStatus.done:
-        subtask.completed_at = None
-    for field, value in update_data.items():
-        setattr(subtask, field, value)
+    _update_completed_at(subtask, new_status)
+    apply_patch(subtask, update_data)
     db.commit()
     db.refresh(subtask)
     return subtask
 
 
 @router.delete("/{task_id}/subtasks/{subtask_id}", status_code=204)
-def delete_subtask(task_id: int, subtask_id: int, db: Session = Depends(get_db)):
+def delete_subtask(task_id: int, subtask_id: int, db: Session = Depends(get_db)) -> None:
     subtask = db.query(Subtask).filter(
         Subtask.id == subtask_id, Subtask.task_id == task_id
     ).first()

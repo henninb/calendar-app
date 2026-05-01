@@ -1,13 +1,13 @@
+from __future__ import annotations
+
 import logging
 from datetime import date
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session, joinedload
 
-log = logging.getLogger(__name__)
-
 from ..config import settings
+from ..crud import get_or_404
 from ..database import get_db
 from ..limiter import limiter
 from ..models import Event, Occurrence, OccurrenceStatus, Task
@@ -15,20 +15,34 @@ from ..schemas import GenerateResult, OccurrenceOut, OccurrenceUpdate, TaskOut
 from ..services.recurrence import generate_all_occurrences, mark_overdue
 from ..services.task_generation import cancel_tasks_for_occurrence
 
+log = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/occurrences", tags=["occurrences"])
+
+
+def _load_occurrence(db: Session, occurrence_id: int) -> Occurrence:
+    occ = (
+        db.query(Occurrence)
+        .options(joinedload(Occurrence.event).joinedload(Event.category))
+        .filter(Occurrence.id == occurrence_id)
+        .first()
+    )
+    if not occ:
+        raise HTTPException(status_code=404, detail="Occurrence not found")
+    return occ
 
 
 @router.get("", response_model=list[OccurrenceOut])
 def list_occurrences(
-    start_date: Optional[date] = Query(None),
-    end_date: Optional[date] = Query(None),
-    status: Optional[OccurrenceStatus] = Query(None),
-    category_id: Optional[int] = Query(None),
-    event_id: Optional[int] = Query(None),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    status: OccurrenceStatus | None = Query(None),
+    category_id: int | None = Query(None),
+    event_id: int | None = Query(None),
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-):
+) -> list[Occurrence]:
     q = (
         db.query(Occurrence)
         .options(joinedload(Occurrence.event).joinedload(Event.category))
@@ -44,30 +58,19 @@ def list_occurrences(
         q = q.filter(Occurrence.event_id == event_id)
     if category_id:
         q = q.join(Occurrence.event).filter(Event.category_id == category_id)
-
     return q.offset(offset).limit(limit).all()
 
 
 @router.get("/{occurrence_id}", response_model=OccurrenceOut)
-def get_occurrence(occurrence_id: int, db: Session = Depends(get_db)):
-    occ = (
-        db.query(Occurrence)
-        .options(joinedload(Occurrence.event).joinedload(Event.category))
-        .filter(Occurrence.id == occurrence_id)
-        .first()
-    )
-    if not occ:
-        raise HTTPException(status_code=404, detail="Occurrence not found")
-    return occ
+def get_occurrence(occurrence_id: int, db: Session = Depends(get_db)) -> Occurrence:
+    return _load_occurrence(db, occurrence_id)
 
 
 @router.patch("/{occurrence_id}", response_model=OccurrenceOut)
 def update_occurrence(
     occurrence_id: int, body: OccurrenceUpdate, db: Session = Depends(get_db)
-):
-    occ = db.get(Occurrence, occurrence_id)
-    if not occ:
-        raise HTTPException(status_code=404, detail="Occurrence not found")
+) -> Occurrence:
+    occ = get_or_404(db, Occurrence, occurrence_id, "Occurrence not found")
     changes = body.model_dump(exclude_unset=True)
     new_status = changes.get("status")
     for field, value in changes.items():
@@ -78,27 +81,15 @@ def update_occurrence(
     # Reload with eager joins — db.commit() expires all attributes and the
     # OccurrenceOut schema accesses occ.event.category, causing N+1 lazy loads
     # without an explicit joinedload here.
-    occ = (
-        db.query(Occurrence)
-        .options(joinedload(Occurrence.event).joinedload(Event.category))
-        .filter(Occurrence.id == occurrence_id)
-        .first()
-    )
+    occ = _load_occurrence(db, occurrence_id)
     log.info("Updated occurrence %d → status=%s", occurrence_id, occ.status)
     return occ
 
 
 @router.post("/{occurrence_id}/task", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
-def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db)):
+def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db)) -> Task:
     """Create a task linked to this occurrence, or return the existing one if already created."""
-    occ = (
-        db.query(Occurrence)
-        .options(joinedload(Occurrence.event).joinedload(Event.category))
-        .filter(Occurrence.id == occurrence_id)
-        .first()
-    )
-    if not occ:
-        raise HTTPException(status_code=404, detail="Occurrence not found")
+    occ = _load_occurrence(db, occurrence_id)
     existing = (
         db.query(Task)
         .options(joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks))
@@ -106,7 +97,11 @@ def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db
         .first()
     )
     if existing:
-        log.info("Task %d already exists for occurrence %d — returning existing", existing.id, occurrence_id)
+        log.info(
+            "Task %d already exists for occurrence %d — returning existing",
+            existing.id,
+            occurrence_id,
+        )
         return existing
     task = Task(
         occurrence_id=occ.id,
@@ -119,15 +114,20 @@ def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db
     db.add(task)
     db.commit()
     db.refresh(task)
-    log.info("Created task %d (%s) from occurrence %d (event %d, date %s)", task.id, task.title, occurrence_id, occ.event_id, occ.occurrence_date)
+    log.info(
+        "Created task %d (%s) from occurrence %d (event %d, date %s)",
+        task.id,
+        task.title,
+        occurrence_id,
+        occ.event_id,
+        occ.occurrence_date,
+    )
     return task
 
 
 @router.delete("/{occurrence_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_occurrence(occurrence_id: int, db: Session = Depends(get_db)):
-    occ = db.get(Occurrence, occurrence_id)
-    if not occ:
-        raise HTTPException(status_code=404, detail="Occurrence not found")
+def delete_occurrence(occurrence_id: int, db: Session = Depends(get_db)) -> None:
+    occ = get_or_404(db, Occurrence, occurrence_id, "Occurrence not found")
     log.info("Deleted occurrence %d (event_id=%d, date=%s)", occ.id, occ.event_id, occ.occurrence_date)
     db.delete(occ)
     db.commit()
@@ -139,7 +139,7 @@ def generate_all(
     request: Request,
     lookahead_days: int = Query(settings.occurrence_lookahead_days, ge=1, le=1825),
     db: Session = Depends(get_db),
-):
+) -> GenerateResult:
     """Generate occurrences for all active events and mark overdue ones."""
     mark_overdue(db)
     result = generate_all_occurrences(db, lookahead_days)

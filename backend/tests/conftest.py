@@ -70,6 +70,16 @@ def client():
         yield c
 
 
+@pytest.fixture
+def db():
+    """Yield a raw SQLAlchemy session for service-layer unit tests."""
+    session = _TestSession()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
 @pytest.fixture(autouse=True)
 def clean_tables():
     yield

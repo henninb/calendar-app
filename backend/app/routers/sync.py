@@ -8,12 +8,14 @@ OAuth flow:
   4. POST /api/sync/gcal            → push unsynced occurrences to Google Calendar
   5. GET  /api/sync/export/ics      → download all upcoming events as .ics
 """
+from __future__ import annotations
+
 import json
 import logging
 import secrets
+from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
-from typing import Generator, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
@@ -35,6 +37,11 @@ _GCAL_SYNC_WORKERS = 10
 _GTASKS_SYNC_WORKERS = 1   # Tasks API: 5 QPS per user; each task makes 2-4 calls so must be sequential
 
 router = APIRouter(prefix="/sync", tags=["sync"])
+
+
+def _sse(data: dict) -> str:
+    """Format a dict as a Server-Sent Events data line."""
+    return f"data: {json.dumps(data)}\n\n"
 
 
 # ── OAuth ─────────────────────────────────────────────────────────────────────
@@ -60,14 +67,15 @@ def _redirect_uri(request: Request) -> str:
     if computed != configured:
         log.warning(
             "Computed redirect URI %r differs from configured %r — using configured value",
-            computed, configured,
+            computed,
+            configured,
         )
         return configured
     return computed
 
 
 @router.get("/auth")
-def start_auth(request: Request):
+def start_auth(request: Request) -> RedirectResponse:
     """Redirect the browser to Google's OAuth consent screen."""
     state = secrets.token_urlsafe(32)
     url = gcal.get_auth_url(state=state, redirect_uri=_redirect_uri(request))
@@ -75,7 +83,7 @@ def start_auth(request: Request):
 
 
 @router.get("/auth/callback")
-def auth_callback(code: str, request: Request, state: str = ""):
+def auth_callback(code: str, request: Request, state: str = "") -> RedirectResponse:
     """Exchange the authorization code for credentials."""
     if not gcal.validate_state(state):
         raise HTTPException(status_code=400, detail="Invalid OAuth state — possible CSRF attempt")
@@ -87,7 +95,7 @@ def auth_callback(code: str, request: Request, state: str = ""):
 
 
 @router.get("/auth/status", response_model=AuthStatus)
-def auth_status():
+def auth_status() -> AuthStatus:
     authenticated, email = gcal.is_authenticated()
     return AuthStatus(authenticated=authenticated, email=email)
 
@@ -95,8 +103,8 @@ def auth_status():
 # ── Sync ──────────────────────────────────────────────────────────────────────
 
 def _sync_one(occ_id: int, creds: Credentials | None = None) -> tuple[int, str, str, str, str]:
-    """
-    Per-thread worker — owns its own DB session; credentials are shared from caller.
+    """Per-thread worker — owns its own DB session; credentials are shared from caller.
+
     Returns (occ_id, action, occ_date_str, gcal_id, error_msg).
     action is one of: "inserted" | "updated" | "skipped" | "failed"
     error_msg is non-empty only when action == "failed".
@@ -123,15 +131,11 @@ def _sync_one(occ_id: int, creds: Credentials | None = None) -> tuple[int, str, 
 
 
 def _gcal_sync_events(days_ahead: int, force: bool = False) -> Generator[str, None, None]:
-    """
-    Generator that yields SSE-formatted events for a GCal sync.
-    Collects occurrence IDs in one session, fans out to _SYNC_WORKERS threads,
+    """Yield SSE-formatted events for a GCal sync.
+
+    Collects occurrence IDs in one session, fans out to _GCAL_SYNC_WORKERS threads,
     and emits a 'progress' event per occurrence plus a final 'done' event.
     """
-    def sse(data: dict) -> str:
-        return f"data: {json.dumps(data)}\n\n"
-
-    # Phase 1: collect IDs
     db = SessionLocal()
     try:
         until = date.today() + timedelta(days=days_ahead)
@@ -150,18 +154,16 @@ def _gcal_sync_events(days_ahead: int, force: bool = False) -> Generator[str, No
 
     total = len(occ_ids)
     log.info("GCal sync: %d occurrences across %d workers", total, _GCAL_SYNC_WORKERS)
-    yield sse({"type": "start", "total": total})
+    yield _sse({"type": "start", "total": total})
 
-    # Pre-fetch credentials once to avoid N file reads across threads
     creds = gcal.get_credentials()
     if not creds:
-        yield sse({"type": "done", "synced": 0, "failed": total, "errors": ["Not authenticated with Google Calendar"]})
+        yield _sse({"type": "done", "synced": 0, "failed": total, "errors": ["Not authenticated with Google Calendar"]})
         return
 
     inserted, updated, skipped, failed = 0, 0, 0, 0
-    errors = []
+    errors: list[str] = []
 
-    # Phase 2: fan out — each worker owns its session; credentials are shared
     with ThreadPoolExecutor(max_workers=_GCAL_SYNC_WORKERS) as pool:
         futures = {pool.submit(_sync_one, occ_id, creds): occ_id for occ_id in occ_ids}
         for i, future in enumerate(as_completed(futures), 1):
@@ -175,15 +177,18 @@ def _gcal_sync_events(days_ahead: int, force: bool = False) -> Generator[str, No
             elif action == "skipped":
                 skipped += 1
                 msg = f"{i}/{total} occ {occ_id}: skipped"
-            else:  # "failed"
+            else:
                 failed += 1
                 errors.append(f"occ {occ_id}: {error_msg}")
                 msg = f"{i}/{total} occ {occ_id}: FAILED {error_msg}"
             log.debug("GCal sync: %s", msg)
-            yield sse({"type": "progress", "i": i, "total": total, "action": action, "msg": msg})
+            yield _sse({"type": "progress", "i": i, "total": total, "action": action, "msg": msg})
 
-    log.info("GCal sync done — inserted=%d updated=%d skipped=%d failed=%d", inserted, updated, skipped, failed)
-    yield sse({"type": "done", "synced": inserted + updated, "failed": failed, "errors": errors})
+    log.info(
+        "GCal sync done — inserted=%d updated=%d skipped=%d failed=%d",
+        inserted, updated, skipped, failed,
+    )
+    yield _sse({"type": "done", "synced": inserted + updated, "failed": failed, "errors": errors})
 
 
 @router.post("/gcal")
@@ -192,9 +197,9 @@ def sync_to_gcal(
     request: Request,
     days_ahead: int = Query(settings.occurrence_lookahead_days, ge=1, le=730),
     force: bool = Query(False, description="Re-sync all occurrences, overwriting existing Google Calendar events"),
-):
-    """
-    Sync occurrences to Google Calendar, streaming progress via Server-Sent Events.
+) -> StreamingResponse:
+    """Sync occurrences to Google Calendar, streaming progress via Server-Sent Events.
+
     Each SSE event is a JSON object with a 'type' field: 'start', 'progress', or 'done'.
     """
     return StreamingResponse(
@@ -204,7 +209,7 @@ def sync_to_gcal(
     )
 
 
-def _run_gcal_delete_all():
+def _run_gcal_delete_all() -> None:
     """Background worker — deletes all synced Google Calendar events and clears sync state."""
     db = SessionLocal()
     try:
@@ -232,20 +237,25 @@ def _run_gcal_delete_all():
 
 
 @router.delete("/gcal", response_model=SyncResult)
-def delete_all_gcal_events(background_tasks: BackgroundTasks):
-    """
-    Delete all synced events from Google Calendar and clear sync state,
-    so they can be re-synced fresh. Runs in the background.
+def delete_all_gcal_events(background_tasks: BackgroundTasks) -> SyncResult:
+    """Delete all synced events from Google Calendar and clear sync state.
+
+    Runs in the background — check server logs for progress.
     """
     background_tasks.add_task(_run_gcal_delete_all)
-    return SyncResult(synced=0, failed=0, errors=[], message="Google Calendar wipe started in background — check server logs for progress.")
+    return SyncResult(
+        synced=0,
+        failed=0,
+        errors=[],
+        message="Google Calendar wipe started in background — check server logs for progress.",
+    )
 
 
 @router.delete("/gcal/wipe-all", response_model=SyncResult)
 def wipe_all_gcal_events(
     x_confirm_delete: str = Header(None, alias="X-Confirm-Delete"),
     db: Session = Depends(get_db),
-):
+) -> SyncResult:
     """Delete ALL events from the primary Google Calendar, including non-app events.
 
     Requires the ``X-Confirm-Delete: yes`` request header to prevent accidental
@@ -261,8 +271,10 @@ def wipe_all_gcal_events(
         cleared = (
             db.query(Occurrence)
             .filter(Occurrence.gcal_event_id.isnot(None))
-            .update({Occurrence.gcal_event_id: None, Occurrence.synced_at: None},
-                    synchronize_session=False)
+            .update(
+                {Occurrence.gcal_event_id: None, Occurrence.synced_at: None},
+                synchronize_session=False,
+            )
         )
         db.commit()
     except Exception as exc:
@@ -276,7 +288,7 @@ def wipe_all_gcal_events(
 
 
 @router.post("/gcal/{occurrence_id}", response_model=SyncResult)
-def sync_single(occurrence_id: int, db: Session = Depends(get_db)):
+def sync_single(occurrence_id: int, db: Session = Depends(get_db)) -> SyncResult:
     """Force-sync a single occurrence to Google Calendar."""
     occ = (
         db.query(Occurrence)
@@ -297,11 +309,10 @@ def sync_single(occurrence_id: int, db: Session = Depends(get_db)):
 # ── Google Tasks Sync ─────────────────────────────────────────────────────────
 
 def _sync_one_task(task_id: int, tasklist_id: str, svc=None) -> tuple[int, str, str, str]:
-    """
-    Per-thread worker — owns its own DB session; svc is shared from the caller.
+    """Per-thread worker — owns its own DB session; svc is shared from the caller.
+
     Returns (task_id, action, title, error_msg).
     action is one of: "inserted" | "updated" | "skipped" | "failed"
-    error_msg is non-empty only when action == "failed".
     Never raises — all exceptions are captured in error_msg.
     """
     db = SessionLocal()
@@ -320,14 +331,11 @@ def _sync_one_task(task_id: int, tasklist_id: str, svc=None) -> tuple[int, str, 
 
 
 def _gtasks_sync_events() -> Generator[str, None, None]:
-    """
-    Generator that yields SSE-formatted events for a Google Tasks sync.
-    Collects task IDs in one session, fans out to _SYNC_WORKERS threads,
+    """Yield SSE-formatted events for a Google Tasks sync.
+
+    Collects task IDs in one session, fans out to _GTASKS_SYNC_WORKERS threads,
     and emits a 'progress' event per task plus a final 'done' event.
     """
-    def sse(data: dict) -> str:
-        return f"data: {json.dumps(data)}\n\n"
-
     db = SessionLocal()
     try:
         task_ids = [
@@ -338,13 +346,13 @@ def _gtasks_sync_events() -> Generator[str, None, None]:
 
     total = len(task_ids)
     log.info("GTasks sync: %d tasks across %d workers", total, _GTASKS_SYNC_WORKERS)
-    yield sse({"type": "start", "total": total})
+    yield _sse({"type": "start", "total": total})
 
     try:
         svc, tasklist_id = gtasks.get_or_create_tasklist()
     except Exception:
         log.exception("GTasks sync: failed to get/create tasklist")
-        yield sse({"type": "done", "synced": 0, "failed": total, "errors": ["Could not access Google Tasks — see server logs"]})
+        yield _sse({"type": "done", "synced": 0, "failed": total, "errors": ["Could not access Google Tasks — see server logs"]})
         return
 
     synced, failed, errors = 0, 0, []
@@ -358,24 +366,24 @@ def _gtasks_sync_events() -> Generator[str, None, None]:
                     msg = f"{i}/{total} task {task_id} ({title}): {action}"
                 elif action == "skipped":
                     msg = f"{i}/{total} task {task_id}: skipped"
-                else:  # "failed"
+                else:
                     failed += 1
                     errors.append(f"task {task_id}: {error_msg}")
                     msg = f"{i}/{total} task {task_id}: FAILED {error_msg}"
                 log.debug("GTasks sync: %s", msg)
-                yield sse({"type": "progress", "i": i, "total": total, "action": action, "msg": msg})
+                yield _sse({"type": "progress", "i": i, "total": total, "action": action, "msg": msg})
     except Exception:
         log.exception("GTasks sync: unexpected error in task loop")
         errors.append("Sync interrupted — see server logs")
         failed += total - (synced + failed)
 
     log.info("GTasks sync done — synced=%d failed=%d", synced, failed)
-    yield sse({"type": "done", "synced": synced, "failed": failed, "errors": errors})
+    yield _sse({"type": "done", "synced": synced, "failed": failed, "errors": errors})
 
 
 @router.post("/gtasks")
 @limiter.limit("5/minute")
-def sync_to_gtasks(request: Request):
+def sync_to_gtasks(request: Request) -> StreamingResponse:
     """Push all non-cancelled tasks to Google Tasks, streaming progress via Server-Sent Events."""
     return StreamingResponse(
         _gtasks_sync_events(),
@@ -388,14 +396,11 @@ def sync_to_gtasks(request: Request):
 
 @router.get("/export/ics")
 def export_ics(
-    start_date: Optional[date] = Query(None),
-    end_date: Optional[date] = Query(None),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
     db: Session = Depends(get_db),
-):
-    """
-    Download upcoming occurrences as an .ics file importable into any
-    calendar application including Google Calendar.
-    """
+) -> Response:
+    """Download upcoming occurrences as an .ics file importable into any calendar application."""
     today = date.today()
     start = start_date or today
     end = end_date or (today + timedelta(days=settings.occurrence_lookahead_days))
@@ -427,10 +432,7 @@ def export_ics(
         vevent.add("uid", f"occ-{occ.id}@calendar-app")
         vevent.add("summary", ev.title)
         vevent.add("dtstart", occ.occurrence_date)
-        vevent.add(
-            "dtend",
-            occ.occurrence_date + timedelta(days=ev.duration_days),
-        )
+        vevent.add("dtend", occ.occurrence_date + timedelta(days=ev.duration_days))
         if ev.description:
             vevent.add("description", ev.description)
         if ev.location:
@@ -440,9 +442,8 @@ def export_ics(
             vevent.add("comment", f"Amount: ${ev.amount}")
         cal.add_component(vevent)
 
-    ics_bytes = cal.to_ical()
     return Response(
-        content=ics_bytes,
+        content=cal.to_ical(),
         media_type="text/calendar",
         headers={"Content-Disposition": "attachment; filename=calendar-app.ics"},
     )

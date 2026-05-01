@@ -5,14 +5,105 @@ For events with generates_tasks=True, a Task is created for each Occurrence
 max(reminder_days) days before the occurrence_date.
 
 Entry points:
-  generate_pending_tasks(db)         — run by the daily scheduler
-  cancel_tasks_for_occurrence(db, occ) — called when occurrence is skipped/deleted
+  generate_pending_tasks(db)            — run by the daily scheduler
+  cancel_tasks_for_occurrence(db, occ)  — called when occurrence is skipped/deleted
+  next_task_due_date(task)              — compute next recurrence date for a task
+  spawn_recurring_task(db, task)        — create the successor task after completion
 """
+import calendar as cal_mod
+import logging
 from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
-from ..models import Event, Occurrence, OccurrenceStatus, Task, TaskStatus
+from ..models import Event, Occurrence, OccurrenceStatus, Subtask, Task, TaskRecurrence, TaskStatus
+
+log = logging.getLogger(__name__)
+
+_RECURRENCE_DELTA: dict[TaskRecurrence, timedelta | None] = {
+    TaskRecurrence.daily: timedelta(days=1),
+    TaskRecurrence.weekly: timedelta(weeks=1),
+    TaskRecurrence.biweekly: timedelta(weeks=2),
+    TaskRecurrence.monthly: None,
+    TaskRecurrence.quarterly: None,
+    TaskRecurrence.semiannual: None,
+    TaskRecurrence.yearly: None,
+}
+
+_MONTH_INCREMENTS: dict[TaskRecurrence, int] = {
+    TaskRecurrence.monthly: 1,
+    TaskRecurrence.quarterly: 3,
+    TaskRecurrence.semiannual: 6,
+}
+
+
+def next_task_due_date(task: Task) -> date | None:
+    """Return the next due date for a recurring task, or None if one-time."""
+    if task.recurrence == TaskRecurrence.none or not task.due_date:
+        return None
+    delta = _RECURRENCE_DELTA.get(task.recurrence)
+    if delta is not None:
+        return task.due_date + delta
+    today = task.due_date
+    if task.recurrence in _MONTH_INCREMENTS:
+        months = _MONTH_INCREMENTS[task.recurrence]
+        month = today.month + months
+        year = today.year + (month - 1) // 12
+        month = ((month - 1) % 12) + 1
+        day = min(today.day, cal_mod.monthrange(year, month)[1])
+        return date(year, month, day)
+    if task.recurrence == TaskRecurrence.yearly:
+        year = today.year + 1
+        day = min(today.day, cal_mod.monthrange(year, today.month)[1])
+        return date(year, today.month, day)
+    return None
+
+
+def spawn_recurring_task(db: Session, task: Task) -> None:
+    """Flush (but do NOT commit) the next task for a recurring task. Caller commits.
+
+    Keeping spawn inside the caller's transaction makes the status-change and
+    the new-task creation atomic — a crash between them can no longer leave a
+    task permanently 'done' without a successor.
+    """
+    next_date = next_task_due_date(task)
+    if not next_date:
+        return
+    already_exists = db.query(Task).filter(Task.parent_task_id == task.id).first()
+    if already_exists:
+        log.debug(
+            "Skipping spawn for task %d — next instance already exists as task %d",
+            task.id,
+            already_exists.id,
+        )
+        return
+    new_task = Task(
+        parent_task_id=task.id,
+        title=task.title,
+        description=task.description,
+        priority=task.priority,
+        assignee_id=task.assignee_id,
+        category_id=task.category_id,
+        due_date=next_date,
+        estimated_minutes=task.estimated_minutes,
+        recurrence=task.recurrence,
+    )
+    db.add(new_task)
+    db.flush()
+    for subtask in task.subtasks:
+        db.add(Subtask(
+            task_id=new_task.id,
+            title=subtask.title,
+            status=TaskStatus.todo,
+            order=subtask.order,
+        ))
+    log.info(
+        "Spawned next %s task %d (due %s) from completed task %d",
+        task.recurrence,
+        new_task.id,
+        next_date,
+        task.id,
+    )
 
 
 def _lead_days(event: Event) -> int:
@@ -21,10 +112,8 @@ def _lead_days(event: Event) -> int:
 
 
 def generate_pending_tasks(db: Session) -> int:
-    """
-    For every active generates_tasks event, create tasks for occurrences
-    whose occurrence_date falls within the next max(reminder_days) days
-    and that don't already have a linked task.
+    """Create tasks for upcoming occurrences whose lead window opens today.
+
     Returns the count of tasks created.
 
     Uses 3 queries regardless of event count (no N+1):
@@ -42,12 +131,10 @@ def generate_pending_tasks(db: Session) -> int:
     if not events:
         return 0
 
-    # Per-event thresholds and lookup map
     event_thresholds = {event.id: today + timedelta(days=_lead_days(event)) for event in events}
     event_map = {event.id: event for event in events}
     max_threshold = max(event_thresholds.values())
 
-    # Batch-load all candidate occurrences across all events in one query
     qualifying_occs = (
         db.query(Occurrence)
         .filter(
@@ -59,17 +146,17 @@ def generate_pending_tasks(db: Session) -> int:
         .all()
     )
 
-    # Filter per-event threshold in Python, then batch-check existing tasks
     occ_ids_to_check = [
-        occ.id for occ in qualifying_occs
+        occ.id
+        for occ in qualifying_occs
         if occ.occurrence_date <= event_thresholds[occ.event_id]
     ]
     if not occ_ids_to_check:
         return 0
 
     existing_occ_ids = {
-        row[0] for row in
-        db.query(Task.occurrence_id).filter(Task.occurrence_id.in_(occ_ids_to_check)).all()
+        row[0]
+        for row in db.query(Task.occurrence_id).filter(Task.occurrence_id.in_(occ_ids_to_check)).all()
     }
 
     new_tasks = []
@@ -94,8 +181,8 @@ def generate_pending_tasks(db: Session) -> int:
 
 
 def cancel_tasks_for_occurrence(db: Session, occurrence: Occurrence) -> int:
-    """
-    Cancel all non-terminal tasks linked to this occurrence.
+    """Cancel all non-terminal tasks linked to this occurrence.
+
     Returns count cancelled.
     """
     tasks = (
