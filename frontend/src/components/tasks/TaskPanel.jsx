@@ -255,6 +255,11 @@ export default function TaskPanel({
           flex flex-col
           transition-transform duration-300 ease-in-out
           ${open ? 'translate-x-0' : 'translate-x-full'}`}
+        onKeyDown={e => {
+          if (isCreate && e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') {
+            handleSave()
+          }
+        }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700/60 flex-shrink-0">
@@ -279,7 +284,6 @@ export default function TaskPanel({
               ref={titleRef}
               value={form.title ?? ''}
               onChange={e => set('title', e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSave()}
               placeholder="Task title"
               className={fieldCls}
             />

@@ -159,6 +159,30 @@ describe('TaskPanel — create flow', () => {
 
     expect(onCreateTask).toHaveBeenCalledOnce()
   })
+
+  it('pressing Enter in the estimated minutes field calls onCreateTask', async () => {
+    const onCreateTask = vi.fn().mockResolvedValue(undefined)
+    renderPanel({ mode: 'create', onCreateTask })
+
+    fireEvent.change(screen.getByPlaceholderText('Task title'), { target: { value: 'Quick task' } })
+    const minutesInput = screen.getByPlaceholderText('—')
+    fireEvent.change(minutesInput, { target: { value: '30' } })
+    fireEvent.keyDown(minutesInput, { key: 'Enter' })
+
+    expect(onCreateTask).toHaveBeenCalledOnce()
+  })
+
+  it('pressing Enter in the description textarea does NOT call onCreateTask', async () => {
+    const onCreateTask = vi.fn().mockResolvedValue(undefined)
+    renderPanel({ mode: 'create', onCreateTask })
+
+    fireEvent.change(screen.getByPlaceholderText('Task title'), { target: { value: 'Quick task' } })
+    const textarea = screen.getByPlaceholderText('Optional notes…')
+    fireEvent.change(textarea, { target: { value: 'Some notes' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+
+    expect(onCreateTask).not.toHaveBeenCalled()
+  })
 })
 
 // ── Edit flow ─────────────────────────────────────────────────────────────────
