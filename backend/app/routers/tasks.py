@@ -25,6 +25,15 @@ def _update_completed_at(obj: Task | Subtask, new_status: TaskStatus | None) -> 
         obj.completed_at = None
 
 
+def _get_subtask_or_404(db: Session, task_id: int, subtask_id: int) -> Subtask:
+    subtask = db.query(Subtask).filter(
+        Subtask.id == subtask_id, Subtask.task_id == task_id
+    ).first()
+    if not subtask:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+    return subtask
+
+
 def _load_task(db: Session, task_id: int) -> Task:
     task = (
         db.query(Task)
@@ -125,11 +134,7 @@ def create_subtask(task_id: int, body: SubtaskCreate, db: Session = Depends(get_
 def update_subtask(
     task_id: int, subtask_id: int, body: SubtaskUpdate, db: Session = Depends(get_db)
 ) -> Subtask:
-    subtask = db.query(Subtask).filter(
-        Subtask.id == subtask_id, Subtask.task_id == task_id
-    ).first()
-    if not subtask:
-        raise HTTPException(status_code=404, detail="Subtask not found")
+    subtask = _get_subtask_or_404(db, task_id, subtask_id)
     update_data = body.model_dump(exclude_unset=True)
     new_status = update_data.get("status")
     _update_completed_at(subtask, new_status)
@@ -141,10 +146,6 @@ def update_subtask(
 
 @router.delete("/{task_id}/subtasks/{subtask_id}", status_code=204)
 def delete_subtask(task_id: int, subtask_id: int, db: Session = Depends(get_db)) -> None:
-    subtask = db.query(Subtask).filter(
-        Subtask.id == subtask_id, Subtask.task_id == task_id
-    ).first()
-    if not subtask:
-        raise HTTPException(status_code=404, detail="Subtask not found")
+    subtask = _get_subtask_or_404(db, task_id, subtask_id)
     db.delete(subtask)
     db.commit()

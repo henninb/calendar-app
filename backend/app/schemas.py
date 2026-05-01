@@ -20,7 +20,7 @@ def _normalize_rrule(v: str | None) -> str | None:
 # ── Category ────────────────────────────────────────────────────────────────
 
 class CategoryBase(BaseModel):
-    name: str = Field(..., max_length=100)
+    name: str = Field(..., max_length=50)
     color: str = Field("#3b82f6", pattern=r'^#[0-9a-fA-F]{6}$')
     icon: str = Field("📅", max_length=10)
     description: str | None = Field(None, max_length=1000)
@@ -31,7 +31,7 @@ class CategoryCreate(CategoryBase):
 
 
 class CategoryUpdate(BaseModel):
-    name: str | None = Field(None, max_length=100)
+    name: str | None = Field(None, max_length=50)
     color: str | None = Field(None, pattern=r'^#[0-9a-fA-F]{6}$')
     icon: str | None = Field(None, max_length=10)
     description: str | None = Field(None, max_length=1000)

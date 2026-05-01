@@ -38,7 +38,7 @@ def adjust_weekend(d: date, shift: WeekendShift) -> date:
     return d
 
 
-def close_date_for_month(year: int, month: int, close_day: int, weekend_shift: Optional[str]) -> date:
+def close_date_for_month(year: int, month: int, close_day: int, weekend_shift: Optional[WeekendShift]) -> date:
     last_day = cal_mod.monthrange(year, month)[1]
     d = date(year, month, min(close_day, last_day))
     if weekend_shift:

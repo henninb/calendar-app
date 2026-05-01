@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session, joinedload
 
 from ..config import settings
-from ..crud import get_or_404
+from ..crud import apply_patch, get_or_404
 from ..database import get_db
 from ..limiter import limiter
 from ..models import Event, Occurrence, OccurrenceStatus, Task
@@ -73,11 +73,10 @@ def update_occurrence(
     occ = get_or_404(db, Occurrence, occurrence_id, "Occurrence not found")
     changes = body.model_dump(exclude_unset=True)
     new_status = changes.get("status")
-    for field, value in changes.items():
-        setattr(occ, field, value)
-    db.commit()
+    apply_patch(occ, changes)
     if new_status == OccurrenceStatus.skipped:
         cancel_tasks_for_occurrence(db, occ)
+    db.commit()
     # Reload with eager joins — db.commit() expires all attributes and the
     # OccurrenceOut schema accesses occ.event.category, causing N+1 lazy loads
     # without an explicit joinedload here.
@@ -112,8 +111,15 @@ def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db
         category_id=occ.event.category_id,
     )
     db.add(task)
+    db.flush()
+    task_id = task.id
     db.commit()
-    db.refresh(task)
+    task = (
+        db.query(Task)
+        .options(joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks))
+        .filter(Task.id == task_id)
+        .first()
+    )
     log.info(
         "Created task %d (%s) from occurrence %d (event %d, date %s)",
         task.id,

@@ -315,3 +315,20 @@ def test_delete_list_cascades_items(client: TestClient) -> None:
     client.delete(f"/api/grocery/lists/{lst['id']}")
     # Item catalog entry should still exist
     assert client.get(f"/api/grocery/items/{item['id']}").status_code == 200
+
+
+def test_list_grocery_lists_invalid_status_returns_422(client: TestClient) -> None:
+    resp = client.get("/api/grocery/lists?status=not_a_real_status")
+    assert resp.status_code == 422
+
+
+def test_update_list_item_not_found_returns_404(client: TestClient) -> None:
+    lst = _create_list(client)
+    resp = client.patch(f"/api/grocery/lists/{lst['id']}/items/99999", json={"quantity": "2"})
+    assert resp.status_code == 404
+
+
+def test_remove_list_item_not_found_returns_404(client: TestClient) -> None:
+    lst = _create_list(client)
+    resp = client.delete(f"/api/grocery/lists/{lst['id']}/items/99999")
+    assert resp.status_code == 404

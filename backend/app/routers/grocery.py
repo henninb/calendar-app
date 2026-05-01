@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..crud import apply_patch, get_or_404
 from ..database import get_db
-from ..models import GroceryItem, GroceryList, GroceryListItem, OnHand, Store
+from ..models import GroceryItem, GroceryList, GroceryListItem, GroceryListStatus, OnHand, Store
 from ..schemas import (
     GroceryItemCreate,
     GroceryItemOut,
@@ -145,17 +145,20 @@ def _load_list(list_id: int, db: Session) -> GroceryList:
 
 
 def _load_list_item(db: Session, list_item_id: int) -> GroceryListItem:
-    return (
+    item = (
         db.query(GroceryListItem)
         .options(joinedload(GroceryListItem.item).joinedload(GroceryItem.default_store))
         .filter(GroceryListItem.id == list_item_id)
-        .one()
+        .first()
     )
+    if not item:
+        raise HTTPException(status_code=404, detail="Grocery list item not found")
+    return item
 
 
 @router.get("/lists", response_model=list[GroceryListOut])
 def list_grocery_lists(
-    status: str | None = Query(None, description="Filter by status: draft, active, completed"),
+    status: GroceryListStatus | None = Query(None),
     db: Session = Depends(get_db),
 ) -> list[GroceryList]:
     q = (
@@ -252,7 +255,6 @@ def update_list_item(
         raise HTTPException(status_code=404, detail="Item not on this list")
     apply_patch(list_item, body.model_dump(exclude_unset=True))
     db.commit()
-    db.refresh(list_item)
     return _load_list_item(db, list_item.id)
 
 
