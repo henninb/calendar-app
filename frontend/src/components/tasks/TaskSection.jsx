@@ -10,19 +10,12 @@ import TaskCard from './TaskCard'
 
 // Per-section accent: [left-border color, label color light, label color dark, bg light, bg dark]
 const SECTION_ACCENT = {
-  overdue: {
+  overdue_today: {
     border:  'border-l-red-500',
     label:   'text-red-700 dark:text-red-400',
     bg:      'bg-red-50 dark:bg-red-950/30',
     hover:   'hover:bg-red-100/70 dark:hover:bg-red-950/50',
     badge:   'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400',
-  },
-  today: {
-    border:  'border-l-amber-500',
-    label:   'text-amber-700 dark:text-amber-400',
-    bg:      'bg-amber-50 dark:bg-amber-950/20',
-    hover:   'hover:bg-amber-100/70 dark:hover:bg-amber-950/40',
-    badge:   'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400',
   },
   tomorrow: {
     border:  'border-l-amber-500',
@@ -69,9 +62,8 @@ const SECTION_ACCENT = {
 }
 
 const SECTION_ICON = {
-  overdue:   '🔥',
-  today:     '☀️',
-  tomorrow:  '📅',
+  overdue_today: '🔥',
+  tomorrow:      '📅',
   this_week:     '📆',
   next_week:     '🗓',
   later:         '⏳',
@@ -180,7 +172,7 @@ export default function TaskSection({
 
         <div className="flex-1" />
 
-        {sectionKey === 'overdue' && count > 0 && (
+        {sectionKey === 'overdue_today' && count > 0 && (
           <span className="text-xs font-semibold text-red-500 dark:text-red-400 mr-1">
             Needs attention
           </span>
