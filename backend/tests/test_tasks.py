@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 import pytest
-from app.models import Category, Task, TaskStatus
+from app.models import Category, Task, TaskRecurrence, TaskStatus
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -103,3 +105,77 @@ def test_task_includes_subtasks_in_response(client: TestClient, task: dict) -> N
     resp = client.get(f"/api/tasks/{task['id']}")
     assert resp.status_code == 200
     assert len(resp.json()["subtasks"]) == 2
+
+
+# ── Recurring task: cancel advances the chain ─────────────────────────────────
+
+@pytest.fixture
+def recurring_task(client: TestClient, category: Category) -> dict:
+    resp = client.post(
+        "/api/tasks",
+        json={
+            "title": "Weekly chore",
+            "category_id": category.id,
+            "due_date": "2026-04-30",
+            "recurrence": "weekly",
+        },
+    )
+    assert resp.status_code == 201
+    return resp.json()
+
+
+def test_cancel_recurring_task_spawns_successor(
+    client: TestClient, db: Session, recurring_task: dict
+) -> None:
+    resp = client.patch(
+        f"/api/tasks/{recurring_task['id']}",
+        json={"status": "cancelled"},
+    )
+    assert resp.status_code == 200
+
+    successor = db.query(Task).filter(Task.parent_task_id == recurring_task["id"]).first()
+    assert successor is not None
+    assert successor.due_date == date(2026, 5, 7)
+    assert successor.recurrence == TaskRecurrence.weekly
+    assert successor.title == recurring_task["title"]
+    assert successor.status == TaskStatus.todo
+    assert successor.completed_at is None
+
+
+def test_cancel_recurring_task_spawns_exactly_one_successor(
+    client: TestClient, db: Session, recurring_task: dict
+) -> None:
+    client.patch(f"/api/tasks/{recurring_task['id']}", json={"status": "cancelled"})
+
+    count = db.query(Task).filter(Task.parent_task_id == recurring_task["id"]).count()
+    assert count == 1
+
+
+def test_done_recurring_task_also_spawns_successor(
+    client: TestClient, db: Session, recurring_task: dict
+) -> None:
+    resp = client.patch(
+        f"/api/tasks/{recurring_task['id']}",
+        json={"status": "done"},
+    )
+    assert resp.status_code == 200
+
+    successor = db.query(Task).filter(Task.parent_task_id == recurring_task["id"]).first()
+    assert successor is not None
+    assert successor.due_date == date(2026, 5, 7)
+    assert successor.status == TaskStatus.todo
+
+
+def test_cancel_non_recurring_task_no_successor(
+    client: TestClient, db: Session, category: Category
+) -> None:
+    resp = client.post(
+        "/api/tasks",
+        json={"title": "One-off task", "category_id": category.id, "due_date": "2026-04-30"},
+    )
+    task_id = resp.json()["id"]
+
+    client.patch(f"/api/tasks/{task_id}", json={"status": "cancelled"})
+
+    count = db.query(Task).filter(Task.parent_task_id == task_id).count()
+    assert count == 0
