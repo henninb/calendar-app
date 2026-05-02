@@ -129,12 +129,14 @@ function OverflowMenu({ items }) {
       {open && createPortal(
         <div
           ref={menuRef}
+          role="menu"
           style={{ position: 'absolute', top: pos.top, right: pos.right, zIndex: 9999 }}
           className="w-44 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden py-1"
         >
           {visible.map(item => (
             <button
               key={item.label}
+              role="menuitem"
               onClick={e => { e.stopPropagation(); item.onClick(); setOpen(false) }}
               className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm transition-colors
                 ${item.danger
@@ -142,7 +144,7 @@ function OverflowMenu({ items }) {
                   : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                 }`}
             >
-              <span className="w-4 text-center opacity-70">{item.icon}</span>
+              <span aria-hidden="true" className="w-4 text-center opacity-70">{item.icon}</span>
               {item.label}
             </button>
           ))}

@@ -73,9 +73,10 @@ describe('TaskList — cancel recurring task triggers reload', () => {
     await waitFor(() => expect(screen.getByText('Weekly chore')).toBeInTheDocument())
     expect(api.fetchTasks).toHaveBeenCalledTimes(1)
 
-    // Open the overflow menu and click Cancel (task sections render before TaskPanel in DOM)
+    // Open the overflow menu and click Cancel — scope within the menu to avoid
+    // the TaskPanel's Cancel button which is always present in the DOM
     fireEvent.click(screen.getByTitle('More actions'))
-    fireEvent.click(screen.getAllByText('Cancel')[0])
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Cancel' }))
 
     // silentLoad should fire fetchTasks a second time to pick up the spawned successor
     await waitFor(() => expect(api.fetchTasks).toHaveBeenCalledTimes(2))
