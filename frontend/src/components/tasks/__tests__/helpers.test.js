@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  parseMinutes,
   withAlpha,
   isOverdue,
   fmt,
@@ -8,6 +9,36 @@ import {
   reversePayload,
   getDaysBadge,
 } from '../helpers'
+
+// ── parseMinutes ──────────────────────────────────────────────────────────────
+
+describe('parseMinutes', () => {
+  it('returns a positive integer as-is', () => {
+    expect(parseMinutes('30')).toBe(30)
+    expect(parseMinutes('1')).toBe(1)
+    expect(parseMinutes(60)).toBe(60)
+  })
+
+  it('truncates decimals to the integer part', () => {
+    expect(parseMinutes('45.9')).toBe(45)
+  })
+
+  it('returns null for zero', () => {
+    expect(parseMinutes('0')).toBeNull()
+    expect(parseMinutes(0)).toBeNull()
+  })
+
+  it('returns null for negative numbers', () => {
+    expect(parseMinutes('-5')).toBeNull()
+  })
+
+  it('returns null for non-numeric strings', () => {
+    expect(parseMinutes('')).toBeNull()
+    expect(parseMinutes('abc')).toBeNull()
+    expect(parseMinutes(null)).toBeNull()
+    expect(parseMinutes(undefined)).toBeNull()
+  })
+})
 
 // ── withAlpha ─────────────────────────────────────────────────────────────────
 
@@ -63,6 +94,13 @@ describe('isOverdue', () => {
   it('returns falsy when due_date is absent', () => {
     expect(isOverdue({ due_date: null, status: 'todo' })).toBeFalsy()
     expect(isOverdue({ status: 'todo' })).toBeFalsy()
+  })
+
+  it('accepts a custom now for deterministic testing', () => {
+    const now = new Date('2024-06-01T00:00:00')
+    expect(isOverdue({ due_date: '2024-05-31', status: 'todo' }, now)).toBe(true)
+    expect(isOverdue({ due_date: '2024-06-01', status: 'todo' }, now)).toBe(false)
+    expect(isOverdue({ due_date: '2024-06-02', status: 'todo' }, now)).toBe(false)
   })
 })
 

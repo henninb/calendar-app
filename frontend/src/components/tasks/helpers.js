@@ -1,3 +1,8 @@
+export function parseMinutes(value) {
+  const n = parseInt(value, 10)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
 export const STATUS_OPTIONS = ['todo', 'in_progress', 'done', 'cancelled']
 export const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', done: 'Done', cancelled: 'Cancelled' }
 export const TASK_FETCH_LIMIT = 500
@@ -23,10 +28,10 @@ export function withAlpha(hex, alpha) {
   return hex
 }
 
-export function isOverdue(task) {
+export function isOverdue(task, now = new Date()) {
   return (
     task.due_date &&
-    new Date(task.due_date + 'T00:00:00') < new Date() &&
+    new Date(task.due_date + 'T00:00:00') < now &&
     task.status !== 'done' &&
     task.status !== 'cancelled'
   )
@@ -72,9 +77,11 @@ export function reversePayload(prior, data) {
   return rev
 }
 
+const MS_PER_DAY = 86_400_000
+
 export function getDaysBadge(task, now = new Date()) {
   if (!task.due_date || task.status === 'done' || task.status === 'cancelled') return null
-  const diff = Math.ceil((new Date(task.due_date + 'T00:00:00') - now) / 86400000)
+  const diff = Math.ceil((new Date(task.due_date + 'T00:00:00') - now) / MS_PER_DAY)
   if (diff < 0) return { text: `${Math.abs(diff)}d overdue`, cls: 'text-red-500 dark:text-red-400 font-semibold' }
   if (diff === 0) return { text: 'today', cls: 'text-amber-500 dark:text-amber-400 font-semibold' }
   if (diff <= 3) return { text: `${diff}d`, cls: 'text-amber-500 dark:text-amber-400' }

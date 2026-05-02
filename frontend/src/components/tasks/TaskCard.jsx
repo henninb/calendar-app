@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import {
   DndContext, closestCenter, MouseSensor, TouchSensor, useSensor, useSensors,
 } from '@dnd-kit/core'
@@ -6,7 +7,21 @@ import {
   SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { isOverdue, fmt, withAlpha, STATUS_LABELS, STATUS_OPTIONS, getDaysBadge } from './helpers'
+import {
+  isOverdue, fmt, withAlpha, parseMinutes,
+  STATUS_LABELS, STATUS_OPTIONS, getDaysBadge,
+} from './helpers'
+
+const FIELDS = {
+  STATUS:            'status',
+  DUE_DATE:          'due_date',
+  ASSIGNEE_ID:       'assignee_id',
+  ESTIMATED_MINUTES: 'estimated_minutes',
+  CATEGORY:          'category_id',
+}
+
+const MOUSE_ACTIVATION = { activationConstraint: { distance: 5 } }
+const TOUCH_ACTIVATION = { activationConstraint: { delay: 200, tolerance: 5 } }
 
 const inlineCls = `text-sm px-2 py-0.5 rounded-lg border border-blue-400 dark:border-blue-500
   bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200
@@ -40,14 +55,50 @@ const subtaskInputCls = `flex-1 text-sm px-2.5 py-1.5 rounded-lg
   placeholder-slate-400 dark:placeholder-slate-500
   focus:outline-none focus:ring-2 focus:ring-blue-500/40`
 
+// ── InlineMetaField ───────────────────────────────────────────────────────────
+// Renders a clickable icon+label button in view mode and an icon+control in
+// edit mode.  `extra` is optional trailing content shown only in view mode
+// (e.g. a days-remaining badge).
+
+function InlineMetaField({ icon, label, title, editing, onStartEdit, extra, children }) {
+  if (editing) {
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="opacity-60">{icon}</span>
+        {children}
+      </span>
+    )
+  }
+  return (
+    <button
+      onClick={onStartEdit}
+      title={title}
+      className="group flex items-center gap-1.5 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+    >
+      <span className="opacity-60">{icon}</span>
+      <span className="border-b border-dashed border-transparent group-hover:border-blue-400 transition-colors">
+        {label}
+      </span>
+      {extra}
+    </button>
+  )
+}
+
+// ── OverflowMenu ──────────────────────────────────────────────────────────────
+
 function OverflowMenu({ items }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef(null)
+  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const btnRef = useRef(null)
+  const menuRef = useRef(null)
 
   useEffect(() => {
     if (!open) return
     function handle(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+      if (
+        btnRef.current && !btnRef.current.contains(e.target) &&
+        menuRef.current && !menuRef.current.contains(e.target)
+      ) setOpen(false)
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
@@ -56,17 +107,31 @@ function OverflowMenu({ items }) {
   const visible = items.filter(item => !item.hidden)
   if (visible.length === 0) return null
 
+  function handleOpen(e) {
+    e.stopPropagation()
+    if (!open) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPos({ top: rect.bottom + window.scrollY + 4, right: window.innerWidth - rect.right })
+    }
+    setOpen(o => !o)
+  }
+
   return (
-    <div ref={ref} className="relative flex-shrink-0">
+    <div className="relative flex-shrink-0">
       <button
-        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        ref={btnRef}
+        onClick={handleOpen}
         title="More actions"
-        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-lg leading-none"
+        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-lg leading-none"
       >
         ···
       </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-20 overflow-hidden py-1">
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: 'absolute', top: pos.top, right: pos.right, zIndex: 9999 }}
+          className="w-44 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden py-1"
+        >
           {visible.map(item => (
             <button
               key={item.label}
@@ -81,11 +146,14 @@ function OverflowMenu({ items }) {
               {item.label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
 }
+
+// ── SubtaskConfirmModal ───────────────────────────────────────────────────────
 
 function SubtaskConfirmModal({ task, incompleteSubtasks, onCompleteAll, onDoneAnyway, onCancel }) {
   useEffect(() => {
@@ -154,9 +222,11 @@ function SubtaskConfirmModal({ task, incompleteSubtasks, onCompleteAll, onDoneAn
   )
 }
 
+// ── SortableSubtaskRow ────────────────────────────────────────────────────────
+
 function SortableSubtaskRow({
   sub, taskId, isDimmed,
-  editingSubtaskId, editSubtaskTitle,
+  subtaskDraft,       // { id, title } | null
   onStartEdit, onSaveEdit, onCancelEdit, onEditChange,
   onPatchSubtask, onDeleteSubtask,
 }) {
@@ -171,7 +241,7 @@ function SortableSubtaskRow({
     zIndex: isDragging ? 10 : undefined,
   }
 
-  const isEditing = editingSubtaskId === sub.id
+  const isEditing = subtaskDraft?.id === sub.id
 
   return (
     <div
@@ -199,19 +269,14 @@ function SortableSubtaskRow({
           <span className="w-4 h-4 flex-shrink-0" />
           <input
             autoFocus
-            value={editSubtaskTitle}
+            value={subtaskDraft.title}
             onChange={e => onEditChange(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter')  onSaveEdit()
               if (e.key === 'Escape') onCancelEdit()
             }}
             onBlur={onSaveEdit}
-            className={`flex-1 text-sm px-2.5 py-1.5 rounded-lg
-              border border-slate-200 dark:border-slate-600
-              bg-white dark:bg-slate-700/60
-              text-slate-800 dark:text-slate-200
-              placeholder-slate-400 dark:placeholder-slate-500
-              focus:outline-none focus:ring-2 focus:ring-blue-500/40`}
+            className={subtaskInputCls}
           />
           <button
             onMouseDown={e => e.preventDefault()}
@@ -257,6 +322,8 @@ function SortableSubtaskRow({
   )
 }
 
+// ── TaskCard ──────────────────────────────────────────────────────────────────
+
 export default function TaskCard({
   task,
   expanded,
@@ -275,17 +342,13 @@ export default function TaskCard({
   const [editingField, setEditingField] = useState(null)
   const [showSubtaskConfirm, setShowSubtaskConfirm] = useState(false)
 
-  // Inline title edit
-  const [editingTitle, setEditingTitle]     = useState(false)
-  const [editTitleValue, setEditTitleValue] = useState('')
+  // null = not editing; string value = editing with that draft
+  const [titleDraft, setTitleDraft] = useState(null)
 
-  // Inline category edit
-  const [editingCategory, setEditingCategory] = useState(false)
+  // null = not editing; { id, title } = editing that subtask
+  const [subtaskDraft, setSubtaskDraft] = useState(null)
 
-  // Inline subtask state
-  const [editingSubtaskId, setEditingSubtaskId]   = useState(null)
-  const [editSubtaskTitle, setEditSubtaskTitle]   = useState('')
-  const [newSubtaskTitle, setNewSubtaskTitle]     = useState('')
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
   const newSubtaskRef   = useRef(null)
   const pendingFocusAdd = useRef(false)
 
@@ -297,11 +360,24 @@ export default function TaskCard({
     }
   }, [expanded])
 
-  const overdue        = isOverdue(task)
-  const subtaskCount   = task.subtasks?.length ?? 0
-  const doneSubtasks   = task.subtasks?.filter(s => s.status === 'done').length ?? 0
-  const incompleteSubtasks = task.subtasks?.filter(s => s.status !== 'done' && s.status !== 'cancelled') ?? []
-  const sortedSubtasks = [...(task.subtasks ?? [])].sort((a, b) => a.order - b.order)
+  // ── Derived task values ───────────────────────────────────────────────────
+
+  const overdue = isOverdue(task)
+  const isDimmed = task.status === 'done' || task.status === 'cancelled'
+
+  const subtaskCount = useMemo(() => task.subtasks?.length ?? 0, [task.subtasks])
+  const doneSubtasks = useMemo(
+    () => task.subtasks?.filter(s => s.status === 'done').length ?? 0,
+    [task.subtasks],
+  )
+  const incompleteSubtasks = useMemo(
+    () => task.subtasks?.filter(s => s.status !== 'done' && s.status !== 'cancelled') ?? [],
+    [task.subtasks],
+  )
+  const sortedSubtasks = useMemo(
+    () => [...(task.subtasks ?? [])].sort((a, b) => a.order - b.order),
+    [task.subtasks],
+  )
 
   // ── Done / subtask confirm ────────────────────────────────────────────────
 
@@ -315,9 +391,9 @@ export default function TaskCard({
 
   const handleCompleteAllAndDone = useCallback(async () => {
     setShowSubtaskConfirm(false)
-    for (const sub of incompleteSubtasks) {
-      await onPatchSubtask(task.id, sub.id, { status: 'done' })
-    }
+    await Promise.all(
+      incompleteSubtasks.map(sub => onPatchSubtask(task.id, sub.id, { status: 'done' }))
+    )
     onPatchTask(task.id, { status: 'done' })
   }, [onPatchSubtask, onPatchTask, task.id, incompleteSubtasks])
 
@@ -326,15 +402,15 @@ export default function TaskCard({
     onPatchTask(task.id, { status: 'done' })
   }, [onPatchTask, task.id])
 
-  // ── Inline title edit ────────────────────────────────────────────────────
+  // ── Inline title edit ─────────────────────────────────────────────────────
 
   const handleSaveTitle = useCallback(() => {
-    const title = editTitleValue.trim()
-    setEditingTitle(false)
+    const title = titleDraft?.trim()
+    setTitleDraft(null)
     if (title && title !== task.title) {
       onPatchTask(task.id, { title })
     }
-  }, [editTitleValue, task.id, task.title, onPatchTask])
+  }, [titleDraft, task.id, task.title, onPatchTask])
 
   // ── Inline subtask add ────────────────────────────────────────────────────
 
@@ -357,22 +433,27 @@ export default function TaskCard({
   // ── Inline subtask edit ───────────────────────────────────────────────────
 
   const handleStartEditSubtask = useCallback((sub) => {
-    setEditingSubtaskId(sub.id)
-    setEditSubtaskTitle(sub.title)
+    setSubtaskDraft({ id: sub.id, title: sub.title })
   }, [])
 
   const handleSaveEditSubtask = useCallback(async () => {
-    if (!editingSubtaskId) return
-    const title = editSubtaskTitle.trim()
-    if (title) await onPatchSubtask(task.id, editingSubtaskId, { title })
-    setEditingSubtaskId(null)
-  }, [editingSubtaskId, editSubtaskTitle, onPatchSubtask, task.id])
+    if (!subtaskDraft) return
+    const title = subtaskDraft.title.trim()
+    if (title) await onPatchSubtask(task.id, subtaskDraft.id, { title })
+    setSubtaskDraft(null)
+  }, [subtaskDraft, onPatchSubtask, task.id])
+
+  const handleCancelEditSubtask = useCallback(() => setSubtaskDraft(null), [])
+
+  const handleEditSubtaskChange = useCallback((title) => {
+    setSubtaskDraft(prev => prev ? { ...prev, title } : prev)
+  }, [])
 
   // ── Drag-and-drop reorder ─────────────────────────────────────────────────
 
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(MouseSensor, MOUSE_ACTIVATION),
+    useSensor(TouchSensor, TOUCH_ACTIVATION),
   )
 
   const handleDragEnd = useCallback(({ active, over }) => {
@@ -387,7 +468,7 @@ export default function TaskCard({
 
   const daysBadge = getDaysBadge(task)
 
-  const menuItems = [
+  const menuItems = useMemo(() => [
     {
       label: 'Edit',
       icon: '✎',
@@ -428,10 +509,9 @@ export default function TaskCard({
       danger: true,
       onClick: () => onDeleteTask(task.id),
     },
-  ]
+  ], [task, onEdit, onPatchTask, onDeleteTask, handleDone])
 
   const stripeClass = PRIORITY_STRIPE[task.priority] ?? PRIORITY_STRIPE.low
-  const isDimmed    = task.status === 'done' || task.status === 'cancelled'
 
   return (
     <div
@@ -477,14 +557,14 @@ export default function TaskCard({
             )}
           </div>
 
-          {editingTitle ? (
+          {titleDraft !== null ? (
             <input
               autoFocus
-              value={editTitleValue}
-              onChange={e => setEditTitleValue(e.target.value)}
+              value={titleDraft}
+              onChange={e => setTitleDraft(e.target.value)}
               onKeyDown={e => {
                 if (e.key === 'Enter') handleSaveTitle()
-                if (e.key === 'Escape') setEditingTitle(false)
+                if (e.key === 'Escape') setTitleDraft(null)
               }}
               onBlur={handleSaveTitle}
               className="flex-1 min-w-0 text-base font-medium bg-transparent
@@ -495,10 +575,7 @@ export default function TaskCard({
           ) : (
             <span
               onDoubleClick={() => {
-                if (!isDimmed) {
-                  setEditTitleValue(task.title)
-                  setEditingTitle(true)
-                }
+                if (!isDimmed) setTitleDraft(task.title)
               }}
               title={isDimmed ? undefined : 'Double-click to edit title'}
               className={`flex-1 min-w-0 text-base font-medium leading-snug select-none
@@ -511,7 +588,7 @@ export default function TaskCard({
             </span>
           )}
 
-          {editingField === 'status' ? (
+          {editingField === FIELDS.STATUS ? (
             <select
               autoFocus
               defaultValue={task.status}
@@ -526,7 +603,7 @@ export default function TaskCard({
             </select>
           ) : (
             <button
-              onClick={() => setEditingField('status')}
+              onClick={() => setEditingField(FIELDS.STATUS)}
               title="Click to edit status"
               className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-opacity hover:opacity-75 ${STATUS_PILL[task.status] ?? STATUS_PILL.todo}`}
             >
@@ -542,16 +619,16 @@ export default function TaskCard({
         {(task.category || (task.recurrence && task.recurrence !== 'none')) && (
           <div className="flex flex-wrap items-center gap-2 mt-2.5 ml-9">
             {task.category && (
-              editingCategory ? (
+              editingField === FIELDS.CATEGORY ? (
                 <select
                   autoFocus
                   defaultValue={task.category_id ?? ''}
                   onChange={e => {
                     onPatchTask(task.id, { category_id: e.target.value ? parseInt(e.target.value, 10) : null })
-                    setEditingCategory(false)
+                    setEditingField(null)
                   }}
-                  onBlur={() => setEditingCategory(false)}
-                  onKeyDown={e => e.key === 'Escape' && setEditingCategory(false)}
+                  onBlur={() => setEditingField(null)}
+                  onKeyDown={e => e.key === 'Escape' && setEditingField(null)}
                   className={`text-xs ${inlineCls}`}
                 >
                   <option value="">No category</option>
@@ -561,7 +638,7 @@ export default function TaskCard({
                 </select>
               ) : (
                 <span
-                  onDoubleClick={() => !isDimmed && setEditingCategory(true)}
+                  onDoubleClick={() => !isDimmed && setEditingField(FIELDS.CATEGORY)}
                   title={isDimmed ? undefined : 'Double-click to change category'}
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold cursor-default select-none"
                   style={{
@@ -586,105 +663,92 @@ export default function TaskCard({
         {(task.due_date || task.assignee || task.estimated_minutes) && (
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-2.5 ml-9 text-sm text-slate-500 dark:text-slate-400">
             {task.due_date && (
-              editingField === 'due_date' ? (
-                <span className="flex items-center gap-1.5">
-                  <span className="opacity-60">📅</span>
-                  <input
-                    type="date"
-                    autoFocus
-                    defaultValue={task.due_date}
-                    onChange={e => {
-                      if (e.target.value) {
-                        onPatchTask(task.id, { due_date: e.target.value })
-                        setEditingField(null)
-                      }
-                    }}
-                    onBlur={e => {
+              <InlineMetaField
+                icon="📅"
+                label={fmt(task.due_date)}
+                title="Click to edit due date"
+                editing={editingField === FIELDS.DUE_DATE}
+                onStartEdit={() => setEditingField(FIELDS.DUE_DATE)}
+                extra={daysBadge && (
+                  <span className={daysBadge.cls}>· {daysBadge.text}</span>
+                )}
+              >
+                <input
+                  type="date"
+                  autoFocus
+                  defaultValue={task.due_date}
+                  onChange={e => {
+                    if (e.target.value) {
+                      onPatchTask(task.id, { due_date: e.target.value })
+                      setEditingField(null)
+                    }
+                  }}
+                  onBlur={e => {
+                    onPatchTask(task.id, { due_date: e.target.value || null })
+                    setEditingField(null)
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
                       onPatchTask(task.id, { due_date: e.target.value || null })
                       setEditingField(null)
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') { onPatchTask(task.id, { due_date: e.target.value || null }); setEditingField(null) }
-                      if (e.key === 'Escape') setEditingField(null)
-                    }}
-                    className="text-sm px-2 py-0.5 rounded-lg border border-blue-400 dark:border-blue-500
-                      bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200
-                      focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                  />
-                </span>
-              ) : (
-                <button
-                  onClick={() => setEditingField('due_date')}
-                  title="Click to edit due date"
-                  className="flex items-center gap-1.5 hover:text-blue-500 dark:hover:text-blue-400 transition-colors group/date"
-                >
-                  <span className="opacity-60">📅</span>
-                  <span className="border-b border-dashed border-transparent group-hover/date:border-blue-400 transition-colors">
-                    {fmt(task.due_date)}
-                  </span>
-                  {daysBadge && (
-                    <span className={daysBadge.cls}>· {daysBadge.text}</span>
-                  )}
-                </button>
-              )
-            )}
-            {editingField === 'assignee_id' ? (
-              <span className="flex items-center gap-1.5">
-                <span className="opacity-60">👤</span>
-                <select
-                  autoFocus
-                  defaultValue={task.assignee_id ?? ''}
-                  onChange={e => { onPatchTask(task.id, { assignee_id: e.target.value || null }); setEditingField(null) }}
-                  onBlur={() => setEditingField(null)}
-                  onKeyDown={e => e.key === 'Escape' && setEditingField(null)}
-                  className={inlineCls}
-                >
-                  <option value="">Unassigned</option>
-                  {(persons ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </span>
-            ) : (
-              <button
-                onClick={() => setEditingField('assignee_id')}
-                title="Click to edit assignee"
-                className="flex items-center gap-1.5 hover:text-blue-500 dark:hover:text-blue-400 transition-colors group/assignee"
-              >
-                <span className="opacity-60">👤</span>
-                <span className="border-b border-dashed border-transparent group-hover/assignee:border-blue-400 transition-colors">
-                  {task.assignee?.name ?? 'Unassigned'}
-                </span>
-              </button>
-            )}
-
-            {editingField === 'estimated_minutes' ? (
-              <span className="flex items-center gap-1.5">
-                <span className="opacity-60">⏱</span>
-                <input
-                  type="number"
-                  autoFocus
-                  min="1"
-                  defaultValue={task.estimated_minutes ?? ''}
-                  placeholder="min"
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') { onPatchTask(task.id, { estimated_minutes: parseInt(e.target.value, 10) || null }); setEditingField(null) }
+                    }
                     if (e.key === 'Escape') setEditingField(null)
                   }}
-                  onBlur={e => { onPatchTask(task.id, { estimated_minutes: parseInt(e.target.value, 10) || null }); setEditingField(null) }}
-                  className={`w-20 ${inlineCls}`}
+                  className={inlineCls}
                 />
-              </span>
-            ) : (
-              <button
-                onClick={() => setEditingField('estimated_minutes')}
-                title="Click to edit duration"
-                className="flex items-center gap-1.5 hover:text-blue-500 dark:hover:text-blue-400 transition-colors group/dur"
-              >
-                <span className="opacity-60">⏱</span>
-                <span className="border-b border-dashed border-transparent group-hover/dur:border-blue-400 transition-colors">
-                  {task.estimated_minutes ? `${task.estimated_minutes}m` : 'No duration'}
-                </span>
-              </button>
+              </InlineMetaField>
             )}
+
+            <InlineMetaField
+              icon="👤"
+              label={task.assignee?.name ?? 'Unassigned'}
+              title="Click to edit assignee"
+              editing={editingField === FIELDS.ASSIGNEE_ID}
+              onStartEdit={() => setEditingField(FIELDS.ASSIGNEE_ID)}
+            >
+              <select
+                autoFocus
+                defaultValue={task.assignee_id ?? ''}
+                onChange={e => {
+                  onPatchTask(task.id, { assignee_id: e.target.value || null })
+                  setEditingField(null)
+                }}
+                onBlur={() => setEditingField(null)}
+                onKeyDown={e => e.key === 'Escape' && setEditingField(null)}
+                className={inlineCls}
+              >
+                <option value="">Unassigned</option>
+                {(persons ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </InlineMetaField>
+
+            <InlineMetaField
+              icon="⏱"
+              label={task.estimated_minutes ? `${task.estimated_minutes}m` : 'No duration'}
+              title="Click to edit duration"
+              editing={editingField === FIELDS.ESTIMATED_MINUTES}
+              onStartEdit={() => setEditingField(FIELDS.ESTIMATED_MINUTES)}
+            >
+              <input
+                type="number"
+                autoFocus
+                min="1"
+                defaultValue={task.estimated_minutes ?? ''}
+                placeholder="min"
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    onPatchTask(task.id, { estimated_minutes: parseMinutes(e.target.value) })
+                    setEditingField(null)
+                  }
+                  if (e.key === 'Escape') setEditingField(null)
+                }}
+                onBlur={e => {
+                  onPatchTask(task.id, { estimated_minutes: parseMinutes(e.target.value) })
+                  setEditingField(null)
+                }}
+                className={`w-20 ${inlineCls}`}
+              />
+            </InlineMetaField>
           </div>
         )}
 
@@ -752,12 +816,11 @@ export default function TaskCard({
                       sub={sub}
                       taskId={task.id}
                       isDimmed={isDimmed}
-                      editingSubtaskId={editingSubtaskId}
-                      editSubtaskTitle={editSubtaskTitle}
+                      subtaskDraft={subtaskDraft}
                       onStartEdit={handleStartEditSubtask}
                       onSaveEdit={handleSaveEditSubtask}
-                      onCancelEdit={() => setEditingSubtaskId(null)}
-                      onEditChange={setEditSubtaskTitle}
+                      onCancelEdit={handleCancelEditSubtask}
+                      onEditChange={handleEditSubtaskChange}
                       onPatchSubtask={onPatchSubtask}
                       onDeleteSubtask={onDeleteSubtask}
                     />

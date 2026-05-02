@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import TaskCard from '../TaskCard'
+import { STATUS_LABELS } from '../helpers'
 
 // Mock DnD-kit so jsdom doesn't need a real pointer-events implementation.
 vi.mock('@dnd-kit/core', () => ({
@@ -28,7 +29,7 @@ vi.mock('@dnd-kit/utilities', () => ({
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const baseTask = {
+const BASE_TASK = {
   id: 1, title: 'Buy groceries', description: null,
   priority: 'medium', status: 'todo',
   due_date: '2099-12-31', estimated_minutes: null,
@@ -37,36 +38,26 @@ const baseTask = {
   recurrence: 'none', subtasks: [],
 }
 
-const baseCallbacks = {
+const BASE_PROPS = {
   expanded: false,
-  onToggleExpand: vi.fn(),
-  onEdit: vi.fn(),
-  onPatchTask: vi.fn(),
-  onDeleteTask: vi.fn(),
-  onPatchSubtask: vi.fn(),
-  onAddSubtask: vi.fn(),
-  onDeleteSubtask: vi.fn(),
-  onReorderSubtasks: vi.fn(),
   persons: [],
   categories: [],
 }
 
 function renderCard(taskOverrides = {}, propOverrides = {}) {
-  const task = { ...baseTask, ...taskOverrides }
+  const task = { ...BASE_TASK, ...taskOverrides }
   const cbs  = {
-    ...baseCallbacks,
-    // give each test fresh mocks so call counts don't bleed between tests
-    onToggleExpand:   vi.fn(),
-    onEdit:           vi.fn(),
-    onPatchTask:      vi.fn(),
-    onDeleteTask:     vi.fn(),
-    onPatchSubtask:   vi.fn(),
-    onAddSubtask:     vi.fn(),
-    onDeleteSubtask:  vi.fn(),
+    onToggleExpand:    vi.fn(),
+    onEdit:            vi.fn(),
+    onPatchTask:       vi.fn(),
+    onDeleteTask:      vi.fn(),
+    onPatchSubtask:    vi.fn(),
+    onAddSubtask:      vi.fn(),
+    onDeleteSubtask:   vi.fn(),
     onReorderSubtasks: vi.fn(),
     ...propOverrides,
   }
-  return { ...render(<TaskCard task={task} {...cbs} />), task, cbs }
+  return { ...render(<TaskCard task={task} {...BASE_PROPS} {...cbs} />), task, cbs }
 }
 
 // ── Basic rendering ───────────────────────────────────────────────────────────
@@ -78,7 +69,6 @@ describe('TaskCard — basic rendering', () => {
   })
 
   it('renders the correct status pill label for each status', () => {
-    const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', done: 'Done', cancelled: 'Cancelled' }
     for (const [status, label] of Object.entries(STATUS_LABELS)) {
       const { unmount } = renderCard({ status })
       expect(screen.getByText(label)).toBeInTheDocument()
@@ -99,11 +89,7 @@ describe('TaskCard — basic rendering', () => {
   })
 
   it('renders a category badge when task has a category', () => {
-    const task = {
-      ...baseTask,
-      category: { name: 'medical', icon: '🏥', color: '#ec4899' },
-    }
-    renderCard(task)
+    renderCard({ category: { name: 'medical', icon: '🏥', color: '#ec4899' } })
     expect(screen.getByText('🏥 medical')).toBeInTheDocument()
   })
 
@@ -407,10 +393,29 @@ describe('TaskCard — overflow menu', () => {
     expect(cbs.onDeleteTask).toHaveBeenCalledWith(1)
   })
 
-  it('"Cancel" menu item appears for active tasks', () => {
+  it('"Cancel" menu item appears for todo tasks', () => {
     renderCard({ status: 'todo' })
     fireEvent.click(screen.getByTitle('More actions'))
     expect(screen.getByText('Cancel')).toBeInTheDocument()
+  })
+
+  it('"Cancel" menu item appears for in_progress tasks', () => {
+    renderCard({ status: 'in_progress' })
+    fireEvent.click(screen.getByTitle('More actions'))
+    expect(screen.getByText('Cancel')).toBeInTheDocument()
+  })
+
+  it('"Cancel" menu item calls onPatchTask with cancelled status', () => {
+    const { cbs } = renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(screen.getByText('Cancel'))
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'cancelled' })
+  })
+
+  it('"Cancel" menu item is hidden for already-cancelled tasks', () => {
+    renderCard({ status: 'cancelled' })
+    fireEvent.click(screen.getByTitle('More actions'))
+    expect(screen.queryByText('Cancel')).not.toBeInTheDocument()
   })
 
   it('"Reopen" menu item appears for done tasks', () => {
@@ -484,6 +489,64 @@ describe('TaskCard — overflow menu', () => {
     fireEvent.click(screen.getByTitle('More actions'))
     fireEvent.click(screen.getByText('Complete'))
     expect(screen.getByText('Incomplete subtasks')).toBeInTheDocument()
+  })
+})
+
+// ── Inline category editing ───────────────────────────────────────────────────
+
+describe('TaskCard — inline category editing', () => {
+  const CATS = [
+    { id: 1, name: 'Work',     icon: '💼', color: '#3b82f6' },
+    { id: 2, name: 'Personal', icon: '🏠', color: '#10b981' },
+  ]
+  const categoryTask = {
+    category_id: 1,
+    category: CATS[0],
+  }
+
+  it('renders the category badge', () => {
+    renderCard(categoryTask, { categories: CATS })
+    expect(screen.getByText('💼 Work')).toBeInTheDocument()
+  })
+
+  it('double-clicking the category badge opens a select for active tasks', () => {
+    renderCard(categoryTask, { categories: CATS })
+    fireEvent.dblClick(screen.getByText('💼 Work'))
+    expect(screen.getByRole('combobox')).toBeInTheDocument()
+  })
+
+  it('does NOT open category editor on double-click for done tasks', () => {
+    renderCard({ ...categoryTask, status: 'done' }, { categories: CATS })
+    fireEvent.dblClick(screen.getByText('💼 Work'))
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+
+  it('does NOT open category editor on double-click for cancelled tasks', () => {
+    renderCard({ ...categoryTask, status: 'cancelled' }, { categories: CATS })
+    fireEvent.dblClick(screen.getByText('💼 Work'))
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+
+  it('selecting a new category calls onPatchTask with the parsed category_id', () => {
+    const { cbs } = renderCard(categoryTask, { categories: CATS })
+    fireEvent.dblClick(screen.getByText('💼 Work'))
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '2' } })
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { category_id: 2 })
+  })
+
+  it('selecting the empty option calls onPatchTask with null', () => {
+    const { cbs } = renderCard(categoryTask, { categories: CATS })
+    fireEvent.dblClick(screen.getByText('💼 Work'))
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '' } })
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { category_id: null })
+  })
+
+  it('pressing Escape closes the editor without saving', () => {
+    const { cbs } = renderCard(categoryTask, { categories: CATS })
+    fireEvent.dblClick(screen.getByText('💼 Work'))
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' })
+    expect(cbs.onPatchTask).not.toHaveBeenCalled()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
 })
 
