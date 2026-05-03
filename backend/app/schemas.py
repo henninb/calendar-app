@@ -18,7 +18,7 @@ def _normalize_rrule(v: str | None) -> str | None:
 
 
 class _RruleNormalizeMixin(BaseModel):
-    @field_validator("rrule")
+    @field_validator("rrule", check_fields=False)
     @classmethod
     def normalize_rrule(cls, v: str | None) -> str | None:
         return _normalize_rrule(v)
