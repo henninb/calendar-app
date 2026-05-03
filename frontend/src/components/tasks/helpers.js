@@ -28,10 +28,14 @@ export function withAlpha(hex, alpha) {
   return hex
 }
 
+function parseDueDate(dateStr) {
+  return new Date(dateStr + 'T00:00:00')
+}
+
 export function isOverdue(task, now = new Date()) {
   return (
     task.due_date &&
-    new Date(task.due_date + 'T00:00:00') < now &&
+    parseDueDate(task.due_date) < now &&
     task.status !== 'done' &&
     task.status !== 'cancelled'
   )
@@ -39,7 +43,7 @@ export function isOverdue(task, now = new Date()) {
 
 export function fmt(dateStr) {
   if (!dateStr) return null
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
+  return parseDueDate(dateStr).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
   })
 }
@@ -81,7 +85,7 @@ const MS_PER_DAY = 86_400_000
 
 export function getDaysBadge(task, now = new Date()) {
   if (!task.due_date || task.status === 'done' || task.status === 'cancelled') return null
-  const diff = Math.ceil((new Date(task.due_date + 'T00:00:00') - now) / MS_PER_DAY)
+  const diff = Math.ceil((parseDueDate(task.due_date) - now) / MS_PER_DAY)
   if (diff < 0) return { text: `${Math.abs(diff)}d overdue`, cls: 'text-red-500 dark:text-red-400 font-semibold' }
   if (diff === 0) return { text: 'today', cls: 'text-amber-500 dark:text-amber-400 font-semibold' }
   if (diff <= 3) return { text: `${diff}d`, cls: 'text-amber-500 dark:text-amber-400' }

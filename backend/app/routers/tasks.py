@@ -16,6 +16,8 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
+_TASK_LOAD_OPTIONS = [joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks)]
+
 
 def _update_completed_at(obj: Task | Subtask, new_status: TaskStatus | None) -> None:
     """Set or clear completed_at based on the incoming status transition."""
@@ -37,7 +39,7 @@ def _get_subtask_or_404(db: Session, task_id: int, subtask_id: int) -> Subtask:
 def _load_task(db: Session, task_id: int) -> Task:
     task = (
         db.query(Task)
-        .options(joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks))
+        .options(*_TASK_LOAD_OPTIONS)
         .filter(Task.id == task_id)
         .first()
     )
@@ -60,7 +62,7 @@ def list_tasks(
 ) -> list[Task]:
     q = (
         db.query(Task)
-        .options(joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks))
+        .options(*_TASK_LOAD_OPTIONS)
         .order_by(Task.due_date.asc().nullslast(), Task.created_at)
     )
     if status:

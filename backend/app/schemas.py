@@ -17,6 +17,13 @@ def _normalize_rrule(v: str | None) -> str | None:
     return v
 
 
+class _RruleNormalizeMixin(BaseModel):
+    @field_validator("rrule")
+    @classmethod
+    def normalize_rrule(cls, v: str | None) -> str | None:
+        return _normalize_rrule(v)
+
+
 # ── Category ────────────────────────────────────────────────────────────────
 
 class CategoryBase(BaseModel):
@@ -45,7 +52,7 @@ class CategoryOut(CategoryBase):
 
 # ── Event ───────────────────────────────────────────────────────────────────
 
-class EventBase(BaseModel):
+class EventBase(_RruleNormalizeMixin):
     title: str = Field(..., max_length=255)
     category_id: int
     rrule: str | None = Field(None, max_length=500)   # None → one-time
@@ -61,17 +68,12 @@ class EventBase(BaseModel):
     generates_tasks: bool = False
     gcal_calendar_id: str | None = Field(None, max_length=255)
 
-    @field_validator("rrule")
-    @classmethod
-    def normalize_rrule(cls, v: str | None) -> str | None:
-        return _normalize_rrule(v)
-
 
 class EventCreate(EventBase):
     pass
 
 
-class EventUpdate(BaseModel):
+class EventUpdate(_RruleNormalizeMixin):
     title: str | None = Field(None, max_length=255)
     category_id: int | None = None
     rrule: str | None = Field(None, max_length=500)
@@ -86,11 +88,6 @@ class EventUpdate(BaseModel):
     is_active: bool | None = None
     generates_tasks: bool | None = None
     gcal_calendar_id: str | None = Field(None, max_length=255)
-
-    @field_validator("rrule")
-    @classmethod
-    def normalize_rrule(cls, v: str | None) -> str | None:
-        return _normalize_rrule(v)
 
 
 class EventOut(EventBase):
