@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from sqlalchemy.orm import Session
-
-from datetime import timedelta
 
 from app.models import Category, Event, Occurrence, OccurrenceStatus, Person, Priority, Subtask, Task, TaskRecurrence, TaskStatus
 from app.services.task_generation import (
@@ -138,3 +136,210 @@ def test_spawn_recurring_task_copies_subtasks(db: Session, category: Category) -
     assert len(subtasks) == 1
     assert subtasks[0].title == "Sub step"
     assert subtasks[0].status == TaskStatus.todo
+
+
+# ── cancel_tasks_for_occurrence ───────────────────────────────────────────────
+
+def _make_occurrence(db: Session, category: Category, occ_date: date) -> Occurrence:
+    event = Event(
+        title="Test Event",
+        category_id=category.id,
+        dtstart=occ_date,
+        priority=Priority.medium,
+        is_active=True,
+        generates_tasks=True,
+        reminder_days=[7],
+    )
+    db.add(event)
+    db.flush()
+    occ = Occurrence(
+        event_id=event.id,
+        occurrence_date=occ_date,
+        status=OccurrenceStatus.upcoming,
+    )
+    db.add(occ)
+    db.commit()
+    db.refresh(occ)
+    return occ
+
+
+def test_cancel_tasks_for_occurrence_cancels_todo_tasks(db: Session, category: Category) -> None:
+    occ = _make_occurrence(db, category, date.today() + timedelta(days=3))
+    task = Task(
+        occurrence_id=occ.id,
+        title="To cancel",
+        priority=Priority.medium,
+        due_date=occ.occurrence_date,
+        status=TaskStatus.todo,
+    )
+    db.add(task)
+    db.commit()
+
+    count = cancel_tasks_for_occurrence(db, occ)
+    assert count == 1
+    db.refresh(task)
+    assert task.status == TaskStatus.cancelled
+
+
+def test_cancel_tasks_for_occurrence_cancels_in_progress(db: Session, category: Category) -> None:
+    occ = _make_occurrence(db, category, date.today() + timedelta(days=3))
+    task = Task(
+        occurrence_id=occ.id,
+        title="In progress",
+        priority=Priority.medium,
+        due_date=occ.occurrence_date,
+        status=TaskStatus.in_progress,
+    )
+    db.add(task)
+    db.commit()
+
+    count = cancel_tasks_for_occurrence(db, occ)
+    assert count == 1
+    db.refresh(task)
+    assert task.status == TaskStatus.cancelled
+
+
+def test_cancel_tasks_for_occurrence_skips_done_tasks(db: Session, category: Category) -> None:
+    occ = _make_occurrence(db, category, date.today() + timedelta(days=3))
+    task = Task(
+        occurrence_id=occ.id,
+        title="Already done",
+        priority=Priority.medium,
+        due_date=occ.occurrence_date,
+        status=TaskStatus.done,
+    )
+    db.add(task)
+    db.commit()
+
+    count = cancel_tasks_for_occurrence(db, occ)
+    assert count == 0
+    db.refresh(task)
+    assert task.status == TaskStatus.done
+
+
+def test_cancel_tasks_for_occurrence_skips_already_cancelled(db: Session, category: Category) -> None:
+    occ = _make_occurrence(db, category, date.today() + timedelta(days=3))
+    task = Task(
+        occurrence_id=occ.id,
+        title="Already cancelled",
+        priority=Priority.medium,
+        due_date=occ.occurrence_date,
+        status=TaskStatus.cancelled,
+    )
+    db.add(task)
+    db.commit()
+
+    count = cancel_tasks_for_occurrence(db, occ)
+    assert count == 0
+
+
+def test_cancel_tasks_for_occurrence_no_tasks_returns_zero(db: Session, category: Category) -> None:
+    occ = _make_occurrence(db, category, date.today() + timedelta(days=3))
+    assert cancel_tasks_for_occurrence(db, occ) == 0
+
+
+# ── generate_pending_tasks ────────────────────────────────────────────────────
+
+def test_generate_pending_tasks_no_events_returns_zero(db: Session) -> None:
+    assert generate_pending_tasks(db) == 0
+
+
+def test_generate_pending_tasks_creates_task_within_lead_window(db: Session, category: Category) -> None:
+    # Event with 7-day lead; occurrence 5 days away → within window
+    lead_days = 7
+    occ_date = date.today() + timedelta(days=5)
+    event = Event(
+        title="Upcoming Task Event",
+        category_id=category.id,
+        dtstart=occ_date,
+        priority=Priority.medium,
+        is_active=True,
+        generates_tasks=True,
+        reminder_days=[lead_days],
+    )
+    db.add(event)
+    db.flush()
+    occ = Occurrence(
+        event_id=event.id,
+        occurrence_date=occ_date,
+        status=OccurrenceStatus.upcoming,
+    )
+    db.add(occ)
+    db.commit()
+
+    count = generate_pending_tasks(db)
+    assert count == 1
+    task = db.query(Task).filter(Task.occurrence_id == occ.id).first()
+    assert task is not None
+    assert task.title == "Upcoming Task Event"
+    assert task.due_date == occ_date
+
+
+def test_generate_pending_tasks_skips_event_without_generates_tasks(db: Session, category: Category) -> None:
+    occ_date = date.today() + timedelta(days=3)
+    event = Event(
+        title="Non-generating Event",
+        category_id=category.id,
+        dtstart=occ_date,
+        priority=Priority.medium,
+        is_active=True,
+        generates_tasks=False,   # should be skipped
+        reminder_days=[7],
+    )
+    db.add(event)
+    db.flush()
+    db.add(Occurrence(
+        event_id=event.id,
+        occurrence_date=occ_date,
+        status=OccurrenceStatus.upcoming,
+    ))
+    db.commit()
+
+    assert generate_pending_tasks(db) == 0
+
+
+def test_generate_pending_tasks_idempotent(db: Session, category: Category) -> None:
+    occ_date = date.today() + timedelta(days=5)
+    event = Event(
+        title="Idempotent Event",
+        category_id=category.id,
+        dtstart=occ_date,
+        priority=Priority.medium,
+        is_active=True,
+        generates_tasks=True,
+        reminder_days=[7],
+    )
+    db.add(event)
+    db.flush()
+    db.add(Occurrence(
+        event_id=event.id,
+        occurrence_date=occ_date,
+        status=OccurrenceStatus.upcoming,
+    ))
+    db.commit()
+
+    assert generate_pending_tasks(db) == 1
+    assert generate_pending_tasks(db) == 0  # second call creates nothing
+
+
+def test_generate_pending_tasks_skips_past_occurrences(db: Session, category: Category) -> None:
+    occ_date = date.today() - timedelta(days=1)  # yesterday
+    event = Event(
+        title="Past Event",
+        category_id=category.id,
+        dtstart=occ_date,
+        priority=Priority.medium,
+        is_active=True,
+        generates_tasks=True,
+        reminder_days=[7],
+    )
+    db.add(event)
+    db.flush()
+    db.add(Occurrence(
+        event_id=event.id,
+        occurrence_date=occ_date,
+        status=OccurrenceStatus.upcoming,
+    ))
+    db.commit()
+
+    assert generate_pending_tasks(db) == 0

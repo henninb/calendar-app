@@ -259,3 +259,33 @@ def test_generate_all_occurrences(client: TestClient, event: Event) -> None:
     assert "events_processed" in data
     assert "occurrences_created" in data
     assert isinstance(data["occurrences_created"], int)
+
+
+def test_list_occurrences_filter_by_category_id(
+    client: TestClient, db: Session, occurrence: Occurrence, event: Event, category: Category
+) -> None:
+    other_cat = Category(name="other_cat", color="#ff0000")
+    db.add(other_cat)
+    db.flush()
+    other_event = Event(
+        title="Other Cat Event",
+        category_id=other_cat.id,
+        dtstart=date(2026, 5, 1),
+        priority="low",
+        is_active=True,
+    )
+    db.add(other_event)
+    db.flush()
+    other_occ = Occurrence(
+        event_id=other_event.id,
+        occurrence_date=date(2026, 5, 20),
+        status=OccurrenceStatus.upcoming,
+    )
+    db.add(other_occ)
+    db.commit()
+
+    resp = client.get(f"/api/occurrences?category_id={category.id}")
+    assert resp.status_code == 200
+    ids = [o["id"] for o in resp.json()]
+    assert occurrence.id in ids
+    assert other_occ.id not in ids

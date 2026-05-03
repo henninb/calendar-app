@@ -2,12 +2,14 @@
 from datetime import date, timedelta
 
 import pytest
+from sqlalchemy.orm import Session
 
-from app.models import CreditCard, WeekendShift
+from app.models import Category, CreditCard, Event, WeekendShift
 from app.services.credit_card import (
     adjust_weekend,
     close_date_for_month,
     due_date_for_close,
+    ensure_card_events,
     next_annual_fee_date,
     next_statement_close,
     previous_statement_close,
@@ -320,3 +322,74 @@ class TestTrackerRow:
         row = tracker_row(card, date(2024, 3, 10))
         assert row["name"] == "TestFixed"
         assert row["issuer"] == "TestBank"
+
+# ── ensure_card_events ────────────────────────────────────────────────────────
+
+def _db_card(db: Session, close_day: int = 15, annual_fee_month: int | None = None) -> CreditCard:
+    card = CreditCard(
+        name="DB Test Card",
+        issuer="Test Bank",
+        statement_close_day=close_day,
+        grace_period_days=21,
+        annual_fee_month=annual_fee_month,
+        is_active=True,
+    )
+    db.add(card)
+    db.commit()
+    db.refresh(card)
+    return card
+
+
+def _cc_category(db: Session) -> Category:
+    cat = Category(name="credit_card", color="#FF6B6B", icon="credit-card")
+    db.add(cat)
+    db.commit()
+    db.refresh(cat)
+    return cat
+
+
+class TestEnsureCardEvents:
+    def test_creates_close_and_due_events(self, db: Session) -> None:
+        cat = _cc_category(db)
+        card = _db_card(db)
+        ensure_card_events(db, card, cat.id)
+
+        events = db.query(Event).filter(Event.credit_card_id == card.id).all()
+        titles = {e.title for e in events}
+        assert any("Statement Close" in t for t in titles)
+        assert any("Payment Due" in t for t in titles)
+
+    def test_no_annual_fee_event_without_month(self, db: Session) -> None:
+        cat = _cc_category(db)
+        card = _db_card(db, annual_fee_month=None)
+        ensure_card_events(db, card, cat.id)
+
+        events = db.query(Event).filter(Event.credit_card_id == card.id).all()
+        assert not any("Annual Fee" in e.title for e in events)
+
+    def test_annual_fee_event_created_when_month_set(self, db: Session) -> None:
+        cat = _cc_category(db)
+        card = _db_card(db, annual_fee_month=6)
+        ensure_card_events(db, card, cat.id)
+
+        events = db.query(Event).filter(Event.credit_card_id == card.id).all()
+        assert any("Annual Fee" in e.title for e in events)
+
+    def test_idempotent_does_not_duplicate(self, db: Session) -> None:
+        cat = _cc_category(db)
+        card = _db_card(db)
+        ensure_card_events(db, card, cat.id)
+        ensure_card_events(db, card, cat.id)
+
+        count = db.query(Event).filter(Event.credit_card_id == card.id).count()
+        assert count == 2  # close + due, no annual fee
+
+    def test_events_linked_to_card(self, db: Session) -> None:
+        cat = _cc_category(db)
+        card = _db_card(db)
+        ensure_card_events(db, card, cat.id)
+
+        events = db.query(Event).filter(Event.credit_card_id == card.id).all()
+        for event in events:
+            assert event.credit_card_id == card.id
+            assert event.category_id == cat.id
