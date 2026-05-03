@@ -60,12 +60,21 @@ const subtaskInputCls = `flex-1 text-sm px-2.5 py-1.5 rounded-lg
 // edit mode.  `extra` is optional trailing content shown only in view mode
 // (e.g. a days-remaining badge).
 
-function InlineMetaField({ icon, label, title, editing, onStartEdit, extra, children }) {
+function InlineMetaField({ icon, label, title, editing, onStartEdit, extra, children, ghost }) {
   if (editing) {
     return (
       <span className="flex items-center gap-1.5">
         <span className="opacity-60">{icon}</span>
         {children}
+      </span>
+    )
+  }
+  if (!onStartEdit) {
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="opacity-60">{icon}</span>
+        <span>{label}</span>
+        {extra}
       </span>
     )
   }
@@ -75,8 +84,8 @@ function InlineMetaField({ icon, label, title, editing, onStartEdit, extra, chil
       title={title}
       className="group flex items-center gap-1.5 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
     >
-      <span className="opacity-60">{icon}</span>
-      <span className="border-b border-dashed border-transparent group-hover:border-blue-400 transition-colors">
+      <span className={ghost ? 'opacity-30' : 'opacity-60'}>{icon}</span>
+      <span className={`border-b border-dashed border-transparent group-hover:border-blue-400 transition-colors${ghost ? ' text-slate-300 dark:text-slate-600 italic' : ''}`}>
         {label}
       </span>
       {extra}
@@ -343,6 +352,7 @@ export default function TaskCard({
 }) {
   const [editingField, setEditingField] = useState(null)
   const [showSubtaskConfirm, setShowSubtaskConfirm] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState(false)
 
   // null = not editing; string value = editing with that draft
   const [titleDraft, setTitleDraft] = useState(null)
@@ -361,6 +371,13 @@ export default function TaskCard({
       setTimeout(() => newSubtaskRef.current?.focus(), 30)
     }
   }, [expanded])
+
+  useEffect(() => {
+    if (!pendingDelete) return
+    function handle(e) { if (e.key === 'Escape') setPendingDelete(false) }
+    document.addEventListener('keydown', handle)
+    return () => document.removeEventListener('keydown', handle)
+  }, [pendingDelete])
 
   // ── Derived task values ───────────────────────────────────────────────────
 
@@ -509,7 +526,7 @@ export default function TaskCard({
       label: 'Delete',
       icon: '✕',
       danger: true,
-      onClick: () => onDeleteTask(task.id),
+      onClick: () => setPendingDelete(true),
     },
   ], [task, onEdit, onPatchTask, onDeleteTask, handleDone])
 
@@ -575,19 +592,28 @@ export default function TaskCard({
                 focus:outline-none pb-px"
             />
           ) : (
-            <span
-              onDoubleClick={() => {
-                if (!isDimmed) setTitleDraft(task.title)
-              }}
-              title={isDimmed ? undefined : 'Double-click to edit title'}
-              className={`flex-1 min-w-0 text-base font-medium leading-snug select-none
-                ${task.status === 'done'
-                  ? 'line-through text-slate-400 dark:text-slate-500'
-                  : 'text-slate-800 dark:text-slate-100'
-                }`}
-            >
-              {task.title}
-            </span>
+            <>
+              <span
+                onDoubleClick={() => {
+                  if (!isDimmed) setTitleDraft(task.title)
+                }}
+                title={isDimmed ? undefined : 'Double-click to edit title'}
+                className={`flex-1 min-w-0 text-base font-medium leading-snug select-none
+                  ${task.status === 'done'
+                    ? 'line-through text-slate-400 dark:text-slate-500'
+                    : 'text-slate-800 dark:text-slate-100'
+                  }`}
+              >
+                {task.title}
+              </span>
+              {!isDimmed && (
+                <button
+                  onClick={() => setTitleDraft(task.title)}
+                  title="Edit title"
+                  className="flex-shrink-0 opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-md text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-all text-xs"
+                >✎</button>
+              )}
+            </>
           )}
 
           {editingField === FIELDS.STATUS ? (
@@ -661,16 +687,17 @@ export default function TaskCard({
           </div>
         )}
 
-        {/* Row 3: metadata (date · assignee · est. time) */}
-        {(task.due_date || task.assignee || task.estimated_minutes) && (
+        {/* Row 3: metadata (date · assignee · est. time) — always shown for active tasks */}
+        {(!isDimmed || task.due_date || task.assignee || task.estimated_minutes) && (
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-2.5 ml-9 text-sm text-slate-500 dark:text-slate-400">
-            {task.due_date && (
+            {(!isDimmed || task.due_date) && (
               <InlineMetaField
                 icon="📅"
-                label={fmt(task.due_date)}
-                title="Click to edit due date"
+                label={task.due_date ? fmt(task.due_date) : 'Add date'}
+                title="Click to set due date"
                 editing={editingField === FIELDS.DUE_DATE}
-                onStartEdit={() => setEditingField(FIELDS.DUE_DATE)}
+                onStartEdit={!isDimmed ? () => setEditingField(FIELDS.DUE_DATE) : undefined}
+                ghost={!task.due_date}
                 extra={daysBadge && (
                   <span className={daysBadge.cls}>· {daysBadge.text}</span>
                 )}
@@ -706,7 +733,8 @@ export default function TaskCard({
               label={task.assignee?.name ?? 'Unassigned'}
               title="Click to edit assignee"
               editing={editingField === FIELDS.ASSIGNEE_ID}
-              onStartEdit={() => setEditingField(FIELDS.ASSIGNEE_ID)}
+              onStartEdit={!isDimmed ? () => setEditingField(FIELDS.ASSIGNEE_ID) : undefined}
+              ghost={!task.assignee}
             >
               <select
                 autoFocus
@@ -726,10 +754,11 @@ export default function TaskCard({
 
             <InlineMetaField
               icon="⏱"
-              label={task.estimated_minutes ? `${task.estimated_minutes}m` : 'No duration'}
+              label={task.estimated_minutes ? `${task.estimated_minutes}m` : 'Add duration'}
               title="Click to edit duration"
               editing={editingField === FIELDS.ESTIMATED_MINUTES}
-              onStartEdit={() => setEditingField(FIELDS.ESTIMATED_MINUTES)}
+              onStartEdit={!isDimmed ? () => setEditingField(FIELDS.ESTIMATED_MINUTES) : undefined}
+              ghost={!task.estimated_minutes}
             >
               <input
                 type="number"
@@ -776,7 +805,7 @@ export default function TaskCard({
         ) : !isDimmed && (
           <button
             onClick={handleAddSubtaskClick}
-            className="mt-3 w-full pl-9 flex items-center gap-1 text-xs text-left text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100"
+            className="mt-3 w-full pl-9 flex items-center gap-1 text-xs text-left text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 transition-colors opacity-40 group-hover:opacity-100"
           >
             <span>+</span> Add subtask
           </button>
@@ -792,6 +821,35 @@ export default function TaskCard({
           onDoneAnyway={handleDoneAnyway}
           onCancel={() => setShowSubtaskConfirm(false)}
         />
+      )}
+
+      {/* Inline delete confirmation */}
+      {pendingDelete && (
+        <div className="flex items-center justify-between gap-3 px-5 py-3
+          bg-red-50 dark:bg-red-950/30
+          border-t border-red-100 dark:border-red-900/50">
+          <span className="text-sm text-red-700 dark:text-red-400 font-medium">
+            Delete this task?
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { onDeleteTask(task.id); setPendingDelete(false) }}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-500 transition-colors"
+            >
+              Delete
+            </button>
+            <button
+              onClick={() => setPendingDelete(false)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold
+                bg-slate-200 dark:bg-slate-700
+                text-slate-600 dark:text-slate-300
+                hover:bg-slate-300 dark:hover:bg-slate-600
+                transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Expanded: subtask list + inline add */}

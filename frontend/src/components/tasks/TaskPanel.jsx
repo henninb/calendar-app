@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { STATUS_OPTIONS, STATUS_LABELS, localDate } from './helpers'
 
 const RECURRENCE_OPTIONS = [
@@ -29,43 +29,6 @@ const fieldCls = `w-full px-3 py-2 text-sm rounded-lg
   transition-shadow`
 
 const labelCls = 'block text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5'
-
-// Category combobox using a <datalist>
-function CategoryCombobox({ value, onChange, categories }) {
-  const id = React.useId()
-  const toText = useCallback(v => {
-    const c = categories.find(c => String(c.id) === String(v))
-    return c ? `${c.icon} ${c.name}` : ''
-  }, [categories])
-  const [text, setText] = useState(() => toText(value))
-
-  useEffect(() => { setText(toText(value)) }, [value, toText])
-
-  function handleChange(e) {
-    const t = e.target.value
-    setText(t)
-    const match = categories.find(c => `${c.icon} ${c.name}` === t || c.name === t)
-    if (match) onChange(String(match.id))
-    else if (!t) onChange('')
-  }
-
-  return (
-    <>
-      <input
-        list={id}
-        value={text}
-        onChange={handleChange}
-        onBlur={() => setText(toText(value))}
-        className={fieldCls}
-        placeholder="None"
-        autoComplete="off"
-      />
-      <datalist id={id}>
-        {categories.map(c => <option key={c.id} value={`${c.icon} ${c.name}`} />)}
-      </datalist>
-    </>
-  )
-}
 
 // Subtask row inside the panel edit form
 function SubtaskRow({ sub, taskId, onPatch, onDelete, onStartEdit, isEditing, editForm, onEditFormChange, onSaveEdit, onCancelEdit }) {
@@ -374,11 +337,16 @@ export default function TaskPanel({
           {/* Category */}
           <div>
             <label className={labelCls}>Category</label>
-            <CategoryCombobox
+            <select
               value={form.category_id ?? ''}
-              onChange={id => set('category_id', id)}
-              categories={categories}
-            />
+              onChange={e => set('category_id', e.target.value)}
+              className={fieldCls}
+            >
+              <option value="">None</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+              ))}
+            </select>
           </div>
 
           {/* Subtasks section — edit mode only */}

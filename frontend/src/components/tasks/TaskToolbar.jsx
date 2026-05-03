@@ -134,7 +134,7 @@ export default function TaskToolbar({
         placeholder="Search tasks…"
         value={searchQuery}
         onChange={e => onSearch(e.target.value)}
-        className="px-3 py-1.5 text-sm rounded-xl w-44
+        className="px-3 py-1.5 text-sm rounded-xl w-44 md:w-64
           bg-white dark:bg-slate-700
           border border-slate-200 dark:border-slate-600
           text-slate-800 dark:text-slate-200

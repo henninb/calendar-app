@@ -250,7 +250,6 @@ export default function TaskList() {
   }, [silentLoad, pushUndo])
 
   const deleteTaskCb = useCallback(async taskId => {
-    if (!window.confirm('Delete this task?')) return
     try {
       await deleteTask(taskId)
       setTasks(prev => prev.filter(t => t.id !== taskId))
@@ -518,7 +517,7 @@ export default function TaskList() {
       <button
         onClick={openCreate}
         title="New task"
-        className="fixed bottom-6 right-6 z-40
+        className={`fixed bottom-6 right-6 z-40
           w-14 h-14 rounded-full
           bg-white dark:bg-slate-800
           border border-slate-200 dark:border-slate-700
@@ -528,7 +527,8 @@ export default function TaskList() {
           hover:border-slate-300 dark:hover:border-slate-600
           transition-all duration-200 active:scale-95
           flex items-center justify-center
-          text-2xl leading-none select-none"
+          text-2xl leading-none select-none
+          ${panel.open ? 'hidden' : ''}`}
       >
         +
       </button>

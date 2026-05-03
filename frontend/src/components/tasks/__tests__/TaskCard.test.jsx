@@ -386,11 +386,12 @@ describe('TaskCard — overflow menu', () => {
     expect(cbs.onEdit).toHaveBeenCalledWith(task)
   })
 
-  it('"Delete" menu item calls onDeleteTask with task id', () => {
+  it('"Delete" menu item shows inline confirmation instead of calling onDeleteTask immediately', () => {
     const { cbs } = renderCard()
     fireEvent.click(screen.getByTitle('More actions'))
     fireEvent.click(screen.getByText('Delete'))
-    expect(cbs.onDeleteTask).toHaveBeenCalledWith(1)
+    expect(cbs.onDeleteTask).not.toHaveBeenCalled()
+    expect(screen.getByText('Delete this task?')).toBeInTheDocument()
   })
 
   it('"Cancel" menu item appears for todo tasks', () => {
@@ -439,6 +440,33 @@ describe('TaskCard — overflow menu', () => {
     fireEvent.click(screen.getByTitle('More actions'))
     fireEvent.click(screen.getByText('Copy'))
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Buy groceries')
+  })
+
+  it('confirming delete calls onDeleteTask with the task id', () => {
+    const { cbs } = renderCard()
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(screen.getByText('Delete'))         // opens confirmation
+    fireEvent.click(screen.getByText('Delete'))         // menu is gone; this hits the confirm button
+    expect(cbs.onDeleteTask).toHaveBeenCalledWith(1)
+  })
+
+  it('cancelling the delete confirmation hides it without calling onDeleteTask', () => {
+    const { cbs } = renderCard()
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(screen.getByText('Delete'))
+    fireEvent.click(screen.getByText('Cancel'))
+    expect(cbs.onDeleteTask).not.toHaveBeenCalled()
+    expect(screen.queryByText('Delete this task?')).not.toBeInTheDocument()
+  })
+
+  it('pressing Escape dismisses the delete confirmation', () => {
+    const { cbs } = renderCard()
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(screen.getByText('Delete'))
+    expect(screen.getByText('Delete this task?')).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(cbs.onDeleteTask).not.toHaveBeenCalled()
+    expect(screen.queryByText('Delete this task?')).not.toBeInTheDocument()
   })
 
   it('clicking outside the overflow menu closes it', () => {
@@ -574,5 +602,72 @@ describe('TaskCard — subtask row full-width click target', () => {
   it('shows "▾ hide" label when expanded', () => {
     renderCard({ subtasks }, { expanded: true })
     expect(screen.getByText('▾ hide')).toBeInTheDocument()
+  })
+})
+
+// ── Pencil button for title editing ──────────────────────────────────────────
+
+describe('TaskCard — pencil title edit button', () => {
+  it('renders the pencil button for active tasks', () => {
+    renderCard({ status: 'todo' })
+    expect(screen.getByTitle('Edit title')).toBeInTheDocument()
+  })
+
+  it('clicking the pencil button enters title edit mode', () => {
+    renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('Edit title'))
+    expect(screen.getByDisplayValue('Buy groceries')).toBeInTheDocument()
+  })
+
+  it('does NOT render pencil button for done tasks', () => {
+    renderCard({ status: 'done' })
+    expect(screen.queryByTitle('Edit title')).not.toBeInTheDocument()
+  })
+
+  it('does NOT render pencil button for cancelled tasks', () => {
+    renderCard({ status: 'cancelled' })
+    expect(screen.queryByTitle('Edit title')).not.toBeInTheDocument()
+  })
+})
+
+// ── Always-visible metadata fields ───────────────────────────────────────────
+
+describe('TaskCard — metadata fields always visible for active tasks', () => {
+  const emptyTask = {
+    due_date: null,
+    estimated_minutes: null,
+    assignee_id: null,
+    assignee: null,
+  }
+
+  it('shows "Add date" ghost when task has no due date', () => {
+    renderCard(emptyTask)
+    expect(screen.getByText('Add date')).toBeInTheDocument()
+  })
+
+  it('shows "Unassigned" when task has no assignee', () => {
+    renderCard(emptyTask)
+    expect(screen.getByText('Unassigned')).toBeInTheDocument()
+  })
+
+  it('shows "Add duration" ghost when task has no estimated minutes', () => {
+    renderCard(emptyTask)
+    expect(screen.getByText('Add duration')).toBeInTheDocument()
+  })
+
+  it('clicking "Add date" opens the date input for active tasks', () => {
+    renderCard(emptyTask)
+    fireEvent.click(screen.getByText('Add date'))
+    expect(document.querySelector('input[type="date"]')).toBeInTheDocument()
+  })
+
+  it('does NOT show "Add date" for done tasks with no due date', () => {
+    renderCard({ ...emptyTask, status: 'done' })
+    expect(screen.queryByText('Add date')).not.toBeInTheDocument()
+  })
+
+  it('shows actual date text (not ghost) when due date is set', () => {
+    renderCard({ due_date: '2099-01-15' })
+    expect(screen.queryByText('Add date')).not.toBeInTheDocument()
   })
 })

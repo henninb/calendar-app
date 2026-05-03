@@ -287,6 +287,48 @@ describe('TaskPanel — subtasks section', () => {
   })
 })
 
+// ── Category select ───────────────────────────────────────────────────────────
+
+describe('TaskPanel — category select', () => {
+  const CATS = [
+    { id: 1, name: 'Work',     icon: '💼', color: '#3b82f6' },
+    { id: 2, name: 'Personal', icon: '🏠', color: '#10b981' },
+  ]
+
+  it('renders a <select> for category (not a text input)', () => {
+    renderPanel({ mode: 'create', categories: CATS })
+    const categoryLabel = screen.getByText('Category')
+    const select = categoryLabel.closest('div').querySelector('select')
+    expect(select).toBeInTheDocument()
+  })
+
+  it('category select contains an option for each category', () => {
+    renderPanel({ mode: 'create', categories: CATS })
+    expect(screen.getByRole('option', { name: /Work/ })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /Personal/ })).toBeInTheDocument()
+  })
+
+  it('category select includes a "None" blank option', () => {
+    renderPanel({ mode: 'create', categories: CATS })
+    expect(screen.getByRole('option', { name: 'None' })).toBeInTheDocument()
+  })
+
+  it('selecting a category includes the category_id in the create payload', async () => {
+    const onCreateTask = vi.fn().mockResolvedValue(undefined)
+    renderPanel({ mode: 'create', categories: CATS, onCreateTask })
+
+    fireEvent.change(screen.getByPlaceholderText('Task title'), { target: { value: 'Test' } })
+    const categoryLabel = screen.getByText('Category')
+    const select = categoryLabel.closest('div').querySelector('select')
+    fireEvent.change(select, { target: { value: '1' } })
+    fireEvent.click(screen.getByText('Create Task'))
+
+    expect(onCreateTask).toHaveBeenCalledWith(
+      expect.objectContaining({ category_id: 1 })
+    )
+  })
+})
+
 // ── Priority buttons ──────────────────────────────────────────────────────────
 
 describe('TaskPanel — priority buttons', () => {
