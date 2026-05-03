@@ -5,8 +5,15 @@ from datetime import date
 import pytest
 from sqlalchemy.orm import Session
 
-from app.models import Category, Person, Task, TaskRecurrence, TaskStatus
-from app.services.task_generation import next_task_due_date, spawn_recurring_task
+from datetime import timedelta
+
+from app.models import Category, Event, Occurrence, OccurrenceStatus, Person, Priority, Subtask, Task, TaskRecurrence, TaskStatus
+from app.services.task_generation import (
+    cancel_tasks_for_occurrence,
+    generate_pending_tasks,
+    next_task_due_date,
+    spawn_recurring_task,
+)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

@@ -179,3 +179,150 @@ def test_cancel_non_recurring_task_no_successor(
 
     count = db.query(Task).filter(Task.parent_task_id == task_id).count()
     assert count == 0
+
+
+# ── CRUD: list / create / get / update / delete ───────────────────────────────
+
+def test_list_tasks_empty(client: TestClient) -> None:
+    resp = client.get("/api/tasks")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_create_task_minimal(client: TestClient, category: Category) -> None:
+    resp = client.post("/api/tasks", json={"title": "Minimum task", "category_id": category.id})
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["title"] == "Minimum task"
+    assert data["status"] == "todo"
+    assert data["id"] > 0
+
+
+def test_create_task_with_due_date(client: TestClient, category: Category) -> None:
+    resp = client.post(
+        "/api/tasks",
+        json={"title": "With due", "category_id": category.id, "due_date": "2026-06-01"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["due_date"] == "2026-06-01"
+
+
+def test_create_task_invalid_category_returns_404(client: TestClient) -> None:
+    resp = client.post("/api/tasks", json={"title": "Bad cat", "category_id": 99999})
+    assert resp.status_code == 404
+
+
+def test_get_task_returns_task(client: TestClient, task: dict) -> None:
+    resp = client.get(f"/api/tasks/{task['id']}")
+    assert resp.status_code == 200
+    assert resp.json()["id"] == task["id"]
+
+
+def test_get_task_not_found(client: TestClient) -> None:
+    resp = client.get("/api/tasks/99999")
+    assert resp.status_code == 404
+
+
+def test_update_task_title(client: TestClient, task: dict) -> None:
+    resp = client.patch(f"/api/tasks/{task['id']}", json={"title": "Renamed task"})
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "Renamed task"
+
+
+def test_update_task_description(client: TestClient, task: dict) -> None:
+    resp = client.patch(f"/api/tasks/{task['id']}", json={"description": "More detail"})
+    assert resp.status_code == 200
+    assert resp.json()["description"] == "More detail"
+
+
+def test_update_task_not_found(client: TestClient) -> None:
+    resp = client.patch("/api/tasks/99999", json={"title": "Ghost"})
+    assert resp.status_code == 404
+
+
+def test_delete_task(client: TestClient, task: dict) -> None:
+    resp = client.delete(f"/api/tasks/{task['id']}")
+    assert resp.status_code == 204
+    assert client.get(f"/api/tasks/{task['id']}").status_code == 404
+
+
+def test_delete_task_not_found(client: TestClient) -> None:
+    resp = client.delete("/api/tasks/99999")
+    assert resp.status_code == 404
+
+
+# ── List filtering ────────────────────────────────────────────────────────────
+
+def test_filter_tasks_by_status(client: TestClient, category: Category) -> None:
+    client.post("/api/tasks", json={"title": "Todo task", "category_id": category.id})
+    done_id = client.post(
+        "/api/tasks", json={"title": "Done task", "category_id": category.id}
+    ).json()["id"]
+    client.patch(f"/api/tasks/{done_id}", json={"status": "done"})
+
+    resp = client.get("/api/tasks?status=done")
+    assert resp.status_code == 200
+    titles = [t["title"] for t in resp.json()]
+    assert "Done task" in titles
+    assert "Todo task" not in titles
+
+
+def test_filter_tasks_by_category_id(client: TestClient, db: Session) -> None:
+    cat_a = Category(name="CatA", color="#aabbcc")
+    cat_b = Category(name="CatB", color="#112233")
+    db.add_all([cat_a, cat_b])
+    db.commit()
+
+    client.post("/api/tasks", json={"title": "A task", "category_id": cat_a.id})
+    client.post("/api/tasks", json={"title": "B task", "category_id": cat_b.id})
+
+    resp = client.get(f"/api/tasks?category_id={cat_a.id}")
+    assert resp.status_code == 200
+    titles = [t["title"] for t in resp.json()]
+    assert "A task" in titles
+    assert "B task" not in titles
+
+
+def test_list_tasks_pagination(client: TestClient, category: Category) -> None:
+    for i in range(5):
+        client.post("/api/tasks", json={"title": f"Task {i}", "category_id": category.id})
+
+    r1 = client.get("/api/tasks?limit=2&offset=0")
+    r2 = client.get("/api/tasks?limit=2&offset=2")
+    assert len(r1.json()) == 2
+    assert len(r2.json()) == 2
+    assert {t["id"] for t in r1.json()}.isdisjoint({t["id"] for t in r2.json()})
+
+
+def test_list_tasks_includes_subtasks(client: TestClient, task: dict) -> None:
+    client.post(f"/api/tasks/{task['id']}/subtasks", json={"title": "Sub X"})
+    resp = client.get("/api/tasks")
+    found = next(t for t in resp.json() if t["id"] == task["id"])
+    assert len(found["subtasks"]) == 1
+
+
+# ── completed_at transitions ──────────────────────────────────────────────────
+
+def test_completed_at_set_when_status_done(client: TestClient, task: dict) -> None:
+    resp = client.patch(f"/api/tasks/{task['id']}", json={"status": "done"})
+    assert resp.status_code == 200
+    assert resp.json()["completed_at"] is not None
+
+
+def test_completed_at_cleared_when_back_to_todo(client: TestClient, task: dict) -> None:
+    client.patch(f"/api/tasks/{task['id']}", json={"status": "done"})
+    resp = client.patch(f"/api/tasks/{task['id']}", json={"status": "todo"})
+    assert resp.status_code == 200
+    assert resp.json()["completed_at"] is None
+
+
+def test_completed_at_none_for_in_progress(client: TestClient, task: dict) -> None:
+    resp = client.patch(f"/api/tasks/{task['id']}", json={"status": "in_progress"})
+    assert resp.status_code == 200
+    assert resp.json()["completed_at"] is None
+
+
+def test_task_includes_category_in_response(client: TestClient, task: dict, category: Category) -> None:
+    resp = client.get(f"/api/tasks/{task['id']}")
+    assert resp.status_code == 200
+    assert resp.json()["category"]["id"] == category.id
