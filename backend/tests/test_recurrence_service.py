@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.models import Category, Event, Occurrence, OccurrenceStatus, Priority
 from app.services.recurrence import (
+    _expand_dates,
     _expand_easter,
+    _expand_eclipses,
     _expand_moon_phase,
     _parse_easter_rule,
     _parse_moon_rule,
@@ -343,3 +345,123 @@ class TestMarkOverdue:
             self._add_occurrence(db, event, date.today() - timedelta(days=i))
         count = mark_overdue(db)
         assert count == 3
+
+
+# ── Eclipse sentinels ─────────────────────────────────────────────────────────
+
+class TestExpandEclipses:
+    def test_solar_eclipses_occur_in_range(self):
+        # There are typically 2-5 solar eclipses per year
+        start = date(2024, 1, 1)
+        end = date(2026, 12, 31)
+        dates = _expand_eclipses(start, end, solar=True)
+        assert len(dates) >= 4  # at least 4 solar eclipses in 3 years
+
+    def test_lunar_eclipses_occur_in_range(self):
+        start = date(2024, 1, 1)
+        end = date(2026, 12, 31)
+        dates = _expand_eclipses(start, end, solar=False)
+        assert len(dates) >= 2
+
+    def test_eclipse_dates_within_bounds(self):
+        start = date(2024, 1, 1)
+        end = date(2024, 12, 31)
+        for solar in (True, False):
+            dates = _expand_eclipses(start, end, solar)
+            for d in dates:
+                assert start <= d <= end
+
+    def test_eclipse_dates_sorted(self):
+        start = date(2024, 1, 1)
+        end = date(2026, 12, 31)
+        for solar in (True, False):
+            dates = _expand_eclipses(start, end, solar)
+            assert dates == sorted(dates)
+
+    def test_no_duplicate_eclipse_dates(self):
+        start = date(2024, 1, 1)
+        end = date(2026, 12, 31)
+        for solar in (True, False):
+            dates = _expand_eclipses(start, end, solar)
+            assert len(dates) == len(set(dates))
+
+
+class TestEclipseSentinelViaGenerateOccurrences:
+    def test_eclipse_solar_sentinel_generates_dates(self, db: Session) -> None:
+        event = _make_event(db, rrule="ECLIPSE_SOLAR", dtstart=date(2024, 1, 1))
+        count = generate_occurrences(db, event, lookahead_days=1095)  # 3 years
+        assert count >= 4
+
+    def test_eclipse_lunar_sentinel_generates_dates(self, db: Session) -> None:
+        event = _make_event(db, rrule="ECLIPSE_LUNAR", dtstart=date(2024, 1, 1))
+        count = generate_occurrences(db, event, lookahead_days=1095)
+        assert count >= 2
+
+    def test_eclipse_solar_case_insensitive(self, db: Session) -> None:
+        event = _make_event(db, rrule="eclipse_solar", dtstart=date(2024, 1, 1))
+        count = generate_occurrences(db, event, lookahead_days=1095)
+        assert count >= 4
+
+
+# ── _expand_dates: dtend_rule bounds RRULE expansion ─────────────────────────
+
+class TestExpandDatesWithDtendRule:
+    def _event_with_dtend(
+        self,
+        db: Session,
+        rrule: str,
+        dtstart: date,
+        dtend_rule: date,
+    ) -> Event:
+        cat = Category(name=f"cat_{next(_cat_counter)}", color="#aabbcc", icon="test")
+        db.add(cat)
+        db.flush()
+        e = Event(
+            title="Bounded Event",
+            category_id=cat.id,
+            dtstart=dtstart,
+            rrule=rrule,
+            dtend_rule=dtend_rule,
+            priority=Priority.medium,
+            is_active=True,
+        )
+        db.add(e)
+        db.commit()
+        db.refresh(e)
+        return e
+
+    def test_monthly_bounded_by_dtend_rule(self, db: Session) -> None:
+        # Monthly Jan–Mar 2026 → 3 occurrences
+        e = self._event_with_dtend(
+            db, "FREQ=MONTHLY", date(2026, 1, 1), date(2026, 3, 31)
+        )
+        dates = _expand_dates(e, date(2027, 1, 1))
+        assert len(dates) == 3
+        assert date(2026, 1, 1) in dates
+        assert date(2026, 2, 1) in dates
+        assert date(2026, 3, 1) in dates
+        assert date(2026, 4, 1) not in dates
+
+    def test_dtend_rule_excludes_nothing_if_until_before_rule(self, db: Session) -> None:
+        # dtend_rule beyond the lookahead → until parameter dominates
+        e = self._event_with_dtend(
+            db, "FREQ=MONTHLY", date(2026, 1, 1), date(2030, 12, 31)
+        )
+        # lookahead until = 2026-04-30; dtend_rule = 2030 — no restriction from dtend
+        dates = _expand_dates(e, date(2026, 4, 30))
+        assert len(dates) == 4
+
+    def test_count_in_rrule_takes_precedence_over_dtend_rule(self, db: Session) -> None:
+        # COUNT=2 should win over dtend_rule even if dtend is earlier
+        e = self._event_with_dtend(
+            db, "FREQ=MONTHLY;COUNT=2", date(2026, 1, 1), date(2026, 12, 31)
+        )
+        dates = _expand_dates(e, date(2027, 1, 1))
+        assert len(dates) == 2
+
+    def test_until_in_rrule_takes_precedence_over_dtend_rule(self, db: Session) -> None:
+        e = self._event_with_dtend(
+            db, "FREQ=MONTHLY;UNTIL=20260201", date(2026, 1, 1), date(2026, 12, 31)
+        )
+        dates = _expand_dates(e, date(2027, 1, 1))
+        assert len(dates) == 2  # Jan and Feb only

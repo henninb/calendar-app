@@ -2,7 +2,7 @@
 import pytest
 from sqlalchemy.orm import Session
 
-from app.models import Category
+from app.models import Category, CreditCard
 
 
 def _create_cc_category(db: Session) -> Category:
@@ -188,6 +188,29 @@ class TestTrackerEndpoint:
         r = client.get("/api/credit-cards/tracker")
         assert r.status_code == 200
         assert r.json() == []
+
+    def test_tracker_skips_misconfigured_card(self, client, db):
+        _create_cc_category(db)
+        # Valid card is included
+        client.post("/api/credit-cards", json=_card_payload())
+        # Misconfigured card directly in DB — no due method → tracker_row raises
+        bad = CreditCard(
+            name="Bad Card",
+            last_four="0000",
+            statement_close_day=15,
+            grace_period_days=None,
+            due_day_same_month=None,
+            due_day_next_month=None,
+            is_active=True,
+        )
+        db.add(bad)
+        db.commit()
+        # Tracker should succeed (bad card silently skipped)
+        r = client.get("/api/credit-cards/tracker")
+        assert r.status_code == 200
+        names = [row["name"] for row in r.json()]
+        assert "Chase Sapphire" in names
+        assert "Bad Card" not in names
 
 
 # ── POST /api/credit-cards/{id}/generate ──────────────────────────────────────

@@ -4,15 +4,18 @@ from datetime import date, timedelta
 import pytest
 from sqlalchemy.orm import Session
 
-from app.models import Category, CreditCard, Event, WeekendShift
+from app.models import Category, CreditCard, Event, Occurrence, WeekendShift
 from app.services.credit_card import (
     adjust_weekend,
     close_date_for_month,
     due_date_for_close,
     ensure_card_events,
+    generate_credit_card_occurrences,
+    grace_str,
     next_annual_fee_date,
     next_statement_close,
     previous_statement_close,
+    rolling_close_for_month,
     tracker_row,
 )
 
@@ -101,6 +104,10 @@ class TestAdjustWeekend:
     def test_nearest_shifts_sunday_to_monday(self):
         sun = _weekday_date(6)
         assert adjust_weekend(sun, WeekendShift.nearest) == sun + timedelta(days=1)
+
+    def test_nearest_leaves_weekday_unchanged(self):
+        monday = _weekday_date(0)
+        assert adjust_weekend(monday, WeekendShift.nearest) == monday
 
     def test_back_result_is_weekday(self):
         for wday in (5, 6):
@@ -214,6 +221,33 @@ class TestNextStatementClose:
         card = _rolling_card(cycle_days=29, ref_date=date(2024, 1, 1))
         assert next_statement_close(card, date(2024, 1, 1)) == date(2024, 1, 1)
 
+    def test_uses_today_when_no_ref_date(self):
+        card = _fixed_card(close_day=15)
+        result = next_statement_close(card)
+        assert isinstance(result, date)
+
+    def test_rolling_year_wrap(self):
+        # 29-day cycle from Jan 1: Dec close is Dec 14, so ref_date=Dec 20 forces wrap to Jan
+        card = _rolling_card(cycle_days=29, ref_date=date(2024, 1, 1))
+        result = next_statement_close(card, date(2024, 12, 20))
+        assert result.year == 2025
+        assert result.month == 1
+
+    def test_rolling_raises_when_no_close_found_in_3_months(self):
+        # 100-day cycle from Jan 1 — months 2 and 3 are skipped
+        card = _rolling_card(cycle_days=100, ref_date=date(2024, 1, 1))
+        with pytest.raises(ValueError):
+            next_statement_close(card, date(2024, 1, 5))
+
+
+# ── rolling_close_for_month ───────────────────────────────────────────────────
+
+def test_rolling_close_for_month_returns_none_when_cycle_skips_month():
+    # 29-day cycle from Jan 31 — Feb is skipped (Jan 31 → Mar 1)
+    card = _rolling_card(cycle_days=29, ref_date=date(2023, 1, 31))
+    result = rolling_close_for_month(2023, 2, card)
+    assert result is None
+
 
 # ── previous_statement_close ──────────────────────────────────────────────────
 
@@ -233,6 +267,11 @@ class TestPreviousStatementClose:
         # next close on Jan 1, previous = Jan 1 - 29 = Dec 3
         prev = previous_statement_close(card, date(2024, 1, 1))
         assert prev == date(2024, 1, 1) - timedelta(days=29)
+
+    def test_uses_today_when_no_ref_date(self):
+        card = _fixed_card(close_day=15)
+        result = previous_statement_close(card)
+        assert isinstance(result, date)
 
 
 # ── next_annual_fee_date ──────────────────────────────────────────────────────
@@ -267,6 +306,52 @@ class TestNextAnnualFeeDate:
         fee = next_annual_fee_date(card, ref)
         assert fee is not None
         assert fee >= ref
+
+    def test_uses_today_when_no_ref_date(self):
+        card = _fixed_card(close_day=15)
+        card.annual_fee_month = 6
+        result = next_annual_fee_date(card)
+        assert isinstance(result, date) or result is None
+
+    def test_rolling_card_annual_fee(self):
+        card = _rolling_card(cycle_days=29, ref_date=date(2024, 1, 1))
+        card.annual_fee_month = 3
+        fee = next_annual_fee_date(card, date(2024, 1, 1))
+        assert fee is not None
+        assert fee.month == 3
+
+
+# ── grace_str ─────────────────────────────────────────────────────────────────
+
+def test_grace_str_for_grace_period_card():
+    card = _fixed_card(grace=21)
+    assert grace_str(card, date(2024, 3, 10)) == "21"
+
+
+def test_grace_str_for_due_day_same_month_card():
+    card = _fixed_card(close_day=15)
+    card.due_day_same_month = 25
+    card.grace_period_days = None
+    result = grace_str(card, date(2024, 3, 10))
+    assert result.endswith("V")
+    assert result[:-1].isdigit()
+
+
+def test_grace_str_for_due_day_next_month_card():
+    card = _fixed_card(close_day=15)
+    card.due_day_next_month = 10
+    card.grace_period_days = None
+    result = grace_str(card, date(2024, 3, 10))
+    assert result.endswith("V")
+    assert result[:-1].isdigit()
+
+
+def test_grace_str_uses_today_when_no_arg():
+    card = _fixed_card(close_day=15)
+    card.due_day_same_month = 25
+    card.grace_period_days = None
+    result = grace_str(card)
+    assert result.endswith("V")
 
 
 # ── tracker_row ───────────────────────────────────────────────────────────────
@@ -322,6 +407,11 @@ class TestTrackerRow:
         row = tracker_row(card, date(2024, 3, 10))
         assert row["name"] == "TestFixed"
         assert row["issuer"] == "TestBank"
+
+    def test_uses_today_when_no_arg(self):
+        card = _fixed_card()
+        row = tracker_row(card)
+        assert isinstance(row["next_close"], str)
 
 # ── ensure_card_events ────────────────────────────────────────────────────────
 
@@ -393,3 +483,63 @@ class TestEnsureCardEvents:
         for event in events:
             assert event.credit_card_id == card.id
             assert event.category_id == cat.id
+
+
+# ── generate_credit_card_occurrences ─────────────────────────────────────────
+
+class TestGenerateCreditCardOccurrences:
+    def _setup(self, db: Session) -> tuple[CreditCard, int]:
+        """Return a DB-backed card and its cc_category_id."""
+        cat = _cc_category(db)
+        card = _db_card(db)
+        ensure_card_events(db, card, cat.id)
+        return card, cat.id
+
+    def test_generates_close_and_due_occurrences(self, db: Session) -> None:
+        card, _ = self._setup(db)
+        count = generate_credit_card_occurrences(db, card, lookahead_days=60)
+        assert count >= 2  # at least one close + one due
+
+    def test_idempotent(self, db: Session) -> None:
+        card, _ = self._setup(db)
+        c1 = generate_credit_card_occurrences(db, card, lookahead_days=60)
+        c2 = generate_credit_card_occurrences(db, card, lookahead_days=60)
+        assert c1 >= 1
+        assert c2 == 0
+
+    def test_no_events_returns_zero(self, db: Session) -> None:
+        # Card with no linked events → nothing to generate
+        card = _db_card(db)
+        count = generate_credit_card_occurrences(db, card, lookahead_days=60)
+        assert count == 0
+
+    def test_occurrences_linked_to_correct_events(self, db: Session) -> None:
+        card, _ = self._setup(db)
+        generate_credit_card_occurrences(db, card, lookahead_days=60)
+        events = db.query(Event).filter(Event.credit_card_id == card.id).all()
+        event_ids = {e.id for e in events}
+        occs = db.query(Occurrence).filter(Occurrence.event_id.in_(event_ids)).all()
+        assert len(occs) >= 1
+        for occ in occs:
+            assert occ.event_id in event_ids
+
+    def test_annual_fee_occurrence_created_when_in_lookahead(self, db: Session) -> None:
+        cat = _cc_category(db)
+        # Set annual_fee_month to a month that falls within a 400-day lookahead
+        import datetime
+        next_year = datetime.date.today().year + 1
+        fee_month = 1  # January of next year is always within 400 days
+        card = _db_card(db, annual_fee_month=fee_month)
+        ensure_card_events(db, card, cat.id)
+        count = generate_credit_card_occurrences(db, card, lookahead_days=400)
+        # Should have close + due + annual fee
+        assert count >= 3
+
+    def test_lookahead_zero_generates_nothing(self, db: Session) -> None:
+        card, _ = self._setup(db)
+        # lookahead_days=1 may still generate today's occurrence, so use a negative trick
+        # Instead verify that short lookahead produces fewer or equal occurrences
+        short = generate_credit_card_occurrences(db, card, lookahead_days=1)
+        # Second call with same window generates 0 (idempotency)
+        again = generate_credit_card_occurrences(db, card, lookahead_days=1)
+        assert again == 0

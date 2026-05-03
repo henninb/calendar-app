@@ -326,3 +326,112 @@ def test_task_includes_category_in_response(client: TestClient, task: dict, cate
     resp = client.get(f"/api/tasks/{task['id']}")
     assert resp.status_code == 200
     assert resp.json()["category"]["id"] == category.id
+
+
+# ── Tasks with assignee ───────────────────────────────────────────────────────
+
+def test_create_task_with_assignee(client: TestClient, category: Category, db: Session) -> None:
+    from app.models import Person
+    person = Person(name="Alice", email="alice@example.com")
+    db.add(person)
+    db.commit()
+
+    resp = client.post("/api/tasks", json={
+        "title": "Assigned task",
+        "category_id": category.id,
+        "assignee_id": person.id,
+    })
+    assert resp.status_code == 201
+    assert resp.json()["assignee"]["id"] == person.id
+    assert resp.json()["assignee"]["name"] == "Alice"
+
+
+def test_filter_tasks_by_assignee_id(client: TestClient, category: Category, db: Session) -> None:
+    from app.models import Person
+    alice = Person(name="Alice", email="alice@example.com")
+    bob = Person(name="Bob", email="bob@example.com")
+    db.add_all([alice, bob])
+    db.commit()
+
+    client.post("/api/tasks", json={"title": "Alice task", "category_id": category.id, "assignee_id": alice.id})
+    client.post("/api/tasks", json={"title": "Bob task", "category_id": category.id, "assignee_id": bob.id})
+
+    resp = client.get(f"/api/tasks?assignee_id={alice.id}")
+    assert resp.status_code == 200
+    titles = [t["title"] for t in resp.json()]
+    assert "Alice task" in titles
+    assert "Bob task" not in titles
+
+
+def test_update_task_assignee(client: TestClient, task: dict, db: Session) -> None:
+    from app.models import Person
+    person = Person(name="Charlie", email="charlie@example.com")
+    db.add(person)
+    db.commit()
+
+    resp = client.patch(f"/api/tasks/{task['id']}", json={"assignee_id": person.id})
+    assert resp.status_code == 200
+    assert resp.json()["assignee"]["name"] == "Charlie"
+
+
+def test_task_with_estimated_minutes(client: TestClient, category: Category) -> None:
+    resp = client.post("/api/tasks", json={
+        "title": "Timed task",
+        "category_id": category.id,
+        "estimated_minutes": 90,
+    })
+    assert resp.status_code == 201
+    assert resp.json()["estimated_minutes"] == 90
+
+
+def test_update_task_estimated_minutes(client: TestClient, task: dict) -> None:
+    resp = client.patch(f"/api/tasks/{task['id']}", json={"estimated_minutes": 45})
+    assert resp.status_code == 200
+    assert resp.json()["estimated_minutes"] == 45
+
+
+def test_task_priority_stored(client: TestClient, category: Category) -> None:
+    resp = client.post("/api/tasks", json={
+        "title": "High priority",
+        "category_id": category.id,
+        "priority": "high",
+    })
+    assert resp.status_code == 201
+    assert resp.json()["priority"] == "high"
+
+
+def test_update_task_priority(client: TestClient, task: dict) -> None:
+    resp = client.patch(f"/api/tasks/{task['id']}", json={"priority": "low"})
+    assert resp.status_code == 200
+    assert resp.json()["priority"] == "low"
+
+
+def test_filter_tasks_by_occurrence_id(client: TestClient, db: Session, category: Category) -> None:
+    from app.models import Event, Occurrence, OccurrenceStatus, Priority
+    from datetime import date
+
+    event = Event(
+        title="Linked Event",
+        category_id=category.id,
+        dtstart=date.today(),
+        priority=Priority.medium,
+        is_active=True,
+    )
+    db.add(event)
+    db.flush()
+    occ = Occurrence(
+        event_id=event.id,
+        occurrence_date=date.today(),
+        status=OccurrenceStatus.upcoming,
+    )
+    db.add(occ)
+    db.commit()
+
+    client.post("/api/tasks", json={"title": "Linked task", "category_id": category.id, "occurrence_id": occ.id})
+    client.post("/api/tasks", json={"title": "Unlinked task", "category_id": category.id})
+
+    resp = client.get(f"/api/tasks?occurrence_id={occ.id}")
+    assert resp.status_code == 200
+    titles = [t["title"] for t in resp.json()]
+    assert "Linked task" in titles
+    assert "Unlinked task" not in titles

@@ -298,6 +298,64 @@ def test_generate_pending_tasks_skips_event_without_generates_tasks(db: Session,
     assert generate_pending_tasks(db) == 0
 
 
+def test_next_task_due_date_returns_none_for_unknown_recurrence() -> None:
+    from unittest.mock import MagicMock
+
+    task = MagicMock()
+    # "unknown" is not a valid TaskRecurrence value so none of the branches match
+    task.recurrence = "unknown_recurrence"
+    task.due_date = date(2026, 3, 15)
+    result = next_task_due_date(task)
+    assert result is None
+
+
+def test_generate_pending_tasks_skips_occurrence_beyond_individual_threshold(
+    db: Session, category: Category
+) -> None:
+    today = date.today()
+    event_a = Event(
+        title="Short Lead Event",
+        category_id=category.id,
+        dtstart=today,
+        priority=Priority.medium,
+        is_active=True,
+        generates_tasks=True,
+        reminder_days=[7],
+    )
+    event_b = Event(
+        title="Long Lead Event",
+        category_id=category.id,
+        dtstart=today,
+        priority=Priority.medium,
+        is_active=True,
+        generates_tasks=True,
+        reminder_days=[14],
+    )
+    db.add_all([event_a, event_b])
+    db.flush()
+
+    # Occurrence for Event A at today+10: beyond event_a threshold (today+7)
+    # but within max_threshold (today+14) → included in query but skipped in loop
+    occ_a = Occurrence(
+        event_id=event_a.id,
+        occurrence_date=today + timedelta(days=10),
+        status=OccurrenceStatus.upcoming,
+    )
+    # Occurrence for Event B at today+3: within both thresholds → task created
+    occ_b = Occurrence(
+        event_id=event_b.id,
+        occurrence_date=today + timedelta(days=3),
+        status=OccurrenceStatus.upcoming,
+    )
+    db.add_all([occ_a, occ_b])
+    db.commit()
+
+    count = generate_pending_tasks(db)
+    assert count == 1
+    assert db.query(Task).filter(Task.occurrence_id == occ_b.id).first() is not None
+    assert db.query(Task).filter(Task.occurrence_id == occ_a.id).first() is None
+
+
 def test_generate_pending_tasks_idempotent(db: Session, category: Category) -> None:
     occ_date = date.today() + timedelta(days=5)
     event = Event(

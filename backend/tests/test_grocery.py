@@ -332,3 +332,190 @@ def test_remove_list_item_not_found_returns_404(client: TestClient) -> None:
     lst = _create_list(client)
     resp = client.delete(f"/api/grocery/lists/{lst['id']}/items/99999")
     assert resp.status_code == 404
+
+
+# ── Store: get by id / update not found ───────────────────────────────────────
+
+def test_list_stores_empty(client: TestClient) -> None:
+    resp = client.get("/api/stores")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_get_store_by_id(client: TestClient) -> None:
+    store = _create_store(client, name="Whole Foods")
+    resp = client.get(f"/api/stores/{store['id']}")
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Whole Foods"
+
+
+def test_update_store_location(client: TestClient) -> None:
+    store = _create_store(client)
+    resp = client.patch(f"/api/stores/{store['id']}", json={"location": "Eden Prairie, MN"})
+    assert resp.status_code == 200
+    assert resp.json()["location"] == "Eden Prairie, MN"
+
+
+def test_update_store_deactivate(client: TestClient) -> None:
+    store = _create_store(client)
+    resp = client.patch(f"/api/stores/{store['id']}", json={"is_active": False})
+    assert resp.status_code == 200
+    assert resp.json()["is_active"] is False
+
+
+def test_update_store_not_found(client: TestClient) -> None:
+    resp = client.patch("/api/stores/99999", json={"name": "Ghost"})
+    assert resp.status_code == 404
+
+
+def test_delete_store_not_found(client: TestClient) -> None:
+    resp = client.delete("/api/stores/99999")
+    assert resp.status_code == 404
+
+
+# ── GroceryItem: get / update / delete 404 ───────────────────────────────────
+
+def test_get_grocery_item_by_id(client: TestClient) -> None:
+    item = _create_item(client, name="Greek Yogurt")
+    resp = client.get(f"/api/grocery/items/{item['id']}")
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Greek Yogurt"
+
+
+def test_get_grocery_item_not_found(client: TestClient) -> None:
+    resp = client.get("/api/grocery/items/99999")
+    assert resp.status_code == 404
+
+
+def test_update_grocery_item_name(client: TestClient) -> None:
+    item = _create_item(client, name="Old Name")
+    resp = client.patch(f"/api/grocery/items/{item['id']}", json={"name": "New Name"})
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "New Name"
+
+
+def test_update_grocery_item_unit(client: TestClient) -> None:
+    item = _create_item(client, name="Milk", unit="each")
+    resp = client.patch(f"/api/grocery/items/{item['id']}", json={"default_unit": "liter"})
+    assert resp.status_code == 200
+    assert resp.json()["default_unit"] == "liter"
+
+
+def test_update_grocery_item_store(client: TestClient) -> None:
+    store = _create_store(client)
+    item = _create_item(client, name="Bread")
+    resp = client.patch(f"/api/grocery/items/{item['id']}", json={"default_store_id": store["id"]})
+    assert resp.status_code == 200
+    assert resp.json()["default_store"]["id"] == store["id"]
+
+
+def test_update_grocery_item_invalid_store(client: TestClient) -> None:
+    item = _create_item(client, name="Butter")
+    resp = client.patch(f"/api/grocery/items/{item['id']}", json={"default_store_id": 99999})
+    assert resp.status_code == 404
+
+
+def test_delete_grocery_item_not_found(client: TestClient) -> None:
+    resp = client.delete("/api/grocery/items/99999")
+    assert resp.status_code == 404
+
+
+def test_list_grocery_items_empty(client: TestClient) -> None:
+    resp = client.get("/api/grocery/items")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_list_grocery_items_all(client: TestClient) -> None:
+    _create_item(client, name="Apple")
+    _create_item(client, name="Banana")
+    resp = client.get("/api/grocery/items")
+    assert resp.status_code == 200
+    names = [i["name"] for i in resp.json()]
+    assert "Apple" in names
+    assert "Banana" in names
+
+
+def test_list_grocery_items_sorted_by_name(client: TestClient) -> None:
+    _create_item(client, name="Zucchini")
+    _create_item(client, name="Avocado")
+    names = [i["name"] for i in client.get("/api/grocery/items").json()]
+    assert names == sorted(names)
+
+
+# ── GroceryList: get / update / 404s ─────────────────────────────────────────
+
+def test_list_grocery_lists_empty(client: TestClient) -> None:
+    resp = client.get("/api/grocery/lists")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_get_grocery_list_by_id(client: TestClient) -> None:
+    lst = _create_list(client, name="Weekend Shop")
+    resp = client.get(f"/api/grocery/lists/{lst['id']}")
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Weekend Shop"
+
+
+def test_get_grocery_list_not_found(client: TestClient) -> None:
+    resp = client.get("/api/grocery/lists/99999")
+    assert resp.status_code == 404
+
+
+def test_update_grocery_list_name(client: TestClient) -> None:
+    lst = _create_list(client, name="Old List")
+    resp = client.patch(f"/api/grocery/lists/{lst['id']}", json={"name": "New List"})
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "New List"
+
+
+def test_update_grocery_list_store(client: TestClient) -> None:
+    store = _create_store(client)
+    lst = _create_list(client)
+    resp = client.patch(f"/api/grocery/lists/{lst['id']}", json={"store_id": store["id"]})
+    assert resp.status_code == 200
+    assert resp.json()["store"]["id"] == store["id"]
+
+
+def test_update_grocery_list_invalid_store(client: TestClient) -> None:
+    lst = _create_list(client)
+    resp = client.patch(f"/api/grocery/lists/{lst['id']}", json={"store_id": 99999})
+    assert resp.status_code == 404
+
+
+def test_update_grocery_list_not_found(client: TestClient) -> None:
+    resp = client.patch("/api/grocery/lists/99999", json={"name": "Ghost"})
+    assert resp.status_code == 404
+
+
+def test_delete_grocery_list_not_found(client: TestClient) -> None:
+    resp = client.delete("/api/grocery/lists/99999")
+    assert resp.status_code == 404
+
+
+# ── On Hand: item not found ───────────────────────────────────────────────────
+
+def test_upsert_on_hand_invalid_item_returns_404(client: TestClient) -> None:
+    resp = client.put("/api/grocery/on-hand/99999", json={"quantity": 1, "unit": "each"})
+    assert resp.status_code == 404
+
+
+def test_list_on_hand_empty(client: TestClient) -> None:
+    resp = client.get("/api/grocery/on-hand")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+# ── List items: add_item list not found / item not found ─────────────────────
+
+def test_add_item_to_list_list_not_found(client: TestClient) -> None:
+    item = _create_item(client, name="Eggs")
+    resp = client.post("/api/grocery/lists/99999/items", json={"item_id": item["id"]})
+    assert resp.status_code == 404
+
+
+def test_add_item_to_list_item_not_found(client: TestClient) -> None:
+    lst = _create_list(client)
+    resp = client.post(f"/api/grocery/lists/{lst['id']}/items", json={"item_id": 99999})
+    assert resp.status_code == 404

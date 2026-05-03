@@ -236,3 +236,117 @@ def test_rrule_prefix_stripped(client: TestClient) -> None:
     })
     assert resp.status_code == 201
     assert "RRULE:" not in (resp.json()["rrule"] or "")
+
+
+# ── dtend_rule: bounded occurrences ──────────────────────────────────────────
+
+def test_event_dtend_rule_bounds_occurrences(client: TestClient) -> None:
+    cat = _create_category(client, name="Bounded")
+    # Monthly from Jan 1 through Mar 31 → exactly 3 occurrences
+    resp = client.post("/api/events", json={
+        "title": "Monthly Bounded",
+        "category_id": cat["id"],
+        "dtstart": "2026-01-01",
+        "rrule": "FREQ=MONTHLY",
+        "dtend_rule": "2026-03-31",
+    })
+    assert resp.status_code == 201
+    event = resp.json()
+    assert event["dtend_rule"] == "2026-03-31"
+
+    # Generate and verify count via generate endpoint
+    gen = client.post(f"/api/events/{event['id']}/generate?lookahead_days=365")
+    assert gen.status_code == 200
+    # Should have created occurrences only for Jan, Feb, Mar
+    occs = client.get(f"/api/occurrences?event_id={event['id']}").json()
+    dates = [o["occurrence_date"] for o in occs]
+    assert "2026-01-01" in dates
+    assert "2026-02-01" in dates
+    assert "2026-03-01" in dates
+    assert all(d <= "2026-03-31" for d in dates)
+
+
+def test_event_dtend_rule_stored_and_returned(client: TestClient) -> None:
+    cat = _create_category(client, name="Dtend")
+    resp = client.post("/api/events", json={
+        "title": "With End Rule",
+        "category_id": cat["id"],
+        "dtstart": "2026-06-01",
+        "rrule": "FREQ=WEEKLY",
+        "dtend_rule": "2026-08-31",
+    })
+    assert resp.status_code == 201
+    assert resp.json()["dtend_rule"] == "2026-08-31"
+
+
+def test_update_event_dtend_rule(client: TestClient) -> None:
+    cat = _create_category(client, name="DtendUpd")
+    event = _create_event(client, cat["id"], rrule="FREQ=WEEKLY")
+    resp = client.patch(f"/api/events/{event['id']}", json={"dtend_rule": "2026-12-31"})
+    assert resp.status_code == 200
+    assert resp.json()["dtend_rule"] == "2026-12-31"
+
+
+# ── generates_tasks / reminder_days ──────────────────────────────────────────
+
+def test_event_generates_tasks_flag(client: TestClient) -> None:
+    cat = _create_category(client, name="TaskGen")
+    resp = client.post("/api/events", json={
+        "title": "Task Generator",
+        "category_id": cat["id"],
+        "dtstart": "2026-06-01",
+        "generates_tasks": True,
+        "reminder_days": [14, 7, 1],
+    })
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["generates_tasks"] is True
+    assert data["reminder_days"] == [14, 7, 1]
+
+
+def test_event_generates_tasks_default_false(client: TestClient) -> None:
+    cat = _create_category(client, name="NoTaskGen")
+    event = _create_event(client, cat["id"])
+    assert event["generates_tasks"] is False
+
+
+def test_update_event_generates_tasks(client: TestClient) -> None:
+    cat = _create_category(client, name="UpdTaskGen")
+    event = _create_event(client, cat["id"])
+    resp = client.patch(f"/api/events/{event['id']}", json={"generates_tasks": True})
+    assert resp.status_code == 200
+    assert resp.json()["generates_tasks"] is True
+
+
+# ── priority / location / amount ──────────────────────────────────────────────
+
+def test_event_priority_stored(client: TestClient) -> None:
+    cat = _create_category(client, name="PriorityEvt")
+    resp = client.post("/api/events", json={
+        "title": "High Priority",
+        "category_id": cat["id"],
+        "dtstart": "2026-06-01",
+        "priority": "high",
+    })
+    assert resp.status_code == 201
+    assert resp.json()["priority"] == "high"
+
+
+def test_event_location_stored(client: TestClient) -> None:
+    cat = _create_category(client, name="LocationEvt")
+    resp = client.post("/api/events", json={
+        "title": "Offsite Meeting",
+        "category_id": cat["id"],
+        "dtstart": "2026-06-01",
+        "location": "Room 101",
+    })
+    assert resp.status_code == 201
+    assert resp.json()["location"] == "Room 101"
+
+
+def test_event_description_stored(client: TestClient) -> None:
+    cat = _create_category(client, name="DescEvt")
+    event = _create_event(client, cat["id"])
+    resp = client.patch(f"/api/events/{event['id']}", json={"description": "Full notes here"})
+    assert resp.status_code == 200
+    assert resp.json()["description"] == "Full notes here"
