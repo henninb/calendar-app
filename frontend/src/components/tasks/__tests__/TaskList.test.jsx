@@ -264,3 +264,396 @@ describe('TaskList — subtask operations', () => {
     await waitFor(() => expect(api.createSubtask).toHaveBeenCalledWith(1, { title: 'Sub B' }))
   })
 })
+
+// ── Keyboard shortcut ─────────────────────────────────────────────────────────
+
+describe('TaskList — keyboard Ctrl+Z / Cmd+Z triggers undo', () => {
+  it('pressing Ctrl+Z after a patch reverts the change', async () => {
+    api.updateTask
+      .mockResolvedValueOnce({ ...baseTask, status: 'in_progress' })
+      .mockResolvedValueOnce({ ...baseTask, status: 'todo' })
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('Start task'))
+    await waitFor(() => expect(api.updateTask).toHaveBeenCalledTimes(1))
+
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true })
+    await waitFor(() => expect(api.updateTask).toHaveBeenCalledTimes(2))
+    expect(api.updateTask).toHaveBeenLastCalledWith(1, { status: 'todo' })
+  })
+
+  it('pressing Cmd+Z also triggers undo', async () => {
+    api.updateTask
+      .mockResolvedValueOnce({ ...baseTask, status: 'in_progress' })
+      .mockResolvedValueOnce({ ...baseTask, status: 'todo' })
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('Start task'))
+    await waitFor(() => expect(api.updateTask).toHaveBeenCalledTimes(1))
+
+    fireEvent.keyDown(document, { key: 'z', metaKey: true })
+    await waitFor(() => expect(api.updateTask).toHaveBeenCalledTimes(2))
+  })
+})
+
+// ── Fetch-limit warning ───────────────────────────────────────────────────────
+
+describe('TaskList — fetch-limit warning', () => {
+  it('shows the fetch-limit banner when 500 tasks are loaded', async () => {
+    const manyTasks = Array.from({ length: 500 }, (_, i) => ({
+      ...baseTask,
+      id: i + 1,
+      created_at: `2099-01-01T${String(Math.floor(i / 3600)).padStart(2, '0')}:${String(Math.floor((i % 3600) / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}Z`,
+    }))
+    api.fetchTasks.mockResolvedValue(manyTasks)
+    render(<TaskList />)
+    await waitFor(() =>
+      expect(screen.getByText(/Showing the first 500 tasks/)).toBeInTheDocument()
+    )
+  })
+
+  it('logs a warning when silentLoad returns 500 tasks', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const manyTasks = Array.from({ length: 500 }, (_, i) => ({
+      ...baseTask, id: i + 1,
+    }))
+    api.updateTask.mockResolvedValue({ ...baseTask, status: 'cancelled' })
+    api.fetchTasks
+      .mockResolvedValueOnce([baseTask])
+      .mockResolvedValueOnce(manyTasks)
+
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Cancel' }))
+
+    await waitFor(() => expect(api.fetchTasks).toHaveBeenCalledTimes(2))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('hit fetch limit'))
+    warnSpy.mockRestore()
+  })
+})
+
+// ── silentLoad error path ─────────────────────────────────────────────────────
+
+describe('TaskList — silentLoad error path', () => {
+  it('shows error banner when silentLoad fails after cancelling', async () => {
+    api.updateTask.mockResolvedValue({ ...baseTask, status: 'cancelled' })
+    api.fetchTasks
+      .mockResolvedValueOnce([baseTask])
+      .mockRejectedValueOnce(new Error('Reload failed'))
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Cancel' }))
+
+    await waitFor(() =>
+      expect(screen.getByText('Reload failed')).toBeInTheDocument()
+    )
+  })
+})
+
+// ── Task grouping by due date ─────────────────────────────────────────────────
+
+describe('TaskList — task grouping by due date', () => {
+  function todayPlus(n) {
+    const d = new Date()
+    d.setDate(d.getDate() + n)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  it('places a task due tomorrow in the Tomorrow section', async () => {
+    api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: todayPlus(1) }])
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+    expect(screen.getByText('Tomorrow')).toBeInTheDocument()
+  })
+
+  it('places a task due in 3 days in the This Week section', async () => {
+    api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: todayPlus(3) }])
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+    expect(screen.getByText('This Week')).toBeInTheDocument()
+  })
+
+  it('places a task due in 10 days in the Next Week section', async () => {
+    api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: todayPlus(10) }])
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+    expect(screen.getByText('Next Week')).toBeInTheDocument()
+  })
+
+  it('places a task due in 20 days in the Later section', async () => {
+    api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: todayPlus(20) }])
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+    expect(screen.getByText('Later')).toBeInTheDocument()
+  })
+
+  it('places a task with no due date in the No Date section', async () => {
+    api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: null }])
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+    expect(screen.getByText('No Date')).toBeInTheDocument()
+  })
+
+  it('places a done task into Done group when done filter is active', async () => {
+    api.fetchTasks.mockResolvedValue([{ ...baseTask, status: 'done' }])
+    render(<TaskList />)
+    await waitFor(() => expect(api.fetchTasks).toHaveBeenCalledTimes(1))
+
+    // Enable done filter, disable others so the done task becomes visible
+    fireEvent.click(screen.getByText(/Filters/))
+    const statusSection = screen.getAllByText('Status')[0].closest('div')
+    fireEvent.click(within(statusSection).getByText('Done'))
+    fireEvent.click(within(statusSection).getByText('To Do'))
+    fireEvent.click(within(statusSection).getByText('In Progress'))
+
+    // The done task is now visible — "No tasks match" should NOT appear
+    await waitFor(() =>
+      expect(screen.queryByText('No tasks match the current filters.')).not.toBeInTheDocument()
+    )
+    expect(screen.queryByText(/All status filters are off/)).not.toBeInTheDocument()
+  })
+})
+
+// ── Section collapse ──────────────────────────────────────────────────────────
+
+describe('TaskList — section collapse/expand', () => {
+  it('collapses the Overdue/Today section when its header is clicked', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    // Section is expanded by default; click header to collapse
+    fireEvent.click(screen.getByText('Overdue / Today'))
+
+    await waitFor(() =>
+      expect(screen.queryByText('Weekly chore')).not.toBeInTheDocument()
+    )
+  })
+})
+
+// ── handleCreateTask error ────────────────────────────────────────────────────
+
+describe('TaskList — handleCreateTask error', () => {
+  it('shows error banner when createTask fails', async () => {
+    api.createTask.mockRejectedValue(new Error('Create failed'))
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('New task'))
+    await waitFor(() => screen.getByText('New Task'))
+
+    fireEvent.change(screen.getByPlaceholderText('Task title'), { target: { value: 'A task' } })
+    fireEvent.click(screen.getByText('Create Task'))
+
+    await waitFor(() => expect(screen.getByText('Create failed')).toBeInTheDocument())
+  })
+})
+
+// ── handleUpdateTask ──────────────────────────────────────────────────────────
+
+describe('TaskList — handleUpdateTask', () => {
+  it('reloads all tasks when panel saves a task with done status', async () => {
+    api.updateTask.mockResolvedValue({ ...baseTask, status: 'done' })
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Edit' }))
+    await waitFor(() => screen.getByText('Edit Task'))
+
+    // Change status to Done in the panel's Status select
+    fireEvent.change(screen.getByDisplayValue('To Do'), { target: { value: 'done' } })
+    fireEvent.click(screen.getByText('Save Changes'))
+
+    await waitFor(() => expect(api.fetchTasks).toHaveBeenCalledTimes(2))
+  })
+
+  it('shows error when updateTask fails in the edit panel', async () => {
+    api.updateTask.mockRejectedValue(new Error('Update failed'))
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Edit' }))
+    await waitFor(() => screen.getByText('Edit Task'))
+
+    fireEvent.click(screen.getByText('Save Changes'))
+
+    await waitFor(() => expect(screen.getByText('Update failed')).toBeInTheDocument())
+  })
+})
+
+// ── patchTask done ────────────────────────────────────────────────────────────
+
+describe('TaskList — patchTask done', () => {
+  it('triggers silentLoad after marking a task done', async () => {
+    api.updateTask.mockResolvedValue({ ...baseTask, status: 'done' })
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('Mark as done'))
+
+    await waitFor(() => expect(api.fetchTasks).toHaveBeenCalledTimes(2), { timeout: 2000 })
+  })
+
+  it('shows error banner when updateTask fails during done patch', async () => {
+    api.updateTask.mockRejectedValue(new Error('Done failed'))
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('Mark as done'))
+
+    await waitFor(() => expect(screen.getByText('Done failed')).toBeInTheDocument(), { timeout: 2000 })
+  })
+})
+
+// ── patchTask undo toast ──────────────────────────────────────────────────────
+
+describe('TaskList — patchTask undo toast', () => {
+  it('shows undo toast after starting a task', async () => {
+    api.updateTask.mockResolvedValue({ ...baseTask, status: 'in_progress' })
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('Start task'))
+
+    await waitFor(() =>
+      expect(screen.getByText(/"Weekly chore" started/)).toBeInTheDocument()
+    )
+  })
+})
+
+// ── deleteTask error ──────────────────────────────────────────────────────────
+
+describe('TaskList — deleteTask error', () => {
+  it('shows error when deleteTask fails', async () => {
+    api.deleteTask.mockRejectedValue(new Error('Delete failed'))
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Delete' }))
+    fireEvent.click(screen.getByText('Delete'))
+
+    await waitFor(() => expect(screen.getByText('Delete failed')).toBeInTheDocument())
+  })
+})
+
+// ── patchSubtask undo and error ───────────────────────────────────────────────
+
+describe('TaskList — patchSubtask undo and error', () => {
+  const taskWithSub = {
+    ...baseTask,
+    subtasks: [{ id: 20, title: 'Sub A', status: 'todo', order: 0, due_date: null }],
+  }
+
+  beforeEach(() => {
+    api.fetchTasks.mockResolvedValue([taskWithSub])
+  })
+
+  it('shows undo toast after checking a subtask', async () => {
+    api.updateSubtask = vi.fn().mockResolvedValue({ id: 20, title: 'Sub A', status: 'done', order: 0 })
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByText('▸ subtasks'))
+    await waitFor(() => screen.getByText('Sub A'))
+
+    fireEvent.click(screen.getAllByRole('checkbox')[0])
+
+    await waitFor(() =>
+      expect(screen.getByText(/Subtask "Sub A" checked/)).toBeInTheDocument()
+    )
+  })
+
+  it('shows error when updateSubtask fails', async () => {
+    api.updateSubtask = vi.fn().mockRejectedValue(new Error('Subtask patch failed'))
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByText('▸ subtasks'))
+    await waitFor(() => screen.getByText('Sub A'))
+
+    fireEvent.click(screen.getAllByRole('checkbox')[0])
+
+    await waitFor(() => expect(screen.getByText('Subtask patch failed')).toBeInTheDocument())
+  })
+})
+
+// ── addSubtask error ──────────────────────────────────────────────────────────
+
+describe('TaskList — addSubtask error', () => {
+  const taskWithSub = {
+    ...baseTask,
+    subtasks: [{ id: 20, title: 'Sub A', status: 'todo', order: 0, due_date: null }],
+  }
+
+  beforeEach(() => {
+    api.fetchTasks.mockResolvedValue([taskWithSub])
+  })
+
+  it('shows error when createSubtask fails', async () => {
+    api.createSubtask = vi.fn().mockRejectedValue(new Error('Add sub failed'))
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByText('▸ subtasks'))
+    await waitFor(() => screen.getByPlaceholderText('Add subtask…'))
+
+    fireEvent.change(screen.getByPlaceholderText('Add subtask…'), { target: { value: 'New sub' } })
+    fireEvent.keyDown(screen.getByPlaceholderText('Add subtask…'), { key: 'Enter' })
+
+    await waitFor(() => expect(screen.getByText('Add sub failed')).toBeInTheDocument())
+  })
+})
+
+// ── deleteSubtask ─────────────────────────────────────────────────────────────
+
+describe('TaskList — deleteSubtask', () => {
+  const taskWithSub = {
+    ...baseTask,
+    subtasks: [{ id: 20, title: 'Sub A', status: 'todo', order: 0, due_date: null }],
+  }
+
+  beforeEach(() => {
+    api.fetchTasks.mockResolvedValue([taskWithSub])
+  })
+
+  it('deletes a subtask and shows undo toast', async () => {
+    api.deleteSubtask = vi.fn().mockResolvedValue(undefined)
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByText('▸ subtasks'))
+    await waitFor(() => screen.getByText('Sub A'))
+
+    fireEvent.click(screen.getByTitle('Delete subtask'))
+
+    await waitFor(() => expect(api.deleteSubtask).toHaveBeenCalledWith(1, 20))
+    await waitFor(() =>
+      expect(screen.getByText(/Subtask "Sub A" deleted/)).toBeInTheDocument()
+    )
+  })
+})
+
+// ── FAB hidden when panel is open ─────────────────────────────────────────────
+
+describe('TaskList — FAB visibility', () => {
+  it('FAB gets the "hidden" class when the create panel is open', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    const fab = screen.getByTitle('New task')
+    expect(fab).not.toHaveClass('hidden')
+
+    fireEvent.click(fab)
+    await waitFor(() => screen.getByText('New Task'))
+
+    expect(screen.getByTitle('New task')).toHaveClass('hidden')
+  })
+})
