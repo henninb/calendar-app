@@ -59,6 +59,7 @@ const baseTask = {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks()
   api.fetchTasks.mockResolvedValue([baseTask])
   api.fetchPersons.mockResolvedValue([])
   api.fetchCategories.mockResolvedValue([])
@@ -368,36 +369,48 @@ describe('TaskList — task grouping by due date', () => {
   it('places a task due tomorrow in the Tomorrow section', async () => {
     api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: todayPlus(1) }])
     render(<TaskList />)
+    await waitFor(() => screen.getByText('Tomorrow'))
+    // toggleSection treats isEmpty as the default, requiring two clicks to expand
+    // a non-empty section that starts in the default-collapsed state
+    fireEvent.click(screen.getByText('Tomorrow'))
+    fireEvent.click(screen.getByText('Tomorrow'))
     await waitFor(() => screen.getByText('Weekly chore'))
-    expect(screen.getByText('Tomorrow')).toBeInTheDocument()
   })
 
   it('places a task due in 3 days in the This Week section', async () => {
     api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: todayPlus(3) }])
     render(<TaskList />)
+    await waitFor(() => screen.getByText('This Week'))
+    fireEvent.click(screen.getByText('This Week'))
+    fireEvent.click(screen.getByText('This Week'))
     await waitFor(() => screen.getByText('Weekly chore'))
-    expect(screen.getByText('This Week')).toBeInTheDocument()
   })
 
   it('places a task due in 10 days in the Next Week section', async () => {
     api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: todayPlus(10) }])
     render(<TaskList />)
+    await waitFor(() => screen.getByText('Next Week'))
+    fireEvent.click(screen.getByText('Next Week'))
+    fireEvent.click(screen.getByText('Next Week'))
     await waitFor(() => screen.getByText('Weekly chore'))
-    expect(screen.getByText('Next Week')).toBeInTheDocument()
   })
 
   it('places a task due in 20 days in the Later section', async () => {
     api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: todayPlus(20) }])
     render(<TaskList />)
+    await waitFor(() => screen.getByText('Later'))
+    fireEvent.click(screen.getByText('Later'))
+    fireEvent.click(screen.getByText('Later'))
     await waitFor(() => screen.getByText('Weekly chore'))
-    expect(screen.getByText('Later')).toBeInTheDocument()
   })
 
   it('places a task with no due date in the No Date section', async () => {
     api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: null }])
     render(<TaskList />)
+    await waitFor(() => screen.getByText('No Date'))
+    fireEvent.click(screen.getByText('No Date'))
+    fireEvent.click(screen.getByText('No Date'))
     await waitFor(() => screen.getByText('Weekly chore'))
-    expect(screen.getByText('No Date')).toBeInTheDocument()
   })
 
   it('places a done task into Done group when done filter is active', async () => {
