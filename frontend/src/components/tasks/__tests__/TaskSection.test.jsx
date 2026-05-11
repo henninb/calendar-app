@@ -2,9 +2,13 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import TaskSection from '../TaskSection'
 
-// DnD-kit is imported transitively via TaskCard; mock it so jsdom doesn't choke.
+// Capture the onDragEnd callback so tests can simulate drag operations.
+let triggerDragEnd = null
 vi.mock('@dnd-kit/core', () => ({
-  DndContext: ({ children }) => children,
+  DndContext: ({ children, onDragEnd }) => {
+    triggerDragEnd = onDragEnd
+    return children
+  },
   closestCenter: {},
   MouseSensor: class {},
   TouchSensor: class {},
@@ -150,12 +154,23 @@ describe('TaskSection', () => {
 
   it('calls onReorderTasks when drag ends on a different task', () => {
     const onReorderTasks = vi.fn()
-    renderSection({
-      tasks: [baseTask, { ...baseTask, id: 2, title: 'Task 2' }],
-      collapsed: false,
-      onReorderTasks,
-    })
-    // DnD is mocked — verify the section renders without error and callback is wired
+    const task2 = { ...baseTask, id: 2, title: 'Task 2' }
+    renderSection({ tasks: [baseTask, task2], collapsed: false, onReorderTasks })
+    triggerDragEnd({ active: { id: 1 }, over: { id: 2 } })
+    expect(onReorderTasks).toHaveBeenCalledWith([task2, baseTask])
+  })
+
+  it('does not call onReorderTasks when dropped on the same task', () => {
+    const onReorderTasks = vi.fn()
+    renderSection({ tasks: [baseTask], collapsed: false, onReorderTasks })
+    triggerDragEnd({ active: { id: 1 }, over: { id: 1 } })
+    expect(onReorderTasks).not.toHaveBeenCalled()
+  })
+
+  it('does not call onReorderTasks when dropped outside any target', () => {
+    const onReorderTasks = vi.fn()
+    renderSection({ tasks: [baseTask], collapsed: false, onReorderTasks })
+    triggerDragEnd({ active: { id: 1 }, over: null })
     expect(onReorderTasks).not.toHaveBeenCalled()
   })
 })

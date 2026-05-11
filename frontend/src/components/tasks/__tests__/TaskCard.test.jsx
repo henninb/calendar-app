@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import TaskCard from '../TaskCard'
 import { STATUS_LABELS } from '../helpers'
 
@@ -669,5 +669,258 @@ describe('TaskCard — metadata fields always visible for active tasks', () => {
   it('shows actual date text (not ghost) when due date is set', () => {
     renderCard({ due_date: '2099-01-15' })
     expect(screen.queryByText('Add date')).not.toBeInTheDocument()
+  })
+})
+
+// ── Complete all & mark done ──────────────────────────────────────────────────
+
+describe('TaskCard — complete all subtasks and mark done', () => {
+  it('"Complete all & mark done" patches each incomplete subtask then marks task done', async () => {
+    const { cbs } = renderCard({
+      subtasks: [
+        { id: 10, title: 'Step A', status: 'todo', order: 0, due_date: null },
+        { id: 11, title: 'Step B', status: 'todo', order: 1, due_date: null },
+      ],
+    })
+    fireEvent.click(screen.getByTitle('Mark as done'))
+    fireEvent.click(screen.getByText('Complete all & mark done'))
+    await waitFor(() => {
+      expect(cbs.onPatchSubtask).toHaveBeenCalledWith(1, 10, { status: 'done' })
+      expect(cbs.onPatchSubtask).toHaveBeenCalledWith(1, 11, { status: 'done' })
+      expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'done' })
+    })
+  })
+})
+
+// ── Inline status editing ─────────────────────────────────────────────────────
+
+describe('TaskCard — inline status editing', () => {
+  it('clicking the status pill opens a status select', () => {
+    renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('Click to edit status'))
+    expect(screen.getByRole('combobox')).toBeInTheDocument()
+  })
+
+  it('selecting a new status calls onPatchTask and closes the select', () => {
+    const { cbs } = renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('Click to edit status'))
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'in_progress' } })
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'in_progress' })
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+
+  it('pressing Escape on the status select closes it without patching', () => {
+    const { cbs } = renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('Click to edit status'))
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' })
+    expect(cbs.onPatchTask).not.toHaveBeenCalled()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+
+  it('blurring the status select closes it', () => {
+    renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('Click to edit status'))
+    fireEvent.blur(screen.getByRole('combobox'))
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+})
+
+// ── Inline due date editing ───────────────────────────────────────────────────
+
+describe('TaskCard — inline due date editing', () => {
+  it('changing the due date input calls onPatchTask', () => {
+    const { cbs } = renderCard({ due_date: '2099-01-15' })
+    fireEvent.click(screen.getByTitle('Click to set due date'))
+    const input = document.querySelector('input[type="date"]')
+    fireEvent.change(input, { target: { value: '2099-06-01' } })
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { due_date: '2099-06-01' })
+  })
+
+  it('pressing Escape on the due date input closes the editor', () => {
+    renderCard({ due_date: '2099-01-15' })
+    fireEvent.click(screen.getByTitle('Click to set due date'))
+    const input = document.querySelector('input[type="date"]')
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(document.querySelector('input[type="date"]')).not.toBeInTheDocument()
+  })
+
+  it('pressing Enter on the due date input calls onPatchTask', () => {
+    const { cbs } = renderCard({ due_date: '2099-01-15' })
+    fireEvent.click(screen.getByTitle('Click to set due date'))
+    const input = document.querySelector('input[type="date"]')
+    // fire Enter without a prior change so onChange hasn't already closed the editor
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(cbs.onPatchTask).toHaveBeenCalled()
+  })
+
+  it('blurring the due date input calls onPatchTask', () => {
+    const { cbs } = renderCard({ due_date: '2099-01-15' })
+    fireEvent.click(screen.getByTitle('Click to set due date'))
+    const input = document.querySelector('input[type="date"]')
+    // blur without prior change (onChange would have closed the editor already)
+    fireEvent.blur(input)
+    expect(cbs.onPatchTask).toHaveBeenCalled()
+  })
+})
+
+// ── Inline assignee editing ───────────────────────────────────────────────────
+
+describe('TaskCard — inline assignee editing', () => {
+  const persons = [{ id: 5, name: 'Alice' }]
+
+  it('clicking the assignee field opens a select with person options', () => {
+    renderCard({}, { persons })
+    fireEvent.click(screen.getByTitle('Click to edit assignee'))
+    const select = screen.getByRole('combobox')
+    expect(within(select).getByText('Alice')).toBeInTheDocument()
+  })
+
+  it('selecting an assignee calls onPatchTask with the assignee_id', () => {
+    const { cbs } = renderCard({}, { persons })
+    fireEvent.click(screen.getByTitle('Click to edit assignee'))
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '5' } })
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { assignee_id: '5' })
+  })
+
+  it('pressing Escape on the assignee select closes it', () => {
+    renderCard({}, { persons })
+    fireEvent.click(screen.getByTitle('Click to edit assignee'))
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' })
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+})
+
+// ── Inline estimated-minutes editing ─────────────────────────────────────────
+
+describe('TaskCard — inline estimated minutes editing', () => {
+  it('blurring the minutes input calls onPatchTask', () => {
+    const { cbs } = renderCard({})
+    fireEvent.click(screen.getByTitle('Click to edit duration'))
+    const input = screen.getByPlaceholderText('min')
+    fireEvent.change(input, { target: { value: '45' } })
+    fireEvent.blur(input)
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { estimated_minutes: 45 })
+  })
+
+  it('pressing Enter in the minutes input calls onPatchTask', () => {
+    const { cbs } = renderCard({})
+    fireEvent.click(screen.getByTitle('Click to edit duration'))
+    const input = screen.getByPlaceholderText('min')
+    fireEvent.change(input, { target: { value: '30' } })
+    fireEvent.keyDown(input, { key: 'Enter', target: { value: '30' } })
+    expect(cbs.onPatchTask).toHaveBeenCalled()
+  })
+
+  it('pressing Escape on the minutes input closes it', () => {
+    renderCard({})
+    fireEvent.click(screen.getByTitle('Click to edit duration'))
+    fireEvent.keyDown(screen.getByPlaceholderText('min'), { key: 'Escape' })
+    expect(screen.queryByPlaceholderText('min')).not.toBeInTheDocument()
+  })
+})
+
+// ── Subtask row editing in expanded card ──────────────────────────────────────
+
+describe('TaskCard — subtask row inline editing', () => {
+  const subtasks = [
+    { id: 10, title: 'Milk', status: 'done', order: 0, due_date: null },
+    { id: 11, title: 'Eggs', status: 'todo', order: 1, due_date: null },
+  ]
+
+  it('clicking a non-done subtask title shows an edit input', () => {
+    renderCard({ subtasks }, { expanded: true })
+    fireEvent.click(screen.getByText('Eggs'))
+    expect(screen.getByDisplayValue('Eggs')).toBeInTheDocument()
+  })
+
+  it('changing the subtask edit input updates the draft value', () => {
+    renderCard({ subtasks }, { expanded: true })
+    fireEvent.click(screen.getByText('Eggs'))
+    fireEvent.change(screen.getByDisplayValue('Eggs'), { target: { value: 'Scrambled Eggs' } })
+    expect(screen.getByDisplayValue('Scrambled Eggs')).toBeInTheDocument()
+  })
+
+  it('pressing Enter in subtask edit input calls onPatchSubtask with new title', () => {
+    const { cbs } = renderCard({ subtasks }, { expanded: true })
+    fireEvent.click(screen.getByText('Eggs'))
+    const input = screen.getByDisplayValue('Eggs')
+    fireEvent.change(input, { target: { value: 'Boiled Eggs' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(cbs.onPatchSubtask).toHaveBeenCalledWith(1, 11, { title: 'Boiled Eggs' })
+  })
+
+  it('pressing Escape in subtask edit input cancels editing without saving', () => {
+    const { cbs } = renderCard({ subtasks }, { expanded: true })
+    fireEvent.click(screen.getByText('Eggs'))
+    fireEvent.keyDown(screen.getByDisplayValue('Eggs'), { key: 'Escape' })
+    expect(cbs.onPatchSubtask).not.toHaveBeenCalled()
+    expect(screen.queryByDisplayValue('Eggs')).not.toBeInTheDocument()
+  })
+
+  it('blurring the subtask edit input saves via onPatchSubtask', () => {
+    const { cbs } = renderCard({ subtasks }, { expanded: true })
+    fireEvent.click(screen.getByText('Eggs'))
+    const input = screen.getByDisplayValue('Eggs')
+    fireEvent.change(input, { target: { value: 'Fried Eggs' } })
+    fireEvent.blur(input)
+    expect(cbs.onPatchSubtask).toHaveBeenCalledWith(1, 11, { title: 'Fried Eggs' })
+  })
+
+  it('clicking "Cancel edit" button closes the editing input', () => {
+    const { cbs } = renderCard({ subtasks }, { expanded: true })
+    fireEvent.click(screen.getByText('Eggs'))
+    expect(screen.getByDisplayValue('Eggs')).toBeInTheDocument()
+    fireEvent.click(screen.getByTitle('Cancel edit'))
+    expect(cbs.onPatchSubtask).not.toHaveBeenCalled()
+    expect(screen.queryByDisplayValue('Eggs')).not.toBeInTheDocument()
+  })
+
+  it('toggling a subtask checkbox calls onPatchSubtask with the new status', () => {
+    const { cbs } = renderCard({ subtasks }, { expanded: true })
+    const checkboxes = screen.getAllByRole('checkbox')
+    // First checkbox is Milk (done). Second is Eggs (todo) — click to mark done.
+    fireEvent.click(checkboxes[1])
+    expect(cbs.onPatchSubtask).toHaveBeenCalledWith(1, 11, { status: 'done' })
+  })
+
+  it('unchecking a done subtask calls onPatchSubtask with todo', () => {
+    const { cbs } = renderCard({ subtasks }, { expanded: true })
+    const checkboxes = screen.getAllByRole('checkbox')
+    fireEvent.click(checkboxes[0])
+    expect(cbs.onPatchSubtask).toHaveBeenCalledWith(1, 10, { status: 'todo' })
+  })
+
+  it('clicking the delete button on a subtask calls onDeleteSubtask', () => {
+    const { cbs } = renderCard({ subtasks }, { expanded: true })
+    const deleteBtn = screen.getAllByTitle('Delete subtask')[0]
+    fireEvent.click(deleteBtn)
+    expect(cbs.onDeleteSubtask).toHaveBeenCalledWith(1, 10)
+  })
+})
+
+// ── Add subtask when card is collapsed ───────────────────────────────────────
+
+describe('TaskCard — add subtask from collapsed state', () => {
+  it('clicking "+ Add subtask" on a collapsed card calls onToggleExpand', () => {
+    const { cbs } = renderCard({ subtasks: [] }, { expanded: false })
+    fireEvent.click(screen.getByText('Add subtask'))
+    expect(cbs.onToggleExpand).toHaveBeenCalledWith(1)
+  })
+})
+
+// ── Overflow menu — Start item ────────────────────────────────────────────────
+
+describe('TaskCard — overflow menu Start item', () => {
+  it('"Start" menu item calls onPatchTask with in_progress', () => {
+    const { cbs } = renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(within(screen.getByRole('menu')).getByText('Start'))
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'in_progress' })
+  })
+
+  it('"Start" menu item is hidden for in_progress tasks', () => {
+    renderCard({ status: 'in_progress' })
+    fireEvent.click(screen.getByTitle('More actions'))
+    expect(screen.queryByText('Start')).not.toBeInTheDocument()
   })
 })

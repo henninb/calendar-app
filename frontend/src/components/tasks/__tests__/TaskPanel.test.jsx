@@ -329,6 +329,111 @@ describe('TaskPanel — category select', () => {
   })
 })
 
+// ── Subtask row interactions ──────────────────────────────────────────────────
+
+describe('TaskPanel — subtask row interactions', () => {
+  const taskWithSubs = {
+    ...baseTask,
+    subtasks: [
+      { id: 10, title: 'Write tests', status: 'todo', order: 0, due_date: null },
+      { id: 11, title: 'Review PR',   status: 'done', order: 1, due_date: null },
+    ],
+  }
+
+  it('toggling a subtask checkbox calls onPatchSubtask', () => {
+    const onPatchSubtask = vi.fn().mockResolvedValue(undefined)
+    renderPanel({ mode: 'edit', task: taskWithSubs, onPatchSubtask })
+    const checkboxes = screen.getAllByRole('checkbox')
+    fireEvent.click(checkboxes[0])
+    expect(onPatchSubtask).toHaveBeenCalledWith(1, 10, { status: 'done' })
+  })
+
+  it('clicking delete button on a subtask calls onDeleteSubtask', () => {
+    const onDeleteSubtask = vi.fn().mockResolvedValue(undefined)
+    renderPanel({ mode: 'edit', task: taskWithSubs, onDeleteSubtask })
+    const deleteBtn = screen.getByLabelText('Delete subtask: Write tests')
+    fireEvent.click(deleteBtn)
+    expect(onDeleteSubtask).toHaveBeenCalledWith(1, 10)
+  })
+
+  it('clicking edit button on a subtask shows the editing form', () => {
+    renderPanel({ mode: 'edit', task: taskWithSubs })
+    fireEvent.click(screen.getByLabelText('Edit subtask: Write tests'))
+    expect(screen.getByDisplayValue('Write tests')).toBeInTheDocument()
+  })
+
+  it('clicking Save in subtask edit form calls onPatchSubtask', () => {
+    const onPatchSubtask = vi.fn().mockResolvedValue(undefined)
+    renderPanel({ mode: 'edit', task: taskWithSubs, onPatchSubtask })
+    fireEvent.click(screen.getByLabelText('Edit subtask: Write tests'))
+    const input = screen.getByDisplayValue('Write tests')
+    fireEvent.change(input, { target: { value: 'Write unit tests' } })
+    fireEvent.click(screen.getByText('Save'))
+    expect(onPatchSubtask).toHaveBeenCalledWith(1, 10, expect.objectContaining({ title: 'Write unit tests' }))
+  })
+
+  it('pressing Enter in subtask title input calls onPatchSubtask', () => {
+    const onPatchSubtask = vi.fn().mockResolvedValue(undefined)
+    renderPanel({ mode: 'edit', task: taskWithSubs, onPatchSubtask })
+    fireEvent.click(screen.getByLabelText('Edit subtask: Write tests'))
+    const input = screen.getByDisplayValue('Write tests')
+    fireEvent.change(input, { target: { value: 'Write integration tests' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onPatchSubtask).toHaveBeenCalledWith(1, 10, expect.objectContaining({ title: 'Write integration tests' }))
+  })
+
+  it('pressing Escape in subtask title input cancels editing without saving', () => {
+    const onPatchSubtask = vi.fn().mockResolvedValue(undefined)
+    renderPanel({ mode: 'edit', task: taskWithSubs, onPatchSubtask })
+    fireEvent.click(screen.getByLabelText('Edit subtask: Write tests'))
+    const editInput = screen.getByDisplayValue('Write tests')
+    fireEvent.keyDown(editInput, { key: 'Escape' })
+    expect(onPatchSubtask).not.toHaveBeenCalled()
+    // Edit button is visible again when editing is closed
+    expect(screen.getByLabelText('Edit subtask: Write tests')).toBeInTheDocument()
+  })
+
+  it('clicking Cancel in subtask edit form hides editing state', () => {
+    renderPanel({ mode: 'edit', task: taskWithSubs })
+    fireEvent.click(screen.getByLabelText('Edit subtask: Write tests'))
+    expect(screen.getByDisplayValue('Write tests')).toBeInTheDocument()
+    // The first Cancel button is the subtask row cancel; the second is the panel footer
+    fireEvent.click(screen.getAllByText('Cancel')[0])
+    expect(screen.getByLabelText('Edit subtask: Write tests')).toBeInTheDocument()
+  })
+
+  it('clicking Add button (not Enter) calls onAddSubtask', () => {
+    const onAddSubtask = vi.fn().mockResolvedValue(undefined)
+    renderPanel({ mode: 'edit', task: baseTask, onAddSubtask })
+    fireEvent.change(screen.getByPlaceholderText('Add subtask…'), { target: { value: 'New sub' } })
+    fireEvent.click(screen.getByText('Add').closest('button'))
+    expect(onAddSubtask).toHaveBeenCalledWith(1, 'New sub')
+  })
+})
+
+// ── Recurrence & category ─────────────────────────────────────────────────────
+
+describe('TaskPanel — recurrence and category in save payload', () => {
+  it('changing recurrence select includes the value in the save payload', async () => {
+    const onUpdateTask = vi.fn().mockResolvedValue(undefined)
+    renderPanel({ mode: 'edit', task: baseTask, onUpdateTask })
+    const recurrenceSection = screen.getByText('Recurrence').closest('div')
+    fireEvent.change(recurrenceSection.querySelector('select'), { target: { value: 'weekly' } })
+    fireEvent.click(screen.getByText('Save Changes'))
+    expect(onUpdateTask).toHaveBeenCalledWith(1, expect.objectContaining({ recurrence: 'weekly' }))
+  })
+
+  it('changing category select includes category_id in the save payload', async () => {
+    const onUpdateTask = vi.fn().mockResolvedValue(undefined)
+    const CATS = [{ id: 5, name: 'Work', icon: '💼', color: '#3b82f6' }]
+    renderPanel({ mode: 'edit', task: baseTask, onUpdateTask, categories: CATS })
+    const categorySection = screen.getByText('Category').closest('div')
+    fireEvent.change(categorySection.querySelector('select'), { target: { value: '5' } })
+    fireEvent.click(screen.getByText('Save Changes'))
+    expect(onUpdateTask).toHaveBeenCalledWith(1, expect.objectContaining({ category_id: 5 }))
+  })
+})
+
 // ── Priority buttons ──────────────────────────────────────────────────────────
 
 describe('TaskPanel — priority buttons', () => {

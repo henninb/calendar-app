@@ -141,4 +141,32 @@ describe('TaskToolbar', () => {
     expect(screen.getByText('Category')).toBeInTheDocument()
     expect(screen.getByText('🏥 medical')).toBeInTheDocument()
   })
+
+  it('clicking "Clear all" resets assignee and category filters', () => {
+    const onFilterAssignee = vi.fn()
+    const onFilterCategory = vi.fn()
+    renderToolbar({ filterStatus: ['todo'], onFilterAssignee, onFilterCategory })
+    fireEvent.click(screen.getByText(/Filters/))
+    fireEvent.click(screen.getByText('Clear all'))
+    expect(onFilterAssignee).toHaveBeenCalledWith('')
+    expect(onFilterCategory).toHaveBeenCalledWith('')
+  })
+
+  it('changing the assignee dropdown calls onFilterAssignee', () => {
+    const onFilterAssignee = vi.fn()
+    renderToolbar({ persons: [{ id: 1, name: 'Alice' }], onFilterAssignee })
+    fireEvent.click(screen.getByText(/Filters/))
+    const assigneeSection = screen.getByText('Assignee').closest('div')
+    fireEvent.change(assigneeSection.querySelector('select'), { target: { value: '1' } })
+    expect(onFilterAssignee).toHaveBeenCalledWith('1')
+  })
+
+  it('changing the category dropdown calls onFilterCategory', () => {
+    const onFilterCategory = vi.fn()
+    renderToolbar({ categories: [{ id: 3, name: 'Work', icon: '💼' }], onFilterCategory })
+    fireEvent.click(screen.getByText(/Filters/))
+    const categorySection = screen.getByText('Category').closest('div')
+    fireEvent.change(categorySection.querySelector('select'), { target: { value: '3' } })
+    expect(onFilterCategory).toHaveBeenCalledWith('3')
+  })
 })
