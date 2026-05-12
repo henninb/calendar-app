@@ -303,3 +303,136 @@ describe('GroceryListDetail — purchased/needed separator', () => {
     expect(screen.getByText('Bananas')).toBeInTheDocument()
   })
 })
+
+describe('GroceryListDetail — print button', () => {
+  it('calls window.print when Print button is clicked', () => {
+    const printSpy = vi.spyOn(window, 'print').mockImplementation(() => {})
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByText(/Print/))
+    expect(printSpy).toHaveBeenCalledTimes(1)
+    printSpy.mockRestore()
+  })
+})
+
+describe('GroceryListDetail — reload error', () => {
+  it('shows reload error when fetchGroceryList fails after togglePurchased failure', async () => {
+    vi.mocked(api.updateGroceryListItem).mockRejectedValue(new Error('Toggle error'))
+    vi.mocked(api.fetchGroceryList).mockRejectedValue(new Error('Reload failed'))
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    const [applesCheckbox] = screen.getAllByRole('checkbox')
+    fireEvent.click(applesCheckbox)
+    await waitFor(() => expect(screen.getByText('Reload failed')).toBeInTheDocument())
+  })
+})
+
+describe('GroceryListDetail — ItemCombobox interactions', () => {
+  it('clears item_id when combobox input is emptied', async () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByTitle('Add item'))
+    const combobox = screen.getByPlaceholderText('Search catalog…')
+    fireEvent.change(combobox, { target: { value: 'Apples' } })
+    fireEvent.change(combobox, { target: { value: '' } })
+    // Add Item button should remain disabled (no item_id selected)
+    expect(screen.getByRole('button', { name: 'Add Item' })).toBeDisabled()
+  })
+
+  it('resets combobox text to selected item name on blur', async () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByTitle('Add item'))
+    const combobox = screen.getByPlaceholderText('Search catalog…')
+    // Select Apples so item_id is set, then type something different
+    fireEvent.change(combobox, { target: { value: 'Apples' } })
+    fireEvent.change(combobox, { target: { value: 'xyz' } })
+    // Blur → resets to the current value's name ('Apples')
+    fireEvent.blur(combobox)
+    expect((combobox as HTMLInputElement).value).toBe('Apples')
+  })
+})
+
+describe('GroceryListDetail — add item panel input interactions', () => {
+  it('updates quantity field when changed', async () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByTitle('Add item'))
+    fireEvent.change(screen.getByPlaceholderText('Search catalog…'), { target: { value: 'Carrots' } })
+    const qtyInput = screen.getByPlaceholderText('1')
+    fireEvent.change(qtyInput, { target: { value: '3' } })
+    expect((qtyInput as HTMLInputElement).value).toBe('3')
+  })
+
+  it('submits via Enter key in the price input', async () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByTitle('Add item'))
+    fireEvent.change(screen.getByPlaceholderText('Search catalog…'), { target: { value: 'Carrots' } })
+    const priceInput = screen.getByPlaceholderText('Optional')
+    fireEvent.change(priceInput, { target: { value: '1.99' } })
+    fireEvent.keyDown(priceInput, { key: 'Enter' })
+    await waitFor(() =>
+      expect(api.addGroceryListItem).toHaveBeenCalledWith(
+        1, expect.objectContaining({ item_id: 103, price: '1.99' })
+      )
+    )
+  })
+})
+
+describe('GroceryListDetail — add panel Escape key', () => {
+  it('closes the add panel when Escape is pressed', () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByTitle('Add item'))
+    expect(screen.getByRole('heading', { name: 'Add Item' })).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(document.querySelector('.translate-x-full')).toBeInTheDocument()
+  })
+})
+
+describe('GroceryListDetail — ItemRow edit mode interactions', () => {
+  it('updates unit select while in edit mode', () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getAllByTitle('Click to edit')[0])
+    // Add panel also has a unit select but is off-screen; edit row's select comes first in DOM
+    const unitSelect = screen.getAllByRole('combobox')[0]
+    fireEvent.change(unitSelect, { target: { value: 'lb' } })
+    expect((unitSelect as HTMLSelectElement).value).toBe('lb')
+  })
+
+  it('updates price input while in edit mode', () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getAllByTitle('Click to edit')[0])
+    // placeholder="—" is unique to the edit row price input
+    const priceInput = screen.getByPlaceholderText('—')
+    fireEvent.change(priceInput, { target: { value: '4.99' } })
+    expect((priceInput as HTMLInputElement).value).toBe('4.99')
+  })
+
+  it('saves via Enter key in the price field during edit', async () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getAllByTitle('Click to edit')[0])
+    const priceInput = screen.getByPlaceholderText('—')
+    fireEvent.keyDown(priceInput, { key: 'Enter' })
+    await waitFor(() => expect(api.updateGroceryListItem).toHaveBeenCalled())
+  })
+
+  it('cancels via Escape key in the price field during edit', () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getAllByTitle('Click to edit')[0])
+    const priceInput = screen.getByPlaceholderText('—')
+    fireEvent.keyDown(priceInput, { key: 'Escape' })
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+
+  it('clicking checkbox while in edit mode calls onToggle', async () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getAllByTitle('Click to edit')[0])
+    const checkboxes = screen.getAllByRole('checkbox')
+    fireEvent.click(checkboxes[0])
+    await waitFor(() => expect(api.updateGroceryListItem).toHaveBeenCalledWith(1, 101, { status: 'purchased' }))
+  })
+
+  it('swallows error silently when updateGroceryListItem fails during inline save', async () => {
+    vi.mocked(api.updateGroceryListItem).mockRejectedValue(new Error('Save failed'))
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getAllByTitle('Click to edit')[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    // The component should not crash and the save button should reappear (editing remains)
+    await waitFor(() => expect(api.updateGroceryListItem).toHaveBeenCalled())
+  })
+})
