@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import React from 'react'
 import GroceryListPanel from '../GroceryListPanel'
 
 const STORES = [
@@ -7,7 +8,7 @@ const STORES = [
   { id: 2, name: 'Costco', location: null },
 ]
 
-function renderPanel(props = {}) {
+function renderPanel(props: Record<string, unknown> = {}) {
   const defaults = {
     open: true, mode: 'create', list: null,
     stores: STORES, onClose: vi.fn(), onSave: vi.fn(),
@@ -62,7 +63,7 @@ describe('GroceryListPanel — edit mode', () => {
 
   it('pre-fills the name field', () => {
     renderPanel({ mode: 'edit', list: existingList })
-    expect(screen.getByPlaceholderText('e.g. Weekly ALDI Run').value).toBe('Weekly Run')
+    expect((screen.getByPlaceholderText('e.g. Weekly ALDI Run') as HTMLInputElement).value).toBe('Weekly Run')
   })
 
   it('shows Save Changes button', () => {

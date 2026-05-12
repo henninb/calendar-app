@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import React from 'react'
 import GroceryListDetail from '../GroceryListDetail'
 
 vi.mock('@/lib/api', () => ({
@@ -33,11 +34,11 @@ const CATALOG = [
 beforeEach(() => {
   vi.clearAllMocks()
   vi.restoreAllMocks()
-  api.fetchGroceryList.mockResolvedValue(LIST)
-  api.updateGroceryList.mockResolvedValue({ ...LIST, status: 'completed', shopping_date: '2026-05-09' })
-  api.updateGroceryListItem.mockResolvedValue(null)
-  api.removeGroceryListItem.mockResolvedValue(null)
-  api.addGroceryListItem.mockResolvedValue(null)
+  vi.mocked(api.fetchGroceryList).mockResolvedValue(LIST)
+  vi.mocked(api.updateGroceryList).mockResolvedValue({ ...LIST, status: 'completed', shopping_date: '2026-05-09' })
+  vi.mocked(api.updateGroceryListItem).mockResolvedValue(null)
+  vi.mocked(api.removeGroceryListItem).mockResolvedValue(null)
+  vi.mocked(api.addGroceryListItem).mockResolvedValue(null)
 })
 
 describe('GroceryListDetail — rendering', () => {
