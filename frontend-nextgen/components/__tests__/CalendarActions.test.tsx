@@ -11,7 +11,6 @@ vi.mock('@/lib/api', () => ({
   generateAll:         vi.fn(),
   syncToGcal:          vi.fn(),
   deleteAllGcalEvents: vi.fn(),
-  wipeAllGcalEvents:   vi.fn(),
 }))
 
 import * as api from '@/lib/api'
@@ -23,7 +22,6 @@ beforeEach(() => {
   vi.mocked(api.generateAll).mockResolvedValue({ occurrences_created: 4, events_processed: 2 })
   vi.mocked(api.syncToGcal).mockResolvedValue({ synced: 8, failed: 0, errors: [] })
   vi.mocked(api.deleteAllGcalEvents).mockResolvedValue({ message: 'Delete started.' })
-  vi.mocked(api.wipeAllGcalEvents).mockResolvedValue({ message: 'Wipe started.' })
 })
 
 describe('CalendarActions — initial render', () => {
@@ -232,53 +230,6 @@ describe('CalendarActions — Delete Google Cal', () => {
   })
 })
 
-describe('CalendarActions — Wipe Google Cal', () => {
-  it('calls wipeAllGcalEvents after confirm', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
-    render(<CalendarActions />)
-    await waitFor(() =>
-      expect(screen.getByText(/Wipe Google Cal/)).toBeInTheDocument()
-    )
-    fireEvent.click(screen.getByText(/Wipe Google Cal/))
-    await waitFor(() => expect(api.wipeAllGcalEvents).toHaveBeenCalledTimes(1))
-  })
-
-  it('logs success message after wipe', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
-    render(<CalendarActions />)
-    await waitFor(() =>
-      expect(screen.getByText(/Wipe Google Cal/)).toBeInTheDocument()
-    )
-    fireEvent.click(screen.getByText(/Wipe Google Cal/))
-    await waitFor(() =>
-      expect(screen.getByText(/Wipe started\./)).toBeInTheDocument()
-    )
-  })
-
-  it('does not call wipeAllGcalEvents when confirm is cancelled', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(false)
-    render(<CalendarActions />)
-    await waitFor(() =>
-      expect(screen.getByText(/Wipe Google Cal/)).toBeInTheDocument()
-    )
-    fireEvent.click(screen.getByText(/Wipe Google Cal/))
-    expect(api.wipeAllGcalEvents).not.toHaveBeenCalled()
-  })
-
-  it('logs error when wipeAllGcalEvents fails', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
-    vi.mocked(api.wipeAllGcalEvents).mockRejectedValue(new Error('Wipe error'))
-    render(<CalendarActions />)
-    await waitFor(() =>
-      expect(screen.getByText(/Wipe Google Cal/)).toBeInTheDocument()
-    )
-    fireEvent.click(screen.getByText(/Wipe Google Cal/))
-    await waitFor(() =>
-      expect(screen.getByText(/Wipe failed: Wipe error/)).toBeInTheDocument()
-    )
-  })
-})
-
 describe('CalendarActions — log panel', () => {
   it('shows log panel after any action', async () => {
     render(<CalendarActions />)
@@ -297,11 +248,10 @@ describe('CalendarActions — log panel', () => {
     expect(screen.queryByText(/Google auth status/)).not.toBeInTheDocument()
   })
 
-  it('does not show delete/wipe buttons when not authenticated', async () => {
+  it('does not show Clear button when not authenticated', async () => {
     vi.mocked(api.gcalAuthStatus).mockResolvedValue({ authenticated: false })
     render(<CalendarActions />)
     await waitFor(() => expect(api.gcalAuthStatus).toHaveBeenCalled())
     expect(screen.queryByText(/Clear Google Cal/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Wipe Google Cal/)).not.toBeInTheDocument()
   })
 })

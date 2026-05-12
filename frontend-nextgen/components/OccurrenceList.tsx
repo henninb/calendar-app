@@ -47,6 +47,12 @@ function daysUntil(dateStr: string): string {
   return `in ${diff}d`
 }
 
+const PRIORITY_COLOR: Record<string, string> = {
+  high:   'color: #dc2626',
+  medium: 'color: #d97706',
+  low:    'color: var(--color-text-dim)',
+}
+
 export default function OccurrenceList() {
   const [occs, setOccs]             = useState<Occurrence[]>([])
   const [cats, setCats]             = useState<ApiCategory[]>([])
@@ -88,6 +94,14 @@ export default function OccurrenceList() {
     setTaskedIds(prev => new Set(prev).add(occ.id))
   }
 
+  const statusCounts = occs.reduce<Record<string, number>>((acc, o) => {
+    acc[o.status] = (acc[o.status] ?? 0) + 1
+    return acc
+  }, {})
+
+  const btnCls = `inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold
+    border border-transparent transition-colors cursor-pointer`
+
   return (
     <div className="card">
       <div className="toolbar">
@@ -121,6 +135,14 @@ export default function OccurrenceList() {
           </select>
         </label>
         <button className="btn btn-blue" onClick={load} title="Reload occurrences from the server">Refresh</button>
+
+        {!loading && occs.length > 0 && (
+          <span style={{ marginLeft: 'auto', fontSize: '.8rem', color: 'var(--color-text-dim)', display: 'flex', gap: '.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {Object.entries(statusCounts).map(([s, n]) => (
+              <span key={s} className={`status ${s}`}>{n} {s}</span>
+            ))}
+          </span>
+        )}
       </div>
 
       {loading ? (
@@ -130,7 +152,7 @@ export default function OccurrenceList() {
       ) : (
         <div className="tbl-wrap">
           <table>
-            <thead>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr>
                 <th>Date</th>
                 <th>When</th>
@@ -155,25 +177,54 @@ export default function OccurrenceList() {
                       {occ.event?.category?.name?.replace(/_/g, ' ')}
                     </span>
                   </td>
-                  <td style={{ textTransform: 'capitalize', color: 'var(--color-text-dim)' }}>
-                    {occ.event?.priority}
+                  <td style={{ textTransform: 'capitalize' }}>
+                    <span style={{ fontSize: '.8rem', fontWeight: 600, ...(occ.event?.priority ? { color: occ.event.priority === 'high' ? '#dc2626' : occ.event.priority === 'medium' ? '#d97706' : 'var(--color-text-dim)' } : {}) }}>
+                      {occ.event?.priority ?? '—'}
+                    </span>
                   </td>
                   <td><span className={`status ${occ.status}`}>{occ.status}</span></td>
                   <td>
-                    <div style={{ display: 'flex', gap: '.35rem' }}>
+                    <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'nowrap' }}>
                       {occ.status !== 'completed' && (
-                        <button className="btn btn-green" title="Mark this occurrence as completed" onClick={() => mark(occ, 'completed')}>✓</button>
+                        <button
+                          className="btn btn-green"
+                          title="Mark as completed"
+                          onClick={() => mark(occ, 'completed')}
+                        >
+                          ✓ Done
+                        </button>
                       )}
                       {occ.status !== 'skipped' && (
-                        <button className="btn btn-gray" title="Mark this occurrence as skipped" onClick={() => mark(occ, 'skipped')}>Skip</button>
+                        <button
+                          className="btn btn-gray"
+                          title="Mark as skipped"
+                          onClick={() => mark(occ, 'skipped')}
+                        >
+                          Skip
+                        </button>
                       )}
                       {(occ.status === 'completed' || occ.status === 'skipped') && (
-                        <button className="btn btn-blue" title="Reopen this occurrence as upcoming" onClick={() => mark(occ, 'upcoming')}>↩</button>
+                        <button
+                          className="btn btn-blue"
+                          title="Reopen as upcoming"
+                          onClick={() => mark(occ, 'upcoming')}
+                        >
+                          ↩ Reopen
+                        </button>
                       )}
                       {(occ.status === 'upcoming' || occ.status === 'overdue') && (
                         taskedIds.has(occ.id)
-                          ? <span style={{ fontSize: '.75rem', color: '#86efac' }}>✓ Task</span>
-                          : <button className="btn btn-blue" style={{ background: '#7c3aed' }} title="Create a task from this occurrence" onClick={() => makeTask(occ)}>→ Task</button>
+                          ? <span style={{ fontSize: '.75rem', color: '#86efac', padding: '.3rem .5rem' }}>✓ Task created</span>
+                          : (
+                            <button
+                              className="btn btn-blue"
+                              style={{ background: '#7c3aed' }}
+                              title="Create a task from this occurrence"
+                              onClick={() => makeTask(occ)}
+                            >
+                              → Task
+                            </button>
+                          )
                       )}
                     </div>
                   </td>

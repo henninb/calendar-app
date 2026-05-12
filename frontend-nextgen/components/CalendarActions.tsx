@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { loadConfig, type Config } from '@/components/ConfigPage'
 import {
   gcalAuthStatus, generateAll, syncToGcal,
-  deleteAllGcalEvents, wipeAllGcalEvents,
+  deleteAllGcalEvents,
   type SyncResult,
 } from '@/lib/api'
 
@@ -29,7 +29,6 @@ export default function CalendarActions() {
   const [syncing, setSyncing]           = useState(false)
   const [gcalSyncing, setGcalSyncing]   = useState(false)
   const [gcalDeleting, setGcalDeleting] = useState(false)
-  const [gcalWiping, setGcalWiping]     = useState(false)
   const [gcalAuth, setGcalAuth]         = useState<boolean | null>(null)
   const [logs, setLogs]                 = useState<LogEntry[]>([])
   const [logCount, setLogCount]         = useState(0)
@@ -126,21 +125,6 @@ export default function CalendarActions() {
     }
   }
 
-  const handleGcalWipe = async () => {
-    if (!gcalAuth) return
-    if (!window.confirm('Delete ALL events from your primary Google Calendar? This includes events not created by this app and cannot be undone.')) return
-    setGcalWiping(true)
-    addLog('warn', 'Wiping ALL events from primary Google Calendar…')
-    try {
-      const res = await wipeAllGcalEvents()
-      addLog('ok', res.message || 'Full wipe started in background.')
-    } catch (e) {
-      addLog('error', `Wipe failed: ${(e as Error).message}`)
-    } finally {
-      setGcalWiping(false)
-    }
-  }
-
   return (
     <div style={{ marginBottom: '1rem' }}>
       <div style={{ display: 'flex', gap: '.5rem', marginBottom: logs.length > 0 ? '.5rem' : 0, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -171,17 +155,6 @@ export default function CalendarActions() {
             title="Delete all events synced by this app from Google Calendar"
           >
             {gcalDeleting ? 'Deleting…' : '🗑 Clear Google Cal'}
-          </button>
-        )}
-        {gcalAuth && (
-          <button
-            className="btn btn-blue"
-            style={{ fontSize: '.8rem', background: '#7f1d1d' }}
-            disabled={gcalWiping}
-            onClick={handleGcalWipe}
-            title="Delete ALL events from your primary Google Calendar — including events not created by this app. Cannot be undone."
-          >
-            {gcalWiping ? 'Wiping…' : '💣 Wipe Google Cal'}
           </button>
         )}
       </div>

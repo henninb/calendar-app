@@ -36,11 +36,19 @@ vi.mock('@fullcalendar/list',        () => ({ default: {} }))
 vi.mock('@fullcalendar/interaction', () => ({ default: {} }))
 
 vi.mock('@/lib/api', () => ({
-  fetchOccurrences: vi.fn(),
-  fetchCategories:  vi.fn(),
-  updateOccurrence: vi.fn(),
-  deleteOccurrence: vi.fn(),
-  createEvent:      vi.fn(),
+  fetchOccurrences:    vi.fn(),
+  fetchCategories:     vi.fn(),
+  updateOccurrence:    vi.fn(),
+  deleteOccurrence:    vi.fn(),
+  createEvent:         vi.fn(),
+  gcalAuthStatus:      vi.fn(),
+  generateAll:         vi.fn(),
+  syncToGcal:          vi.fn(),
+  deleteAllGcalEvents: vi.fn(),
+}))
+
+vi.mock('@/components/CalendarActions', () => ({
+  default: () => <div data-testid="calendar-actions" />,
 }))
 
 vi.mock('@/components/EventPanel', () => ({
@@ -167,7 +175,7 @@ describe('CalendarView — detail panel', () => {
 
   it('closes the panel when the overlay is clicked', async () => {
     await openDetail()
-    fireEvent.click(document.querySelector('.detail-overlay')!)
+    fireEvent.click(screen.getByTestId('event-detail-backdrop'))
     await waitFor(() => expect(screen.queryByText('✓ Done')).not.toBeInTheDocument())
   })
 

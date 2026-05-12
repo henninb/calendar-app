@@ -1,6 +1,5 @@
 'use client'
-import { useState, useRef, useEffect, useLayoutEffect } from 'react'
-import { createPortal } from 'react-dom'
+import { useState, useRef, useEffect } from 'react'
 import { STATUS_OPTIONS, STATUS_LABELS } from './helpers'
 import type { TaskStatus, Person, Category } from './helpers'
 
@@ -147,11 +146,6 @@ export default function TaskToolbar({
   onRefresh,
 }: TaskToolbarProps) {
   const [filterOpen, setFilterOpen] = useState(false)
-  const [portalTarget, setPortalTarget] = useState<Element | null>(null)
-
-  useLayoutEffect(() => {
-    setPortalTarget(document.getElementById('task-toolbar-slot'))
-  }, [])
 
   const activeFilterCount =
     (filterStatus.length < STATUS_OPTIONS.length ? 1 : 0) +
@@ -224,5 +218,9 @@ export default function TaskToolbar({
     </>
   )
 
-  return portalTarget ? createPortal(headerControls, portalTarget) : headerControls
+  return (
+    <div className="flex items-center gap-2 flex-wrap mb-4">
+      {headerControls}
+    </div>
+  )
 }

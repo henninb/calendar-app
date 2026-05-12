@@ -27,15 +27,17 @@ vi.mock('@dnd-kit/utilities', () => ({
 }))
 
 vi.mock('@/lib/api', () => ({
-  fetchTasks:      vi.fn(),
-  fetchPersons:    vi.fn(),
-  fetchCategories: vi.fn(),
-  createTask:      vi.fn(),
-  updateTask:      vi.fn(),
-  deleteTask:      vi.fn(),
-  createSubtask:   vi.fn(),
-  updateSubtask:   vi.fn(),
-  deleteSubtask:   vi.fn(),
+  fetchTasks:       vi.fn(),
+  fetchPersons:     vi.fn(),
+  fetchCategories:  vi.fn(),
+  createTask:       vi.fn(),
+  updateTask:       vi.fn(),
+  deleteTask:       vi.fn(),
+  createSubtask:    vi.fn(),
+  updateSubtask:    vi.fn(),
+  deleteSubtask:    vi.fn(),
+  gcalAuthStatus:   vi.fn(),
+  syncToGtasks:     vi.fn(),
 }))
 
 import * as api from '@/lib/api'
@@ -65,6 +67,8 @@ beforeEach(() => {
   vi.mocked(api.fetchPersons).mockResolvedValue([])
   vi.mocked(api.fetchCategories).mockResolvedValue([])
   vi.mocked(api.updateTask).mockResolvedValue({ ...baseTask, status: 'cancelled' })
+  vi.mocked(api.gcalAuthStatus).mockResolvedValue({ authenticated: false })
+  vi.mocked(api.syncToGtasks).mockResolvedValue({ synced: 0, failed: 0, errors: [] })
 })
 
 describe('TaskList — cancel recurring task triggers reload', () => {

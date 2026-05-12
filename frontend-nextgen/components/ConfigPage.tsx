@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import type { ReactNode } from 'react'
-import { gcalAuthStatus } from '@/lib/api'
+import { gcalAuthStatus, wipeAllGcalEvents } from '@/lib/api'
 
 export interface Config {
   gcalSyncDays: number
@@ -28,6 +28,8 @@ export default function ConfigPage() {
   const [form, setForm]         = useState<Config>(CONFIG_DEFAULTS)
   const [gcalAuth, setGcalAuth] = useState<boolean | null>(null)
   const [saved, setSaved]       = useState(false)
+  const [gcalWiping, setGcalWiping] = useState(false)
+  const [wipeResult, setWipeResult] = useState<{ ok: boolean; msg: string } | null>(null)
   const savedTimerRef           = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => { setForm(loadConfig()) }, [])
@@ -48,6 +50,21 @@ export default function ConfigPage() {
   }
 
   const handleReset = () => { setForm(CONFIG_DEFAULTS) }
+
+  const handleGcalWipe = async () => {
+    if (!gcalAuth) return
+    if (!window.confirm('Delete ALL events from your primary Google Calendar? This includes events not created by this app and cannot be undone.')) return
+    setGcalWiping(true)
+    setWipeResult(null)
+    try {
+      const res = await wipeAllGcalEvents()
+      setWipeResult({ ok: true, msg: res.message || 'Wipe started in background.' })
+    } catch (e) {
+      setWipeResult({ ok: false, msg: (e as Error).message })
+    } finally {
+      setGcalWiping(false)
+    }
+  }
 
   const fieldLabel = (label: string, description: string): ReactNode => (
     <div style={{ marginBottom: '.2rem' }}>
@@ -148,13 +165,52 @@ export default function ConfigPage() {
         </label>
       </div>
 
-      <div style={{ display: 'flex', gap: '.5rem' }}>
+      <div style={{ display: 'flex', gap: '.5rem', marginBottom: '2rem' }}>
         <button className="btn btn-blue" onClick={handleSave}>
           {saved ? '✓ Saved' : 'Save'}
         </button>
         <button className="btn btn-gray" onClick={handleReset}>
           Reset to Defaults
         </button>
+      </div>
+
+      <div>
+        <div style={{
+          fontSize: '.7rem', textTransform: 'uppercase', letterSpacing: '.08em',
+          color: '#dc2626', fontWeight: 700, marginBottom: '1rem',
+          borderBottom: '1px solid #fca5a5', paddingBottom: '.4rem',
+        }}>
+          Danger Zone
+        </div>
+        <div style={{
+          padding: '1rem', borderRadius: 8,
+          border: '1px solid #fca5a5',
+          background: 'var(--color-overdue-row)',
+        }}>
+          {fieldLabel(
+            'Wipe Google Calendar',
+            'Permanently deletes ALL events from your primary Google Calendar, including events not created by this app. This cannot be undone.'
+          )}
+          <div style={{ marginTop: '.75rem', display: 'flex', alignItems: 'center', gap: '.75rem', flexWrap: 'wrap' }}>
+            <button
+              className="btn"
+              style={{ background: '#dc2626', color: '#fff', fontSize: '.8rem', opacity: (!gcalAuth || gcalWiping) ? 0.5 : 1 }}
+              disabled={!gcalAuth || gcalWiping}
+              onClick={handleGcalWipe}
+              title={gcalAuth ? 'Delete ALL events from your primary Google Calendar' : 'Connect Google first'}
+            >
+              {gcalWiping ? 'Wiping…' : '💣 Wipe Google Calendar'}
+            </button>
+            {!gcalAuth && (
+              <span style={{ fontSize: '.8rem', color: 'var(--color-text-dim)' }}>Connect Google first.</span>
+            )}
+            {wipeResult && (
+              <span style={{ fontSize: '.8rem', color: wipeResult.ok ? '#16a34a' : '#dc2626' }}>
+                {wipeResult.ok ? `✓ ${wipeResult.msg}` : wipeResult.msg}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

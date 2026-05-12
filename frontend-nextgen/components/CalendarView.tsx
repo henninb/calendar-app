@@ -7,6 +7,7 @@ import interactionPlugin from '@fullcalendar/interaction'
 import { fetchOccurrences, fetchCategories, updateOccurrence, deleteOccurrence, createEvent } from '@/lib/api'
 import type { EventClickArg } from '@fullcalendar/core'
 import EventPanel from '@/components/EventPanel'
+import CalendarActions from '@/components/CalendarActions'
 
 interface CalCategory {
   id: number
@@ -125,11 +126,7 @@ export default function CalendarView() {
 
   return (
     <div>
-      {error && (
-        <div style={{ background: 'var(--color-error-bg)', color: 'var(--color-error-text)', border: '1px solid var(--color-error-border)', padding: '.5rem 1rem', borderRadius: '6px', marginBottom: '.5rem', fontSize: '.875rem' }}>
-          {error}
-        </div>
-      )}
+      <CalendarActions />
       <div className="card">
         <FullCalendar
           plugins={[dayGridPlugin, listPlugin, interactionPlugin]}
@@ -208,89 +205,123 @@ export default function CalendarView() {
         categories={cats}
       />
 
-      {selected && (
-        <div className="detail-overlay" onClick={() => setSelected(null)}>
-        <div className="detail-panel" onClick={(e) => e.stopPropagation()}>
-          <button className="close" onClick={() => setSelected(null)} title="Close this detail panel">✕</button>
-          <h2>{selected.event?.title}</h2>
+      {/* Event detail backdrop */}
+      <div
+        data-testid="event-detail-backdrop"
+        className={`fixed inset-0 bg-black/40 dark:bg-black/60 z-40 transition-opacity duration-300
+          ${selected ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={() => setSelected(null)}
+      />
 
-          <div className="detail-row">
-            <span>Date</span>
-            <span>{fmt(selected.occurrence_date)}</span>
-          </div>
-          <div className="detail-row">
-            <span>Category</span>
-            <span>
-              <span
-                className="badge"
-                style={{ background: cats.find(c => c.name === selected.event?.category?.name)?.color ?? '#9ca3af' }}
-              >
-                {selected.event?.category?.name?.replace(/_/g, ' ')}
-              </span>
-            </span>
-          </div>
-          <div className="detail-row">
-            <span>Status</span>
-            <span className={`status ${selected.status}`}>{selected.status}</span>
-          </div>
-          {selected.event?.description && (
-            <div className="detail-row">
-              <span>Notes</span>
-              <span>{selected.event.description}</span>
-            </div>
-          )}
-          {selected.event?.amount && (
-            <div className="detail-row">
-              <span>Amount</span>
-              <span>${Number(selected.event.amount).toFixed(2)}</span>
-            </div>
-          )}
-          {(selected.event?.reminder_days?.length ?? 0) > 0 && (
-            <div className="detail-row">
-              <span>Reminders</span>
-              <span>{selected.event.reminder_days!.map(d => `${d}d before`).join(', ')}</span>
-            </div>
-          )}
+      {/* Event detail slide-in panel */}
+      <div
+        className={`fixed top-0 right-0 h-full w-[420px] max-w-full z-50
+          bg-white dark:bg-slate-900
+          border-l border-slate-200 dark:border-slate-700/60
+          shadow-2xl flex flex-col
+          transition-transform duration-300 ease-in-out
+          ${selected ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700/60 flex-shrink-0">
+          <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100 truncate pr-2">
+            {selected?.event?.title}
+          </h2>
+          <button
+            onClick={() => setSelected(null)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex-shrink-0"
+          >✕</button>
+        </div>
 
-          <div style={{ display: 'flex', gap: '.5rem', marginTop: '.5rem', flexWrap: 'wrap' }}>
-            <button
-              className="btn btn-green"
-              disabled={saving || selected.status === 'completed'}
-              onClick={() => markStatus('completed')}
-              title="Mark this occurrence as completed"
-            >
-              ✓ Done
-            </button>
-            <button
-              className="btn btn-gray"
-              disabled={saving || selected.status === 'skipped'}
-              onClick={() => markStatus('skipped')}
-              title="Mark this occurrence as skipped"
-            >
-              Skip
-            </button>
-            {selected.status !== 'upcoming' && (
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {error && (
+            <div className="px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+          {selected && (
+            <>
+              <div>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Date</p>
+                <p className="text-sm text-slate-800 dark:text-slate-200">{fmt(selected.occurrence_date)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Category</p>
+                <span
+                  className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold text-white"
+                  style={{ background: cats.find(c => c.name === selected.event?.category?.name)?.color ?? '#9ca3af' }}
+                >
+                  {selected.event?.category?.name?.replace(/_/g, ' ')}
+                </span>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Status</p>
+                <span className={`status ${selected.status}`}>{selected.status}</span>
+              </div>
+              {selected.event?.description && (
+                <div>
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Notes</p>
+                  <p className="text-sm text-slate-800 dark:text-slate-200">{selected.event.description}</p>
+                </div>
+              )}
+              {selected.event?.amount && (
+                <div>
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Amount</p>
+                  <p className="text-sm text-slate-800 dark:text-slate-200">${Number(selected.event.amount).toFixed(2)}</p>
+                </div>
+              )}
+              {(selected.event?.reminder_days?.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Reminders</p>
+                  <p className="text-sm text-slate-800 dark:text-slate-200">
+                    {selected.event.reminder_days!.map(d => `${d}d before`).join(', ')}
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 px-5 py-4 border-t border-slate-200 dark:border-slate-700/60 flex-shrink-0 flex-wrap">
+          {selected && (
+            <>
               <button
-                className="btn btn-blue"
-                disabled={saving}
-                onClick={() => markStatus('upcoming')}
-                title="Reopen this occurrence as upcoming"
+                className="btn btn-green"
+                disabled={saving || selected.status === 'completed'}
+                onClick={() => markStatus('completed')}
+                title="Mark this occurrence as completed"
               >
-                Reopen
+                ✓ Done
               </button>
-            )}
-            <button
-              className="btn btn-red"
-              disabled={saving}
-              onClick={handleDelete}
-              title="Permanently delete this calendar entry"
-            >
-              Delete
-            </button>
-          </div>
+              <button
+                className="btn btn-gray"
+                disabled={saving || selected.status === 'skipped'}
+                onClick={() => markStatus('skipped')}
+                title="Mark this occurrence as skipped"
+              >
+                Skip
+              </button>
+              {selected.status !== 'upcoming' && (
+                <button
+                  className="btn btn-blue"
+                  disabled={saving}
+                  onClick={() => markStatus('upcoming')}
+                  title="Reopen this occurrence as upcoming"
+                >
+                  Reopen
+                </button>
+              )}
+              <button
+                className="btn btn-red"
+                disabled={saving}
+                onClick={handleDelete}
+                title="Permanently delete this calendar entry"
+              >
+                Delete
+              </button>
+            </>
+          )}
         </div>
-        </div>
-      )}
+      </div>
     </div>
   )
 }

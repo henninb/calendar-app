@@ -90,16 +90,16 @@ describe('OccurrenceList — mark status', () => {
   it('clicking ✓ calls updateOccurrence with completed', async () => {
     vi.mocked(api.updateOccurrence).mockResolvedValue({ ...BASE_OCC, status: 'completed' })
     render(<OccurrenceList />)
-    await waitFor(() => screen.getByTitle('Mark this occurrence as completed'))
-    fireEvent.click(screen.getByTitle('Mark this occurrence as completed'))
+    await waitFor(() => screen.getByTitle('Mark as completed'))
+    fireEvent.click(screen.getByTitle('Mark as completed'))
     await waitFor(() => expect(api.updateOccurrence).toHaveBeenCalledWith(10, { status: 'completed' }))
   })
 
   it('clicking Skip calls updateOccurrence with skipped', async () => {
     vi.mocked(api.updateOccurrence).mockResolvedValue({ ...BASE_OCC, status: 'skipped' })
     render(<OccurrenceList />)
-    await waitFor(() => screen.getByTitle('Mark this occurrence as skipped'))
-    fireEvent.click(screen.getByTitle('Mark this occurrence as skipped'))
+    await waitFor(() => screen.getByTitle('Mark as skipped'))
+    fireEvent.click(screen.getByTitle('Mark as skipped'))
     await waitFor(() => expect(api.updateOccurrence).toHaveBeenCalledWith(10, { status: 'skipped' }))
   })
 
@@ -108,7 +108,7 @@ describe('OccurrenceList — mark status', () => {
     render(<OccurrenceList />)
     await waitFor(() => screen.getByDisplayValue('Upcoming + Overdue'))
     fireEvent.change(screen.getByDisplayValue('Upcoming + Overdue'), { target: { value: 'completed' } })
-    await waitFor(() => expect(screen.getByTitle('Reopen this occurrence as upcoming')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTitle('Reopen as upcoming')).toBeInTheDocument())
   })
 
   it('does NOT show ✓ button for already-completed occurrence', async () => {
@@ -117,7 +117,7 @@ describe('OccurrenceList — mark status', () => {
     await waitFor(() => screen.getByDisplayValue('Upcoming + Overdue'))
     fireEvent.change(screen.getByDisplayValue('Upcoming + Overdue'), { target: { value: 'completed' } })
     await waitFor(() => screen.getByText('completed'))
-    expect(screen.queryByTitle('Mark this occurrence as completed')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Mark as completed')).not.toBeInTheDocument()
   })
 })
 

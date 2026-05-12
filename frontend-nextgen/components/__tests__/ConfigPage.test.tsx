@@ -4,7 +4,8 @@ import React from 'react'
 import ConfigPage, { CONFIG_DEFAULTS, loadConfig } from '../ConfigPage'
 
 vi.mock('@/lib/api', () => ({
-  gcalAuthStatus: vi.fn(),
+  gcalAuthStatus:    vi.fn(),
+  wipeAllGcalEvents: vi.fn(),
 }))
 import * as api from '@/lib/api'
 
@@ -21,6 +22,7 @@ beforeEach(() => {
   localStorageMock.clear()
   vi.clearAllMocks()
   vi.mocked(api.gcalAuthStatus).mockResolvedValue({ authenticated: true })
+  vi.mocked(api.wipeAllGcalEvents).mockResolvedValue({ message: 'Wipe started.' })
 })
 
 function renderPage() {
@@ -150,6 +152,55 @@ describe('ConfigPage — reset', () => {
     await waitFor(() => expect(screen.getByRole('checkbox')).toBeChecked())
     fireEvent.click(screen.getByText('Reset to Defaults'))
     expect(screen.getByRole('checkbox')).not.toBeChecked()
+  })
+})
+
+// ── danger zone ───────────────────────────────────────────────────────────────
+
+describe('ConfigPage — danger zone', () => {
+  it('renders the Wipe Google Calendar button', async () => {
+    renderPage()
+    await waitFor(() => expect(screen.getByText(/💣 Wipe Google Calendar/)).toBeInTheDocument())
+  })
+
+  it('Wipe button is disabled when not authenticated', async () => {
+    vi.mocked(api.gcalAuthStatus).mockResolvedValue({ authenticated: false })
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Not connected')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /💣 Wipe Google Calendar/ })).toBeDisabled()
+  })
+
+  it('calls wipeAllGcalEvents after confirm', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Connected')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /💣 Wipe Google Calendar/ }))
+    await waitFor(() => expect(api.wipeAllGcalEvents).toHaveBeenCalledTimes(1))
+  })
+
+  it('does not call wipeAllGcalEvents when confirm is cancelled', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(false)
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Connected')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /💣 Wipe Google Calendar/ }))
+    expect(api.wipeAllGcalEvents).not.toHaveBeenCalled()
+  })
+
+  it('shows success message after wipe', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Connected')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /💣 Wipe Google Calendar/ }))
+    await waitFor(() => expect(screen.getByText(/Wipe started/)).toBeInTheDocument())
+  })
+
+  it('shows error message when wipe fails', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    vi.mocked(api.wipeAllGcalEvents).mockRejectedValue(new Error('Network error'))
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Connected')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /💣 Wipe Google Calendar/ }))
+    await waitFor(() => expect(screen.getByText('Network error')).toBeInTheDocument())
   })
 })
 
