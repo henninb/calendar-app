@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import React from 'react'
 import EventPanel from '../EventPanel'
 
 const CATS = [
-  { id: 1, name: 'bills',   icon: '💰', color: '#3b82f6' },
-  { id: 2, name: 'health',  icon: '🏥', color: '#10b981' },
+  { id: 1, name: 'bills',  icon: '💰', color: '#3b82f6' },
+  { id: 2, name: 'health', icon: '🏥', color: '#10b981' },
 ]
 
-function renderPanel(props = {}) {
+function renderPanel(props: Record<string, unknown> = {}) {
   const onClose       = vi.fn()
   const onCreateEvent = vi.fn().mockResolvedValue(undefined)
   render(
@@ -68,7 +69,7 @@ describe('EventPanel — rendering', () => {
 describe('EventPanel — close', () => {
   it('clicking ✕ calls onClose', () => {
     const { onClose } = renderPanel()
-    const closeBtn = screen.getAllByRole('button').find(b => b.textContent === '✕')
+    const closeBtn = screen.getAllByRole('button').find(b => b.textContent === '✕')!
     fireEvent.click(closeBtn)
     expect(onClose).toHaveBeenCalled()
   })
@@ -158,6 +159,6 @@ describe('EventPanel — save', () => {
     rerender(
       <EventPanel open={true} onClose={vi.fn()} onCreateEvent={vi.fn()} categories={CATS} />
     )
-    expect(screen.getByPlaceholderText('Event title').value).toBe('')
+    expect((screen.getByPlaceholderText('Event title') as HTMLInputElement).value).toBe('')
   })
 })

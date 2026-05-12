@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import React from 'react'
 import CreditCardTracker from '../CreditCardTracker'
 
 vi.mock('@/lib/api', () => ({
@@ -28,15 +29,15 @@ const BASE_ROW = {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  api.fetchCreditCardTracker.mockResolvedValue([BASE_ROW])
-  api.createCreditCard.mockResolvedValue({})
+  vi.mocked(api.fetchCreditCardTracker).mockResolvedValue([BASE_ROW])
+  vi.mocked(api.createCreditCard).mockResolvedValue({})
 })
 
 // ── rendering ─────────────────────────────────────────────────────────────────
 
 describe('CreditCardTracker — rendering', () => {
   it('shows loading state initially', () => {
-    api.fetchCreditCardTracker.mockReturnValue(new Promise(() => {}))
+    vi.mocked(api.fetchCreditCardTracker).mockReturnValue(new Promise(() => {}))
     render(<CreditCardTracker />)
     expect(screen.getByText('Loading…')).toBeInTheDocument()
   })
@@ -52,13 +53,13 @@ describe('CreditCardTracker — rendering', () => {
   })
 
   it('renders error message when fetch fails', async () => {
-    api.fetchCreditCardTracker.mockRejectedValue(new Error('Network failure'))
+    vi.mocked(api.fetchCreditCardTracker).mockRejectedValue(new Error('Network failure'))
     render(<CreditCardTracker />)
     await waitFor(() => expect(screen.getByText(/Failed to load credit cards/)).toBeInTheDocument())
   })
 
   it('shows empty state when no cards returned', async () => {
-    api.fetchCreditCardTracker.mockResolvedValue([])
+    vi.mocked(api.fetchCreditCardTracker).mockResolvedValue([])
     render(<CreditCardTracker />)
     await waitFor(() => expect(screen.getByText(/No credit cards found/)).toBeInTheDocument())
   })
@@ -73,7 +74,7 @@ describe('CreditCardTracker — rendering', () => {
   })
 
   it('shows overdue warning icon when prev_due_overdue is true', async () => {
-    api.fetchCreditCardTracker.mockResolvedValue([{ ...BASE_ROW, prev_due_overdue: true }])
+    vi.mocked(api.fetchCreditCardTracker).mockResolvedValue([{ ...BASE_ROW, prev_due_overdue: true }])
     render(<CreditCardTracker />)
     await waitFor(() => expect(screen.getByText('⚠')).toBeInTheDocument())
   })
@@ -148,7 +149,7 @@ describe('CreditCardTracker — add card form', () => {
   })
 
   it('shows formError when createCreditCard rejects', async () => {
-    api.createCreditCard.mockRejectedValue(new Error('Duplicate card'))
+    vi.mocked(api.createCreditCard).mockRejectedValue(new Error('Duplicate card'))
     render(<CreditCardTracker />)
     await waitFor(() => screen.getByTitle('Add a new credit card'))
     fireEvent.click(screen.getByTitle('Add a new credit card'))

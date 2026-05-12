@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import React from 'react'
 import StoreManager from '../StoreManager'
 
 vi.mock('@/lib/api', () => ({
@@ -18,9 +19,9 @@ const STORES = [
 beforeEach(() => {
   vi.clearAllMocks()
   vi.restoreAllMocks()
-  api.createStore.mockResolvedValue({ id: 3, name: 'Target', location: null })
-  api.updateStore.mockResolvedValue({ id: 1, name: 'ALDI Updated', location: null })
-  api.deleteStore.mockResolvedValue(null)
+  vi.mocked(api.createStore).mockResolvedValue({ id: 3, name: 'Target', location: null })
+  vi.mocked(api.updateStore).mockResolvedValue({ id: 1, name: 'ALDI Updated', location: null })
+  vi.mocked(api.deleteStore).mockResolvedValue(null)
 })
 
 describe('StoreManager — empty state', () => {
@@ -112,7 +113,7 @@ describe('StoreManager — delete', () => {
 describe('StoreManager — error banner', () => {
   it('shows error when deleteStore fails', async () => {
     vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
-    api.deleteStore.mockRejectedValue(new Error('Server error'))
+    vi.mocked(api.deleteStore).mockRejectedValue(new Error('Server error'))
     render(<StoreManager stores={STORES} onStoresChange={vi.fn()} />)
     fireEvent.click(screen.getAllByTitle('Delete store')[0])
     await waitFor(() => expect(screen.getByText('Server error')).toBeInTheDocument())
@@ -120,7 +121,7 @@ describe('StoreManager — error banner', () => {
 
   it('dismisses error banner when close is clicked', async () => {
     vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
-    api.deleteStore.mockRejectedValue(new Error('Server error'))
+    vi.mocked(api.deleteStore).mockRejectedValue(new Error('Server error'))
     render(<StoreManager stores={STORES} onStoresChange={vi.fn()} />)
     fireEvent.click(screen.getAllByTitle('Delete store')[0])
     await waitFor(() => expect(screen.getByText('Server error')).toBeInTheDocument())

@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import React from 'react'
 import TaskList from '../TaskList'
 
 vi.mock('@dnd-kit/core', () => ({
-  DndContext: ({ children }) => children,
+  DndContext: ({ children }: { children: React.ReactNode }) => children,
   closestCenter: {},
   MouseSensor: class {},
   TouchSensor: class {},
@@ -11,13 +12,13 @@ vi.mock('@dnd-kit/core', () => ({
   useSensors: () => [],
 }))
 vi.mock('@dnd-kit/sortable', () => ({
-  SortableContext: ({ children }) => children,
+  SortableContext: ({ children }: { children: React.ReactNode }) => children,
   verticalListSortingStrategy: {},
   useSortable: () => ({
     attributes: {}, listeners: {}, setNodeRef: () => {},
     transform: null, transition: undefined, isDragging: false,
   }),
-  arrayMove: (arr, from, to) => {
+  arrayMove: (arr: unknown[], from: number, to: number) => {
     const a = [...arr]; a.splice(to, 0, a.splice(from, 1)[0]); return a
   },
 }))
@@ -60,10 +61,10 @@ const baseTask = {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  api.fetchTasks.mockResolvedValue([baseTask])
-  api.fetchPersons.mockResolvedValue([])
-  api.fetchCategories.mockResolvedValue([])
-  api.updateTask.mockResolvedValue({ ...baseTask, status: 'cancelled' })
+  vi.mocked(api.fetchTasks).mockResolvedValue([baseTask])
+  vi.mocked(api.fetchPersons).mockResolvedValue([])
+  vi.mocked(api.fetchCategories).mockResolvedValue([])
+  vi.mocked(api.updateTask).mockResolvedValue({ ...baseTask, status: 'cancelled' })
 })
 
 describe('TaskList — cancel recurring task triggers reload', () => {
@@ -84,7 +85,7 @@ describe('TaskList — cancel recurring task triggers reload', () => {
 
 describe('TaskList — UI states', () => {
   it('shows loading spinner while fetching', () => {
-    api.fetchTasks.mockReturnValue(new Promise(() => {}))
+    vi.mocked(api.fetchTasks).mockReturnValue(new Promise(() => {}))
     render(<TaskList />)
     expect(screen.getByText('Loading tasks…')).toBeInTheDocument()
   })
@@ -94,20 +95,20 @@ describe('TaskList — UI states', () => {
     await waitFor(() => screen.getByText('Weekly chore'))
 
     fireEvent.click(screen.getByText(/Filters/))
-    const statusSection = screen.getAllByText('Status')[0].closest('div')
+    const statusSection = screen.getAllByText('Status')[0].closest('div') as HTMLElement
     fireEvent.click(within(statusSection).getByText('To Do'))
     fireEvent.click(within(statusSection).getByText('In Progress'))
     expect(screen.getByText(/All status filters are off/)).toBeInTheDocument()
   })
 
   it('shows error banner when the API call fails', async () => {
-    api.fetchTasks.mockRejectedValue(new Error('Network error'))
+    vi.mocked(api.fetchTasks).mockRejectedValue(new Error('Network error'))
     render(<TaskList />)
     await waitFor(() => expect(screen.getByText('Network error')).toBeInTheDocument())
   })
 
   it('dismissing the error banner removes it', async () => {
-    api.fetchTasks.mockRejectedValue(new Error('Network error'))
+    vi.mocked(api.fetchTasks).mockRejectedValue(new Error('Network error'))
     render(<TaskList />)
     await waitFor(() => screen.getByText('Network error'))
     fireEvent.click(screen.getByLabelText('Dismiss error'))
@@ -125,7 +126,7 @@ describe('TaskList — UI states', () => {
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
     fireEvent.click(screen.getByText(/Filters/))
-    const statusSection = screen.getAllByText('Status')[0].closest('div')
+    const statusSection = screen.getAllByText('Status')[0].closest('div') as HTMLElement
     fireEvent.click(within(statusSection).getByText('To Do'))
     fireEvent.click(within(statusSection).getByText('In Progress'))
     fireEvent.click(within(statusSection).getByText('Done'))
@@ -138,7 +139,7 @@ describe('TaskList — UI states', () => {
 describe('TaskList — create task', () => {
   it('creates a task and adds it to the list', async () => {
     const newTask = { ...baseTask, id: 99, title: 'Brand new task' }
-    api.createTask = vi.fn().mockResolvedValue(newTask)
+    vi.mocked(api.createTask).mockResolvedValue(newTask)
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -169,7 +170,7 @@ describe('TaskList — edit task', () => {
   })
 
   it('calls updateTask when Save Changes is clicked', async () => {
-    api.updateTask.mockResolvedValue({ ...baseTask, title: 'Updated chore' })
+    vi.mocked(api.updateTask).mockResolvedValue({ ...baseTask, title: 'Updated chore' })
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -190,7 +191,7 @@ describe('TaskList — edit task', () => {
 
 describe('TaskList — delete task', () => {
   it('calls deleteTask and removes the task from the list', async () => {
-    api.deleteTask = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(api.deleteTask).mockResolvedValue(undefined)
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -207,7 +208,7 @@ describe('TaskList — delete task', () => {
 
 describe('TaskList — patch task', () => {
   it('patching a task updates it in place (non-done status)', async () => {
-    api.updateTask.mockResolvedValue({ ...baseTask, status: 'in_progress' })
+    vi.mocked(api.updateTask).mockResolvedValue({ ...baseTask, status: 'in_progress' })
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -226,11 +227,11 @@ describe('TaskList — subtask operations', () => {
   }
 
   beforeEach(() => {
-    api.fetchTasks.mockResolvedValue([taskWithSub])
+    vi.mocked(api.fetchTasks).mockResolvedValue([taskWithSub])
   })
 
   it('toggling a subtask checkbox calls updateSubtask', async () => {
-    api.updateSubtask = vi.fn().mockResolvedValue({ id: 20, title: 'Sub A', status: 'done', order: 0 })
+    vi.mocked(api.updateSubtask).mockResolvedValue({ id: 20, title: 'Sub A', status: 'done', order: 0 })
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -244,7 +245,7 @@ describe('TaskList — subtask operations', () => {
   })
 
   it('adding a subtask via the inline input calls createSubtask', async () => {
-    api.createSubtask = vi.fn().mockResolvedValue({ id: 21, title: 'Sub B', status: 'todo', order: 1 })
+    vi.mocked(api.createSubtask).mockResolvedValue({ id: 21, title: 'Sub B', status: 'todo', order: 1 })
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -262,7 +263,7 @@ describe('TaskList — subtask operations', () => {
 
 describe('TaskList — keyboard Ctrl+Z / Cmd+Z triggers undo', () => {
   it('pressing Ctrl+Z after a patch reverts the change', async () => {
-    api.updateTask
+    vi.mocked(api.updateTask)
       .mockResolvedValueOnce({ ...baseTask, status: 'in_progress' })
       .mockResolvedValueOnce({ ...baseTask, status: 'todo' })
     render(<TaskList />)
@@ -277,7 +278,7 @@ describe('TaskList — keyboard Ctrl+Z / Cmd+Z triggers undo', () => {
   })
 
   it('pressing Cmd+Z also triggers undo', async () => {
-    api.updateTask
+    vi.mocked(api.updateTask)
       .mockResolvedValueOnce({ ...baseTask, status: 'in_progress' })
       .mockResolvedValueOnce({ ...baseTask, status: 'todo' })
     render(<TaskList />)
@@ -300,7 +301,7 @@ describe('TaskList — fetch-limit warning', () => {
       id: i + 1,
       created_at: `2099-01-01T${String(Math.floor(i / 3600)).padStart(2, '0')}:${String(Math.floor((i % 3600) / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}Z`,
     }))
-    api.fetchTasks.mockResolvedValue(manyTasks)
+    vi.mocked(api.fetchTasks).mockResolvedValue(manyTasks)
     render(<TaskList />)
     await waitFor(() =>
       expect(screen.getByText(/Showing the first 500 tasks/)).toBeInTheDocument()
@@ -312,8 +313,8 @@ describe('TaskList — fetch-limit warning', () => {
     const manyTasks = Array.from({ length: 500 }, (_, i) => ({
       ...baseTask, id: i + 1,
     }))
-    api.updateTask.mockResolvedValue({ ...baseTask, status: 'cancelled' })
-    api.fetchTasks
+    vi.mocked(api.updateTask).mockResolvedValue({ ...baseTask, status: 'cancelled' })
+    vi.mocked(api.fetchTasks)
       .mockResolvedValueOnce([baseTask])
       .mockResolvedValueOnce(manyTasks)
 
@@ -333,8 +334,8 @@ describe('TaskList — fetch-limit warning', () => {
 
 describe('TaskList — silentLoad error path', () => {
   it('shows error banner when silentLoad fails after cancelling', async () => {
-    api.updateTask.mockResolvedValue({ ...baseTask, status: 'cancelled' })
-    api.fetchTasks
+    vi.mocked(api.updateTask).mockResolvedValue({ ...baseTask, status: 'cancelled' })
+    vi.mocked(api.fetchTasks)
       .mockResolvedValueOnce([baseTask])
       .mockRejectedValueOnce(new Error('Reload failed'))
     render(<TaskList />)
@@ -352,14 +353,14 @@ describe('TaskList — silentLoad error path', () => {
 // ── Task grouping by due date ─────────────────────────────────────────────────
 
 describe('TaskList — task grouping by due date', () => {
-  function todayPlus(n) {
+  function todayPlus(n: number) {
     const d = new Date()
     d.setDate(d.getDate() + n)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
 
   it('places a task due tomorrow in the Tomorrow section', async () => {
-    api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: todayPlus(1) }])
+    vi.mocked(api.fetchTasks).mockResolvedValue([{ ...baseTask, due_date: todayPlus(1) }])
     render(<TaskList />)
     await waitFor(() => screen.getByText('Tomorrow'))
     fireEvent.click(screen.getByText('Tomorrow'))
@@ -368,7 +369,7 @@ describe('TaskList — task grouping by due date', () => {
   })
 
   it('places a task due in 3 days in the This Week section', async () => {
-    api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: todayPlus(3) }])
+    vi.mocked(api.fetchTasks).mockResolvedValue([{ ...baseTask, due_date: todayPlus(3) }])
     render(<TaskList />)
     await waitFor(() => screen.getByText('This Week'))
     fireEvent.click(screen.getByText('This Week'))
@@ -377,7 +378,7 @@ describe('TaskList — task grouping by due date', () => {
   })
 
   it('places a task due in 10 days in the Next Week section', async () => {
-    api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: todayPlus(10) }])
+    vi.mocked(api.fetchTasks).mockResolvedValue([{ ...baseTask, due_date: todayPlus(10) }])
     render(<TaskList />)
     await waitFor(() => screen.getByText('Next Week'))
     fireEvent.click(screen.getByText('Next Week'))
@@ -386,7 +387,7 @@ describe('TaskList — task grouping by due date', () => {
   })
 
   it('places a task due in 20 days in the Later section', async () => {
-    api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: todayPlus(20) }])
+    vi.mocked(api.fetchTasks).mockResolvedValue([{ ...baseTask, due_date: todayPlus(20) }])
     render(<TaskList />)
     await waitFor(() => screen.getByText('Later'))
     fireEvent.click(screen.getByText('Later'))
@@ -395,7 +396,7 @@ describe('TaskList — task grouping by due date', () => {
   })
 
   it('places a task with no due date in the No Date section', async () => {
-    api.fetchTasks.mockResolvedValue([{ ...baseTask, due_date: null }])
+    vi.mocked(api.fetchTasks).mockResolvedValue([{ ...baseTask, due_date: null }])
     render(<TaskList />)
     await waitFor(() => screen.getByText('No Date'))
     fireEvent.click(screen.getByText('No Date'))
@@ -404,12 +405,12 @@ describe('TaskList — task grouping by due date', () => {
   })
 
   it('places a done task into Done group when done filter is active', async () => {
-    api.fetchTasks.mockResolvedValue([{ ...baseTask, status: 'done' }])
+    vi.mocked(api.fetchTasks).mockResolvedValue([{ ...baseTask, status: 'done' }])
     render(<TaskList />)
     await waitFor(() => expect(api.fetchTasks).toHaveBeenCalledTimes(1))
 
     fireEvent.click(screen.getByText(/Filters/))
-    const statusSection = screen.getAllByText('Status')[0].closest('div')
+    const statusSection = screen.getAllByText('Status')[0].closest('div') as HTMLElement
     fireEvent.click(within(statusSection).getByText('Done'))
     fireEvent.click(within(statusSection).getByText('To Do'))
     fireEvent.click(within(statusSection).getByText('In Progress'))
@@ -440,7 +441,7 @@ describe('TaskList — section collapse/expand', () => {
 
 describe('TaskList — handleCreateTask error', () => {
   it('shows error banner when createTask fails', async () => {
-    api.createTask.mockRejectedValue(new Error('Create failed'))
+    vi.mocked(api.createTask).mockRejectedValue(new Error('Create failed'))
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -458,7 +459,7 @@ describe('TaskList — handleCreateTask error', () => {
 
 describe('TaskList — handleUpdateTask', () => {
   it('reloads all tasks when panel saves a task with done status', async () => {
-    api.updateTask.mockResolvedValue({ ...baseTask, status: 'done' })
+    vi.mocked(api.updateTask).mockResolvedValue({ ...baseTask, status: 'done' })
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -473,7 +474,7 @@ describe('TaskList — handleUpdateTask', () => {
   })
 
   it('shows error when updateTask fails in the edit panel', async () => {
-    api.updateTask.mockRejectedValue(new Error('Update failed'))
+    vi.mocked(api.updateTask).mockRejectedValue(new Error('Update failed'))
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -491,7 +492,7 @@ describe('TaskList — handleUpdateTask', () => {
 
 describe('TaskList — patchTask done', () => {
   it('triggers silentLoad after marking a task done', async () => {
-    api.updateTask.mockResolvedValue({ ...baseTask, status: 'done' })
+    vi.mocked(api.updateTask).mockResolvedValue({ ...baseTask, status: 'done' })
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -501,7 +502,7 @@ describe('TaskList — patchTask done', () => {
   })
 
   it('shows error banner when updateTask fails during done patch', async () => {
-    api.updateTask.mockRejectedValue(new Error('Done failed'))
+    vi.mocked(api.updateTask).mockRejectedValue(new Error('Done failed'))
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -515,7 +516,7 @@ describe('TaskList — patchTask done', () => {
 
 describe('TaskList — patchTask undo toast', () => {
   it('shows undo toast after starting a task', async () => {
-    api.updateTask.mockResolvedValue({ ...baseTask, status: 'in_progress' })
+    vi.mocked(api.updateTask).mockResolvedValue({ ...baseTask, status: 'in_progress' })
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -531,7 +532,7 @@ describe('TaskList — patchTask undo toast', () => {
 
 describe('TaskList — deleteTask error', () => {
   it('shows error when deleteTask fails', async () => {
-    api.deleteTask.mockRejectedValue(new Error('Delete failed'))
+    vi.mocked(api.deleteTask).mockRejectedValue(new Error('Delete failed'))
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -552,11 +553,11 @@ describe('TaskList — patchSubtask undo and error', () => {
   }
 
   beforeEach(() => {
-    api.fetchTasks.mockResolvedValue([taskWithSub])
+    vi.mocked(api.fetchTasks).mockResolvedValue([taskWithSub])
   })
 
   it('shows undo toast after checking a subtask', async () => {
-    api.updateSubtask = vi.fn().mockResolvedValue({ id: 20, title: 'Sub A', status: 'done', order: 0 })
+    vi.mocked(api.updateSubtask).mockResolvedValue({ id: 20, title: 'Sub A', status: 'done', order: 0 })
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -571,7 +572,7 @@ describe('TaskList — patchSubtask undo and error', () => {
   })
 
   it('shows error when updateSubtask fails', async () => {
-    api.updateSubtask = vi.fn().mockRejectedValue(new Error('Subtask patch failed'))
+    vi.mocked(api.updateSubtask).mockRejectedValue(new Error('Subtask patch failed'))
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -593,11 +594,11 @@ describe('TaskList — addSubtask error', () => {
   }
 
   beforeEach(() => {
-    api.fetchTasks.mockResolvedValue([taskWithSub])
+    vi.mocked(api.fetchTasks).mockResolvedValue([taskWithSub])
   })
 
   it('shows error when createSubtask fails', async () => {
-    api.createSubtask = vi.fn().mockRejectedValue(new Error('Add sub failed'))
+    vi.mocked(api.createSubtask).mockRejectedValue(new Error('Add sub failed'))
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
@@ -620,11 +621,11 @@ describe('TaskList — deleteSubtask', () => {
   }
 
   beforeEach(() => {
-    api.fetchTasks.mockResolvedValue([taskWithSub])
+    vi.mocked(api.fetchTasks).mockResolvedValue([taskWithSub])
   })
 
   it('deletes a subtask and shows undo toast', async () => {
-    api.deleteSubtask = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(api.deleteSubtask).mockResolvedValue(undefined)
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 

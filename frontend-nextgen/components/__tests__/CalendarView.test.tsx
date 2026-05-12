@@ -1,10 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import React from 'react'
 import CalendarView from '../CalendarView'
 
-let capturedDatesSet = null
+type DatesSetArg = { startStr: string; endStr: string }
+type EventClickArg = { event: { extendedProps: unknown } }
+type CalEvent = { id: string | number; title: string; extendedProps: unknown }
+
+let capturedDatesSet: ((arg: DatesSetArg) => void) | null = null
+
 vi.mock('@fullcalendar/react', () => ({
-  default: ({ datesSet, eventClick, events }) => {
+  default: ({ datesSet, eventClick, events }: {
+    datesSet: (arg: DatesSetArg) => void
+    eventClick: ((arg: EventClickArg) => void) | undefined
+    events: CalEvent[]
+  }) => {
     capturedDatesSet = datesSet
     return (
       <div data-testid="fullcalendar">
@@ -21,20 +31,20 @@ vi.mock('@fullcalendar/react', () => ({
     )
   },
 }))
-vi.mock('@fullcalendar/daygrid',      () => ({ default: {} }))
-vi.mock('@fullcalendar/list',         () => ({ default: {} }))
-vi.mock('@fullcalendar/interaction',  () => ({ default: {} }))
+vi.mock('@fullcalendar/daygrid',     () => ({ default: {} }))
+vi.mock('@fullcalendar/list',        () => ({ default: {} }))
+vi.mock('@fullcalendar/interaction', () => ({ default: {} }))
 
 vi.mock('@/lib/api', () => ({
-  fetchOccurrences:  vi.fn(),
-  fetchCategories:   vi.fn(),
-  updateOccurrence:  vi.fn(),
-  deleteOccurrence:  vi.fn(),
-  createEvent:       vi.fn(),
+  fetchOccurrences: vi.fn(),
+  fetchCategories:  vi.fn(),
+  updateOccurrence: vi.fn(),
+  deleteOccurrence: vi.fn(),
+  createEvent:      vi.fn(),
 }))
 
 vi.mock('@/components/EventPanel', () => ({
-  default: ({ open, onClose }) =>
+  default: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
     open ? <div data-testid="event-panel"><button onClick={onClose}>ClosePanel</button></div> : null,
 }))
 
@@ -58,16 +68,16 @@ const BASE_OCC = {
 beforeEach(() => {
   vi.clearAllMocks()
   capturedDatesSet = null
-  api.fetchCategories.mockResolvedValue(CATS)
-  api.fetchOccurrences.mockResolvedValue([BASE_OCC])
-  api.updateOccurrence.mockResolvedValue({ ...BASE_OCC, status: 'completed' })
-  api.deleteOccurrence.mockResolvedValue(null)
-  api.createEvent.mockResolvedValue({})
+  vi.mocked(api.fetchCategories).mockResolvedValue(CATS)
+  vi.mocked(api.fetchOccurrences).mockResolvedValue([BASE_OCC])
+  vi.mocked(api.updateOccurrence).mockResolvedValue({ ...BASE_OCC, status: 'completed' })
+  vi.mocked(api.deleteOccurrence).mockResolvedValue(null)
+  vi.mocked(api.createEvent).mockResolvedValue({})
 })
 
 async function triggerDatesSet() {
   await waitFor(() => expect(capturedDatesSet).not.toBeNull())
-  capturedDatesSet({ startStr: '2099-06-01T00:00:00', endStr: '2099-07-01T00:00:00' })
+  capturedDatesSet!({ startStr: '2099-06-01T00:00:00', endStr: '2099-07-01T00:00:00' })
 }
 
 // ── rendering ─────────────────────────────────────────────────────────────────
@@ -105,20 +115,19 @@ describe('CalendarView — rendering', () => {
 describe('CalendarView — category filter', () => {
   it('clicking a category button applies filter (event disappears for other category)', async () => {
     const occ2 = { ...BASE_OCC, id: 11, event: { ...BASE_OCC.event, title: 'Gym', category: { name: 'health' } } }
-    api.fetchOccurrences.mockResolvedValue([BASE_OCC, occ2])
+    vi.mocked(api.fetchOccurrences).mockResolvedValue([BASE_OCC, occ2])
     render(<CalendarView />)
     await triggerDatesSet()
     await waitFor(() => expect(screen.getByText('Pay Rent')).toBeInTheDocument())
 
-    const billsBtn = screen.getByText('bills')
-    fireEvent.click(billsBtn)
+    fireEvent.click(screen.getByText('bills'))
     expect(screen.queryByText('Gym')).not.toBeInTheDocument()
     expect(screen.getByText('Pay Rent')).toBeInTheDocument()
   })
 
   it('clicking the same category button again clears the filter', async () => {
     const occ2 = { ...BASE_OCC, id: 11, event: { ...BASE_OCC.event, title: 'Gym', category: { name: 'health' } } }
-    api.fetchOccurrences.mockResolvedValue([BASE_OCC, occ2])
+    vi.mocked(api.fetchOccurrences).mockResolvedValue([BASE_OCC, occ2])
     render(<CalendarView />)
     await triggerDatesSet()
     await waitFor(() => screen.getByText('bills'))
@@ -158,7 +167,7 @@ describe('CalendarView — detail panel', () => {
 
   it('closes the panel when the overlay is clicked', async () => {
     await openDetail()
-    fireEvent.click(document.querySelector('.detail-overlay'))
+    fireEvent.click(document.querySelector('.detail-overlay')!)
     await waitFor(() => expect(screen.queryByText('✓ Done')).not.toBeInTheDocument())
   })
 
@@ -176,13 +185,13 @@ describe('CalendarView — detail panel', () => {
 
   it('clicking Skip calls updateOccurrence with skipped', async () => {
     await openDetail()
-    api.updateOccurrence.mockResolvedValue({ ...BASE_OCC, status: 'skipped' })
+    vi.mocked(api.updateOccurrence).mockResolvedValue({ ...BASE_OCC, status: 'skipped' })
     fireEvent.click(screen.getByText('Skip'))
     await waitFor(() => expect(api.updateOccurrence).toHaveBeenCalledWith(10, { status: 'skipped' }))
   })
 
   it('shows Reopen button when status is not upcoming', async () => {
-    api.fetchOccurrences.mockResolvedValue([{ ...BASE_OCC, status: 'completed' }])
+    vi.mocked(api.fetchOccurrences).mockResolvedValue([{ ...BASE_OCC, status: 'completed' }])
     render(<CalendarView />)
     await triggerDatesSet()
     await waitFor(() => screen.getByText('Pay Rent'))
@@ -191,7 +200,7 @@ describe('CalendarView — detail panel', () => {
   })
 
   it('shows error when updateOccurrence fails', async () => {
-    api.updateOccurrence.mockRejectedValue(new Error('Update failed'))
+    vi.mocked(api.updateOccurrence).mockRejectedValue(new Error('Update failed'))
     await openDetail()
     fireEvent.click(screen.getByText('✓ Done'))
     await waitFor(() => expect(screen.getByText(/Failed to update status/)).toBeInTheDocument())

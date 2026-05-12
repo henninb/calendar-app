@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
+import React from 'react'
 import ConfigPage, { CONFIG_DEFAULTS, loadConfig } from '../ConfigPage'
 
 vi.mock('@/lib/api', () => ({
@@ -7,11 +8,11 @@ vi.mock('@/lib/api', () => ({
 }))
 import * as api from '@/lib/api'
 
-const lsStore = {}
+const lsStore: Record<string, string> = {}
 const localStorageMock = {
-  getItem:    vi.fn((k) => lsStore[k] ?? null),
-  setItem:    vi.fn((k, v) => { lsStore[k] = String(v) }),
-  removeItem: vi.fn((k) => { delete lsStore[k] }),
+  getItem:    vi.fn((k: string) => lsStore[k] ?? null),
+  setItem:    vi.fn((k: string, v: string) => { lsStore[k] = String(v) }),
+  removeItem: vi.fn((k: string) => { delete lsStore[k] }),
   clear:      vi.fn(() => { Object.keys(lsStore).forEach(k => delete lsStore[k]) }),
 }
 vi.stubGlobal('localStorage', localStorageMock)
@@ -19,7 +20,7 @@ vi.stubGlobal('localStorage', localStorageMock)
 beforeEach(() => {
   localStorageMock.clear()
   vi.clearAllMocks()
-  api.gcalAuthStatus.mockResolvedValue({ authenticated: true })
+  vi.mocked(api.gcalAuthStatus).mockResolvedValue({ authenticated: true })
 })
 
 function renderPage() {
@@ -55,31 +56,31 @@ describe('ConfigPage — rendering', () => {
   })
 
   it('shows "Connected" when gcalAuth resolves to true', async () => {
-    api.gcalAuthStatus.mockResolvedValue({ authenticated: true })
+    vi.mocked(api.gcalAuthStatus).mockResolvedValue({ authenticated: true })
     renderPage()
     await waitFor(() => expect(screen.getByText('Connected')).toBeInTheDocument())
   })
 
   it('shows "Not connected" when gcalAuth resolves to false', async () => {
-    api.gcalAuthStatus.mockResolvedValue({ authenticated: false })
+    vi.mocked(api.gcalAuthStatus).mockResolvedValue({ authenticated: false })
     renderPage()
     await waitFor(() => expect(screen.getByText('Not connected')).toBeInTheDocument())
   })
 
   it('shows "Checking…" while gcalAuth is pending', () => {
-    api.gcalAuthStatus.mockReturnValue(new Promise(() => {}))
+    vi.mocked(api.gcalAuthStatus).mockReturnValue(new Promise(() => {}))
     renderPage()
     expect(screen.getByText('Checking…')).toBeInTheDocument()
   })
 
   it('shows "Reconnect Google" when already connected', async () => {
-    api.gcalAuthStatus.mockResolvedValue({ authenticated: true })
+    vi.mocked(api.gcalAuthStatus).mockResolvedValue({ authenticated: true })
     renderPage()
     await waitFor(() => expect(screen.getByText('Reconnect Google')).toBeInTheDocument())
   })
 
   it('shows "Connect Google" when not connected', async () => {
-    api.gcalAuthStatus.mockResolvedValue({ authenticated: false })
+    vi.mocked(api.gcalAuthStatus).mockResolvedValue({ authenticated: false })
     renderPage()
     await waitFor(() => expect(screen.getByText('Connect Google')).toBeInTheDocument())
   })
@@ -157,14 +158,14 @@ describe('ConfigPage — reset', () => {
 describe('ConfigPage — field changes', () => {
   it('clamps days-ahead to 1 when given 0', () => {
     renderPage()
-    const input = screen.getByDisplayValue('365')
+    const input = screen.getByDisplayValue('365') as HTMLInputElement
     fireEvent.change(input, { target: { value: '0' } })
     expect(input.value).toBe('1')
   })
 
   it('clamps days-ahead to 730 when given 999', () => {
     renderPage()
-    const input = screen.getByDisplayValue('365')
+    const input = screen.getByDisplayValue('365') as HTMLInputElement
     fireEvent.change(input, { target: { value: '999' } })
     expect(input.value).toBe('730')
   })

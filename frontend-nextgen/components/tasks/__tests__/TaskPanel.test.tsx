@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
+import React from 'react'
 import TaskPanel from '../TaskPanel'
 
 const baseTask = {
@@ -10,7 +11,7 @@ const baseTask = {
   subtasks: [],
 }
 
-function renderPanel(overrides = {}) {
+function renderPanel(overrides: Record<string, unknown> = {}) {
   const props = {
     open: true,
     mode: 'create',
@@ -20,8 +21,8 @@ function renderPanel(overrides = {}) {
     onUpdateTask: vi.fn().mockResolvedValue(undefined),
     persons: [],
     categories: [],
-    onPatchSubtask: vi.fn().mockResolvedValue(undefined),
-    onAddSubtask:   vi.fn().mockResolvedValue(undefined),
+    onPatchSubtask:  vi.fn().mockResolvedValue(undefined),
+    onAddSubtask:    vi.fn().mockResolvedValue(undefined),
     onDeleteSubtask: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   }
@@ -223,7 +224,7 @@ describe('TaskPanel — close behaviour', () => {
   it('header ✕ button calls onClose', () => {
     const onClose = vi.fn()
     renderPanel({ onClose })
-    const header = screen.getByText('New Task').closest('div')
+    const header = screen.getByText('New Task').closest('div') as HTMLElement
     fireEvent.click(within(header).getByText('✕'))
     expect(onClose).toHaveBeenCalledOnce()
   })
@@ -296,7 +297,7 @@ describe('TaskPanel — category select', () => {
   it('renders a <select> for category (not a text input)', () => {
     renderPanel({ mode: 'create', categories: CATS })
     const categoryLabel = screen.getByText('Category')
-    const select = categoryLabel.closest('div').querySelector('select')
+    const select = categoryLabel.closest('div')!.querySelector('select')
     expect(select).toBeInTheDocument()
   })
 
@@ -317,7 +318,7 @@ describe('TaskPanel — category select', () => {
 
     fireEvent.change(screen.getByPlaceholderText('Task title'), { target: { value: 'Test' } })
     const categoryLabel = screen.getByText('Category')
-    const select = categoryLabel.closest('div').querySelector('select')
+    const select = categoryLabel.closest('div')!.querySelector('select')!
     fireEvent.change(select, { target: { value: '1' } })
     fireEvent.click(screen.getByText('Create Task'))
 
@@ -402,7 +403,7 @@ describe('TaskPanel — subtask row interactions', () => {
     const onAddSubtask = vi.fn().mockResolvedValue(undefined)
     renderPanel({ mode: 'edit', task: baseTask, onAddSubtask })
     fireEvent.change(screen.getByPlaceholderText('Add subtask…'), { target: { value: 'New sub' } })
-    fireEvent.click(screen.getByText('Add').closest('button'))
+    fireEvent.click(screen.getByText('Add').closest('button')!)
     expect(onAddSubtask).toHaveBeenCalledWith(1, 'New sub')
   })
 })
@@ -413,8 +414,8 @@ describe('TaskPanel — recurrence and category in save payload', () => {
   it('changing recurrence select includes the value in the save payload', async () => {
     const onUpdateTask = vi.fn().mockResolvedValue(undefined)
     renderPanel({ mode: 'edit', task: baseTask, onUpdateTask })
-    const recurrenceSection = screen.getByText('Recurrence').closest('div')
-    fireEvent.change(recurrenceSection.querySelector('select'), { target: { value: 'weekly' } })
+    const recurrenceSection = screen.getByText('Recurrence').closest('div')!
+    fireEvent.change(recurrenceSection.querySelector('select')!, { target: { value: 'weekly' } })
     fireEvent.click(screen.getByText('Save Changes'))
     expect(onUpdateTask).toHaveBeenCalledWith(1, expect.objectContaining({ recurrence: 'weekly' }))
   })
@@ -423,8 +424,8 @@ describe('TaskPanel — recurrence and category in save payload', () => {
     const onUpdateTask = vi.fn().mockResolvedValue(undefined)
     const CATS = [{ id: 5, name: 'Work', icon: '💼', color: '#3b82f6' }]
     renderPanel({ mode: 'edit', task: baseTask, onUpdateTask, categories: CATS })
-    const categorySection = screen.getByText('Category').closest('div')
-    fireEvent.change(categorySection.querySelector('select'), { target: { value: '5' } })
+    const categorySection = screen.getByText('Category').closest('div')!
+    fireEvent.change(categorySection.querySelector('select')!, { target: { value: '5' } })
     fireEvent.click(screen.getByText('Save Changes'))
     expect(onUpdateTask).toHaveBeenCalledWith(1, expect.objectContaining({ category_id: 5 }))
   })

@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import React from 'react'
 import OnHandView from '../OnHandView'
 
 vi.mock('@/lib/api', () => ({
-  fetchOnHand:      vi.fn(),
-  upsertOnHand:     vi.fn(),
-  deleteOnHand:     vi.fn(),
+  fetchOnHand:       vi.fn(),
+  upsertOnHand:      vi.fn(),
+  deleteOnHand:      vi.fn(),
   createGroceryItem: vi.fn(),
   updateGroceryItem: vi.fn(),
   deleteGroceryItem: vi.fn(),
@@ -17,7 +18,7 @@ const STORES = [{ id: 1, name: 'ALDI' }]
 
 const CATALOG_ITEMS = [
   { id: 1, name: 'Apples',  default_unit: 'each', default_store_id: 1,    default_store: { name: 'ALDI' } },
-  { id: 2, name: 'Bananas', default_unit: 'lb',   default_store_id: null,  default_store: null },
+  { id: 2, name: 'Bananas', default_unit: 'lb',   default_store_id: null, default_store: null },
 ]
 
 const ON_HAND = [
@@ -28,16 +29,16 @@ const ON_HAND = [
 beforeEach(() => {
   vi.clearAllMocks()
   vi.restoreAllMocks()
-  api.fetchOnHand.mockResolvedValue(ON_HAND)
-  api.createGroceryItem.mockResolvedValue({ id: 3, name: 'Carrots', default_unit: 'each' })
-  api.updateGroceryItem.mockResolvedValue(null)
-  api.upsertOnHand.mockResolvedValue(null)
-  api.deleteGroceryItem.mockResolvedValue(null)
+  vi.mocked(api.fetchOnHand).mockResolvedValue(ON_HAND)
+  vi.mocked(api.createGroceryItem).mockResolvedValue({ id: 3, name: 'Carrots', default_unit: 'each' })
+  vi.mocked(api.updateGroceryItem).mockResolvedValue(null)
+  vi.mocked(api.upsertOnHand).mockResolvedValue(null)
+  vi.mocked(api.deleteGroceryItem).mockResolvedValue(null)
 })
 
 describe('OnHandView — loading', () => {
   it('shows loading indicator while fetching', () => {
-    api.fetchOnHand.mockImplementation(() => new Promise(() => {}))
+    vi.mocked(api.fetchOnHand).mockImplementation(() => new Promise(() => {}))
     render(<OnHandView catalogItems={CATALOG_ITEMS} stores={STORES} onCatalogChange={vi.fn()} />)
     expect(screen.getByText('Loading…')).toBeInTheDocument()
   })
