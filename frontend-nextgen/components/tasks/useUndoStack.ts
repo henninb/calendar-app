@@ -2,13 +2,27 @@ import { useState, useCallback, useRef } from 'react'
 
 const MAX_HISTORY = 15
 
-export function useUndoStack() {
-  const stackRef  = useRef([])
-  const [len, setLen] = useState(0)
-  const [lastAction, setLastAction] = useState(null)
+export interface UndoEntry {
+  id: number
+  description: string
+  undo: () => void | Promise<void>
+}
 
-  const push = useCallback((entry) => {
-    const full = { ...entry, id: Date.now() + Math.random() }
+interface UseUndoStackReturn {
+  push: (entry: Omit<UndoEntry, 'id'>) => void
+  undo: () => Promise<void>
+  canUndo: boolean
+  lastAction: UndoEntry | null
+  dismissToast: () => void
+}
+
+export function useUndoStack(): UseUndoStackReturn {
+  const stackRef = useRef<UndoEntry[]>([])
+  const [len, setLen] = useState(0)
+  const [lastAction, setLastAction] = useState<UndoEntry | null>(null)
+
+  const push = useCallback((entry: Omit<UndoEntry, 'id'>) => {
+    const full: UndoEntry = { ...entry, id: Date.now() + Math.random() }
     const next = [...stackRef.current.slice(-(MAX_HISTORY - 1)), full]
     stackRef.current = next
     setLen(next.length)

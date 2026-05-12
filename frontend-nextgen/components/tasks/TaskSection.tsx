@@ -3,13 +3,24 @@ import { useCallback } from 'react'
 import {
   DndContext, closestCenter, MouseSensor, TouchSensor, useSensor, useSensors,
 } from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
 import {
   SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import type { ReactNode } from 'react'
 import TaskCard from './TaskCard'
+import type { Task, Person, Category, Subtask } from './helpers'
 
-const SECTION_ACCENT = {
+interface SectionAccentStyle {
+  border: string
+  label: string
+  bg: string
+  hover: string
+  badge: string
+}
+
+const SECTION_ACCENT: Record<string, SectionAccentStyle> = {
   overdue: {
     border:  'border-l-red-500',
     label:   'text-red-700 dark:text-red-400',
@@ -68,7 +79,7 @@ const SECTION_ACCENT = {
   },
 }
 
-const SECTION_ICON = {
+const SECTION_ICON: Record<string, string> = {
   overdue_today: '🔥',
   tomorrow:      '📅',
   this_week:     '📆',
@@ -78,7 +89,13 @@ const SECTION_ICON = {
   no_date:       '📌',
 }
 
-function SortableTaskWrapper({ task, dismissing, children }) {
+interface SortableTaskWrapperProps {
+  task: Task
+  dismissing: boolean
+  children: ReactNode
+}
+
+function SortableTaskWrapper({ task, dismissing, children }: SortableTaskWrapperProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     disabled: dismissing,
@@ -116,6 +133,27 @@ function SortableTaskWrapper({ task, dismissing, children }) {
   )
 }
 
+interface TaskSectionProps {
+  sectionKey: string
+  label: string
+  tasks: Task[]
+  collapsed: boolean
+  onToggleCollapse: () => void
+  expandedCards: Record<number, boolean>
+  onToggleExpand: (id: number) => void
+  onEdit: (task: Task) => void
+  onPatchTask: (id: number, data: Partial<Task>) => void | Promise<void>
+  onDeleteTask: (id: number) => void
+  onPatchSubtask: (taskId: number, subtaskId: number, data: Partial<Subtask>) => void | Promise<void>
+  onAddSubtask: (taskId: number, title: string) => Promise<void>
+  onDeleteSubtask: (taskId: number, subtaskId: number) => void
+  onReorderSubtasks: (taskId: number, subtasks: Subtask[]) => void
+  onReorderTasks: (tasks: Task[]) => void
+  persons: Person[]
+  categories: Category[]
+  dismissingIds?: Set<number>
+}
+
 export default function TaskSection({
   sectionKey,
   label,
@@ -135,7 +173,7 @@ export default function TaskSection({
   persons,
   categories,
   dismissingIds = new Set(),
-}) {
+}: TaskSectionProps) {
   const count = tasks.length
   const accent = SECTION_ACCENT[sectionKey] ?? SECTION_ACCENT.later
   const icon   = SECTION_ICON[sectionKey] ?? '•'
@@ -145,7 +183,7 @@ export default function TaskSection({
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   )
 
-  const handleDragEnd = useCallback(({ active, over }) => {
+  const handleDragEnd = useCallback(({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return
     const oldIndex = tasks.findIndex(t => t.id === active.id)
     const newIndex = tasks.findIndex(t => t.id === over.id)

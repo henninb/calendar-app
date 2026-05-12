@@ -2,20 +2,38 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { STATUS_OPTIONS, STATUS_LABELS } from './helpers'
+import type { TaskStatus, Person, Category } from './helpers'
 
-const STATUS_PILL_ACTIVE = {
+const STATUS_PILL_ACTIVE: Record<TaskStatus, string> = {
   todo:        'bg-blue-100 text-blue-700 ring-1 ring-blue-300 dark:bg-blue-500/20 dark:text-blue-300 dark:ring-blue-500/40',
   in_progress: 'bg-amber-100 text-amber-700 ring-1 ring-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40',
   done:        'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:ring-emerald-500/40',
   cancelled:   'bg-slate-200 text-slate-600 ring-1 ring-slate-300 dark:bg-slate-600/40 dark:text-slate-300 dark:ring-slate-500/40',
 }
 
-function FilterPopover({ filterStatus, onToggleStatus, filterAssignee, onFilterAssignee, filterCategory, onFilterCategory, persons, categories, onClose }) {
-  const ref = useRef(null)
+interface FilterPopoverProps {
+  filterStatus: TaskStatus[]
+  onToggleStatus: (status: TaskStatus) => void
+  filterAssignee: string
+  onFilterAssignee: (value: string) => void
+  filterCategory: string
+  onFilterCategory: (value: string) => void
+  persons: Person[]
+  categories: Category[]
+  onClose: () => void
+}
+
+function FilterPopover({
+  filterStatus, onToggleStatus,
+  filterAssignee, onFilterAssignee,
+  filterCategory, onFilterCategory,
+  persons, categories, onClose,
+}: FilterPopoverProps) {
+  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    function handle(e) {
-      if (ref.current && !ref.current.contains(e.target)) onClose()
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
@@ -99,6 +117,21 @@ function FilterPopover({ filterStatus, onToggleStatus, filterAssignee, onFilterA
   )
 }
 
+interface TaskToolbarProps {
+  searchQuery: string
+  onSearch: (query: string) => void
+  filterStatus: TaskStatus[]
+  onToggleStatus: (status: TaskStatus) => void
+  filterAssignee: string
+  onFilterAssignee: (value: string) => void
+  filterCategory: string
+  onFilterCategory: (value: string) => void
+  persons: Person[]
+  categories: Category[]
+  loading: boolean
+  onRefresh: () => void
+}
+
 export default function TaskToolbar({
   searchQuery,
   onSearch,
@@ -112,9 +145,9 @@ export default function TaskToolbar({
   categories,
   loading,
   onRefresh,
-}) {
+}: TaskToolbarProps) {
   const [filterOpen, setFilterOpen] = useState(false)
-  const [portalTarget, setPortalTarget] = useState(null)
+  const [portalTarget, setPortalTarget] = useState<Element | null>(null)
 
   useLayoutEffect(() => {
     setPortalTarget(document.getElementById('task-toolbar-slot'))

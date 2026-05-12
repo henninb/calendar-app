@@ -8,7 +8,27 @@ import {
   deleteAllGcalEvents, wipeAllGcalEvents, syncToGtasks,
 } from '@/lib/api'
 
-const LOG_COLOR = { info: '#93c5fd', ok: '#86efac', warn: '#fde68a', error: '#fca5a5' }
+type LogLevel = 'info' | 'ok' | 'warn' | 'error'
+
+interface LogEntry {
+  id: number
+  level: LogLevel
+  text: string
+  time: string
+}
+
+interface Config {
+  gcalSyncDays: number
+  gcalSyncForce: boolean
+  apiKey: string
+}
+
+const LOG_COLOR: Record<LogLevel, string> = {
+  info:  '#93c5fd',
+  ok:    '#86efac',
+  warn:  '#fde68a',
+  error: '#fca5a5',
+}
 
 const TABS = [
   { href: '/calendar',     label: '📅 Calendar' },
@@ -23,19 +43,23 @@ function timestamp() {
   return new Date().toLocaleTimeString('en-US', { hour12: false })
 }
 
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
 export default function AppHeader() {
   const pathname = usePathname()
   const [darkMode, setDarkMode]           = useState(true)
-  const [config, setConfig]               = useState({ gcalSyncDays: 365, gcalSyncForce: false, apiKey: '' })
-  const [gcalAuth, setGcalAuth]           = useState(null)
+  const [config, setConfig]               = useState<Config>({ gcalSyncDays: 365, gcalSyncForce: false, apiKey: '' })
+  const [gcalAuth, setGcalAuth]           = useState<boolean | null>(null)
   const [syncing, setSyncing]             = useState(false)
   const [gcalSyncing, setGcalSyncing]     = useState(false)
   const [gcalDeleting, setGcalDeleting]   = useState(false)
   const [gcalWiping, setGcalWiping]       = useState(false)
   const [gtasksSyncing, setGtasksSyncing] = useState(false)
-  const [logs, setLogs]                   = useState([])
+  const [logs, setLogs]                   = useState<LogEntry[]>([])
   const [logCount, setLogCount]           = useState(0)
-  const logEndRef                         = useRef(null)
+  const logEndRef                         = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem('theme')
@@ -50,20 +74,20 @@ export default function AppHeader() {
 
   useEffect(() => { setConfig(loadConfig()) }, [])
 
-  const addLog = useCallback((level, text) => {
+  const addLog = useCallback((level: LogLevel, text: string): number => {
     const id = Date.now() + Math.random()
     setLogs(prev => [...prev, { id, level, text, time: timestamp() }])
     setLogCount(c => c + 1)
     return id
   }, [])
 
-  const updateLog = useCallback((id, text) => {
+  const updateLog = useCallback((id: number, text: string) => {
     setLogs(prev => prev.map(entry => entry.id === id ? { ...entry, text } : entry))
   }, [])
 
   useEffect(() => {
     gcalAuthStatus()
-      .then(s => {
+      .then((s: { authenticated: boolean; email?: string }) => {
         setGcalAuth(s.authenticated)
         addLog('info', `Google auth status: ${s.authenticated ? `authenticated (${s.email || 'no email'})` : 'not authenticated'}`)
       })
@@ -81,7 +105,7 @@ export default function AppHeader() {
       const res = await generateAll()
       addLog('ok', `Generated ${res.occurrences_created} new occurrences across ${res.events_processed} events.`)
     } catch (e) {
-      addLog('error', `Generate failed: ${e.message}`)
+      addLog('error', `Generate failed: ${errMsg(e)}`)
     } finally {
       setSyncing(false)
     }
@@ -97,25 +121,25 @@ export default function AppHeader() {
     addLog('info', `Starting Google Calendar sync (force=${config.gcalSyncForce}, ${config.gcalSyncDays} days)…`)
     const progressId = addLog('info', 'Waiting for server…')
     try {
-      const res = await syncToGcal(config.gcalSyncDays, config.gcalSyncForce, (data) => {
+      const res = await syncToGcal(config.gcalSyncDays, config.gcalSyncForce, (data: { type: string; total?: number; msg?: string }) => {
         if (data.type === 'start') updateLog(progressId, `[gcal sync] 0/${data.total} starting…`)
         else if (data.type === 'progress') updateLog(progressId, `[gcal sync] ${data.msg}`)
       })
       setLogs(prev => prev.filter(entry => entry.id !== progressId))
-      const level = res.failed > 0 ? 'warn' : 'ok'
+      const level: LogLevel = res.failed > 0 ? 'warn' : 'ok'
       addLog(level, `Synced ${res.synced} events to Google Calendar.${res.failed ? ` ${res.failed} failed.` : ''}`)
       if (res.failed > 0) {
-        const quotaErrors = res.errors?.filter(e => e.includes('quotaExceeded') || e.includes('Quota Exceeded')) ?? []
+        const quotaErrors = (res.errors as string[] | undefined)?.filter((e: string) => e.includes('quotaExceeded') || e.includes('Quota Exceeded')) ?? []
         if (quotaErrors.length > 0) {
           addLog('warn', 'Google Calendar API quota exceeded — daily limit reached.')
         } else {
           addLog('warn', `${res.failed} event(s) failed to sync — you may need to reconnect Google.`)
-          res.errors?.slice(0, 5).forEach(err => addLog('error', err))
+          ;(res.errors as string[] | undefined)?.slice(0, 5).forEach((err: string) => addLog('error', err))
         }
       }
     } catch (e) {
       setLogs(prev => prev.filter(entry => entry.id !== progressId))
-      addLog('error', `Google Calendar sync failed: ${e.message}`)
+      addLog('error', `Google Calendar sync failed: ${errMsg(e)}`)
     } finally {
       setGcalSyncing(false)
     }
@@ -130,7 +154,7 @@ export default function AppHeader() {
       const res = await deleteAllGcalEvents()
       addLog('ok', res.message || 'Delete started in background.')
     } catch (e) {
-      addLog('error', `Delete failed: ${e.message}`)
+      addLog('error', `Delete failed: ${errMsg(e)}`)
     } finally {
       setGcalDeleting(false)
     }
@@ -145,7 +169,7 @@ export default function AppHeader() {
       const res = await wipeAllGcalEvents()
       addLog('ok', res.message || 'Full wipe started in background.')
     } catch (e) {
-      addLog('error', `Wipe failed: ${e.message}`)
+      addLog('error', `Wipe failed: ${errMsg(e)}`)
     } finally {
       setGcalWiping(false)
     }
@@ -161,25 +185,25 @@ export default function AppHeader() {
     addLog('info', 'Syncing tasks to Google Tasks…')
     const progressId = addLog('info', 'Waiting for server…')
     try {
-      const res = await syncToGtasks((data) => {
+      const res = await syncToGtasks((data: { type: string; total?: number; msg?: string }) => {
         if (data.type === 'start') updateLog(progressId, `[gtasks sync] 0/${data.total} starting…`)
         else if (data.type === 'progress') updateLog(progressId, `[gtasks sync] ${data.msg}`)
       })
       setLogs(prev => prev.filter(entry => entry.id !== progressId))
-      const level = res.failed > 0 ? 'warn' : 'ok'
+      const level: LogLevel = res.failed > 0 ? 'warn' : 'ok'
       addLog(level, `Synced ${res.synced} tasks to Google Tasks.${res.failed ? ` ${res.failed} failed.` : ''}`)
       if (res.failed > 0) {
-        const quotaErrors = res.errors?.filter(e => e.includes('quotaExceeded') || e.includes('Quota Exceeded')) ?? []
+        const quotaErrors = (res.errors as string[] | undefined)?.filter((e: string) => e.includes('quotaExceeded') || e.includes('Quota Exceeded')) ?? []
         if (quotaErrors.length > 0) {
           addLog('warn', 'Google Tasks API quota exceeded — daily limit reached.')
         } else {
           addLog('warn', `${res.failed} task(s) failed to sync — you may need to reconnect Google.`)
-          res.errors?.slice(0, 5).forEach(err => addLog('error', err))
+          ;(res.errors as string[] | undefined)?.slice(0, 5).forEach((err: string) => addLog('error', err))
         }
       }
     } catch (e) {
       setLogs(prev => prev.filter(entry => entry.id !== progressId))
-      addLog('error', `Google Tasks sync failed: ${e.message}`)
+      addLog('error', `Google Tasks sync failed: ${errMsg(e)}`)
     } finally {
       setGtasksSyncing(false)
     }

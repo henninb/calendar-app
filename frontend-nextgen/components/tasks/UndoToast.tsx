@@ -1,12 +1,19 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
+import type { UndoEntry } from './useUndoStack'
 
 const TOAST_MS = 8000
 const FADE_MS  = 300
 
-export default function UndoToast({ action, onUndo, onDismiss }) {
+interface UndoToastProps {
+  action: UndoEntry | null
+  onUndo: () => void
+  onDismiss: () => void
+}
+
+export default function UndoToast({ action, onUndo, onDismiss }: UndoToastProps) {
   const [visible, setVisible] = useState(false)
-  const timerRef = useRef(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!action) {
@@ -14,23 +21,25 @@ export default function UndoToast({ action, onUndo, onDismiss }) {
       return
     }
     setVisible(true)
-    clearTimeout(timerRef.current)
+    if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       setVisible(false)
       setTimeout(onDismiss, FADE_MS)
     }, TOAST_MS)
 
-    return () => clearTimeout(timerRef.current)
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
   }, [action])
 
   function handleDismiss() {
-    clearTimeout(timerRef.current)
+    if (timerRef.current) clearTimeout(timerRef.current)
     setVisible(false)
     setTimeout(onDismiss, FADE_MS)
   }
 
   function handleUndo() {
-    clearTimeout(timerRef.current)
+    if (timerRef.current) clearTimeout(timerRef.current)
     setVisible(false)
     setTimeout(onDismiss, FADE_MS)
     onUndo()
