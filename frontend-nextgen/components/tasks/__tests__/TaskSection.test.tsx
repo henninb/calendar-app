@@ -1,10 +1,14 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import React from 'react'
 import TaskSection from '../TaskSection'
 
-let triggerDragEnd = null
+type DragEndEvent = { active: { id: number | string }; over: { id: number | string } | null }
+
+let triggerDragEnd: ((event: DragEndEvent) => void) | null = null
+
 vi.mock('@dnd-kit/core', () => ({
-  DndContext: ({ children, onDragEnd }) => {
+  DndContext: ({ children, onDragEnd }: { children: React.ReactNode; onDragEnd: (e: DragEndEvent) => void }) => {
     triggerDragEnd = onDragEnd
     return children
   },
@@ -15,13 +19,13 @@ vi.mock('@dnd-kit/core', () => ({
   useSensors: () => [],
 }))
 vi.mock('@dnd-kit/sortable', () => ({
-  SortableContext: ({ children }) => children,
+  SortableContext: ({ children }: { children: React.ReactNode }) => children,
   verticalListSortingStrategy: {},
   useSortable: () => ({
     attributes: {}, listeners: {}, setNodeRef: () => {},
     transform: null, transition: undefined, isDragging: false,
   }),
-  arrayMove: (arr, from, to) => {
+  arrayMove: (arr: unknown[], from: number, to: number) => {
     const a = [...arr]; a.splice(to, 0, a.splice(from, 1)[0]); return a
   },
 }))
@@ -39,7 +43,7 @@ const baseTask = {
   order: 0, created_at: '2099-01-01T00:00:00Z',
 }
 
-function renderSection(overrides = {}) {
+function renderSection(overrides: Record<string, unknown> = {}) {
   const props = {
     sectionKey: 'this_week',
     label: 'This Week',
@@ -80,7 +84,7 @@ describe('TaskSection', () => {
   })
 
   it('renders the section icon for each known sectionKey', () => {
-    const ICON_MAP = {
+    const ICON_MAP: Record<string, string> = {
       overdue_today: '🔥',
       tomorrow:      '📅',
       this_week:     '📆',
@@ -155,21 +159,21 @@ describe('TaskSection', () => {
     const onReorderTasks = vi.fn()
     const task2 = { ...baseTask, id: 2, title: 'Task 2' }
     renderSection({ tasks: [baseTask, task2], collapsed: false, onReorderTasks })
-    triggerDragEnd({ active: { id: 1 }, over: { id: 2 } })
+    triggerDragEnd!({ active: { id: 1 }, over: { id: 2 } })
     expect(onReorderTasks).toHaveBeenCalledWith([task2, baseTask])
   })
 
   it('does not call onReorderTasks when dropped on the same task', () => {
     const onReorderTasks = vi.fn()
     renderSection({ tasks: [baseTask], collapsed: false, onReorderTasks })
-    triggerDragEnd({ active: { id: 1 }, over: { id: 1 } })
+    triggerDragEnd!({ active: { id: 1 }, over: { id: 1 } })
     expect(onReorderTasks).not.toHaveBeenCalled()
   })
 
   it('does not call onReorderTasks when dropped outside any target', () => {
     const onReorderTasks = vi.fn()
     renderSection({ tasks: [baseTask], collapsed: false, onReorderTasks })
-    triggerDragEnd({ active: { id: 1 }, over: null })
+    triggerDragEnd!({ active: { id: 1 }, over: null })
     expect(onReorderTasks).not.toHaveBeenCalled()
   })
 })

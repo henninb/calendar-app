@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
+import React from 'react'
 import TaskToolbar from '../TaskToolbar'
 import { STATUS_OPTIONS } from '../helpers'
 
-function renderToolbar(overrides = {}) {
+function renderToolbar(overrides: Record<string, unknown> = {}) {
   const props = {
     searchQuery: '',
     onSearch: vi.fn(),
@@ -78,19 +79,19 @@ describe('TaskToolbar', () => {
 
   it('shows no active-filter badge when all filters are default', () => {
     renderToolbar()
-    const btn = screen.getByText(/Filters/).closest('button')
+    const btn = screen.getByText(/Filters/).closest('button')!
     expect(within(btn).queryByText('1')).not.toBeInTheDocument()
   })
 
   it('shows active filter count badge when a status filter is removed', () => {
     renderToolbar({ filterStatus: ['todo', 'in_progress', 'done'] })
-    const btn = screen.getByText(/Filters/).closest('button')
+    const btn = screen.getByText(/Filters/).closest('button')!
     expect(within(btn).getByText('1')).toBeInTheDocument()
   })
 
   it('shows active filter count 2 when both an assignee and a category are filtered', () => {
     renderToolbar({ filterAssignee: 'unassigned', filterCategory: '3' })
-    const btn = screen.getByText(/Filters/).closest('button')
+    const btn = screen.getByText(/Filters/).closest('button')!
     expect(within(btn).getByText('2')).toBeInTheDocument()
   })
 
@@ -154,8 +155,8 @@ describe('TaskToolbar', () => {
     const onFilterAssignee = vi.fn()
     renderToolbar({ persons: [{ id: 1, name: 'Alice' }], onFilterAssignee })
     fireEvent.click(screen.getByText(/Filters/))
-    const assigneeSection = screen.getByText('Assignee').closest('div')
-    fireEvent.change(assigneeSection.querySelector('select'), { target: { value: '1' } })
+    const assigneeSection = screen.getByText('Assignee').closest('div')!
+    fireEvent.change(assigneeSection.querySelector('select')!, { target: { value: '1' } })
     expect(onFilterAssignee).toHaveBeenCalledWith('1')
   })
 
@@ -163,8 +164,8 @@ describe('TaskToolbar', () => {
     const onFilterCategory = vi.fn()
     renderToolbar({ categories: [{ id: 3, name: 'Work', icon: '💼' }], onFilterCategory })
     fireEvent.click(screen.getByText(/Filters/))
-    const categorySection = screen.getByText('Category').closest('div')
-    fireEvent.change(categorySection.querySelector('select'), { target: { value: '3' } })
+    const categorySection = screen.getByText('Category').closest('div')!
+    fireEvent.change(categorySection.querySelector('select')!, { target: { value: '3' } })
     expect(onFilterCategory).toHaveBeenCalledWith('3')
   })
 })

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import React from 'react'
 import GroceryLists from '../GroceryLists'
 
 vi.mock('@/lib/api', () => ({
@@ -35,16 +36,16 @@ const LISTS = [
 beforeEach(() => {
   vi.clearAllMocks()
   vi.restoreAllMocks()
-  api.fetchGroceryLists.mockResolvedValue(LISTS)
-  api.createGroceryList.mockResolvedValue({
+  vi.mocked(api.fetchGroceryLists).mockResolvedValue(LISTS)
+  vi.mocked(api.createGroceryList).mockResolvedValue({
     id: 3, name: 'New List', status: 'draft', store: null, shopping_date: null, items: [],
   })
-  api.deleteGroceryList.mockResolvedValue(null)
+  vi.mocked(api.deleteGroceryList).mockResolvedValue(null)
 })
 
 describe('GroceryLists — loading', () => {
   it('shows loading indicator while fetching', () => {
-    api.fetchGroceryLists.mockImplementation(() => new Promise(() => {}))
+    vi.mocked(api.fetchGroceryLists).mockImplementation(() => new Promise(() => {}))
     render(<GroceryLists stores={STORES} catalogItems={[]} />)
     expect(screen.getByText(/Loading lists/)).toBeInTheDocument()
   })
@@ -77,7 +78,7 @@ describe('GroceryLists — with data', () => {
 
 describe('GroceryLists — empty state', () => {
   it('shows empty message when no lists', async () => {
-    api.fetchGroceryLists.mockResolvedValue([])
+    vi.mocked(api.fetchGroceryLists).mockResolvedValue([])
     render(<GroceryLists stores={STORES} catalogItems={[]} />)
     await waitFor(() => expect(screen.getByText(/No shopping lists yet/)).toBeInTheDocument())
   })
@@ -130,7 +131,7 @@ describe('GroceryLists — delete', () => {
 
 describe('GroceryLists — error state', () => {
   it('shows error banner when fetch fails', async () => {
-    api.fetchGroceryLists.mockRejectedValue(new Error('Network error'))
+    vi.mocked(api.fetchGroceryLists).mockRejectedValue(new Error('Network error'))
     render(<GroceryLists stores={STORES} catalogItems={[]} />)
     await waitFor(() => expect(screen.getByText('Network error')).toBeInTheDocument())
   })

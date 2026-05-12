@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import React from 'react'
 import GroceryPage from '../GroceryPage'
 
 vi.mock('@/lib/api', () => ({
@@ -13,8 +14,8 @@ vi.mock('../StoreManager', () => ({ default: () => <div data-testid="store-manag
 import * as api from '@/lib/api'
 
 beforeEach(() => {
-  api.fetchStores.mockResolvedValue([])
-  api.fetchGroceryItems.mockResolvedValue([])
+  vi.mocked(api.fetchStores).mockResolvedValue([])
+  vi.mocked(api.fetchGroceryItems).mockResolvedValue([])
 })
 
 describe('GroceryPage — tab navigation', () => {

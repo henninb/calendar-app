@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import React from 'react'
 import OccurrenceList from '../OccurrenceList'
 
 vi.mock('@/lib/api', () => ({
-  fetchOccurrences:        vi.fn(),
-  fetchCategories:         vi.fn(),
-  updateOccurrence:        vi.fn(),
+  fetchOccurrences:         vi.fn(),
+  fetchCategories:          vi.fn(),
+  updateOccurrence:         vi.fn(),
   createTaskFromOccurrence: vi.fn(),
 }))
 
@@ -22,15 +23,15 @@ const BASE_OCC = {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  api.fetchCategories.mockResolvedValue(CATS)
-  api.fetchOccurrences.mockResolvedValue([BASE_OCC])
+  vi.mocked(api.fetchCategories).mockResolvedValue(CATS)
+  vi.mocked(api.fetchOccurrences).mockResolvedValue([BASE_OCC])
 })
 
 // ── rendering ─────────────────────────────────────────────────────────────────
 
 describe('OccurrenceList — rendering', () => {
   it('shows loading state initially', () => {
-    api.fetchOccurrences.mockReturnValue(new Promise(() => {}))
+    vi.mocked(api.fetchOccurrences).mockReturnValue(new Promise(() => {}))
     render(<OccurrenceList />)
     expect(screen.getByText('Loading…')).toBeInTheDocument()
   })
@@ -41,7 +42,7 @@ describe('OccurrenceList — rendering', () => {
   })
 
   it('shows "No occurrences found" when list is empty', async () => {
-    api.fetchOccurrences.mockResolvedValue([])
+    vi.mocked(api.fetchOccurrences).mockResolvedValue([])
     render(<OccurrenceList />)
     await waitFor(() => expect(screen.getByText('No occurrences found.')).toBeInTheDocument())
   })
@@ -87,7 +88,7 @@ describe('OccurrenceList — filters', () => {
 
 describe('OccurrenceList — mark status', () => {
   it('clicking ✓ calls updateOccurrence with completed', async () => {
-    api.updateOccurrence.mockResolvedValue({ ...BASE_OCC, status: 'completed' })
+    vi.mocked(api.updateOccurrence).mockResolvedValue({ ...BASE_OCC, status: 'completed' })
     render(<OccurrenceList />)
     await waitFor(() => screen.getByTitle('Mark this occurrence as completed'))
     fireEvent.click(screen.getByTitle('Mark this occurrence as completed'))
@@ -95,7 +96,7 @@ describe('OccurrenceList — mark status', () => {
   })
 
   it('clicking Skip calls updateOccurrence with skipped', async () => {
-    api.updateOccurrence.mockResolvedValue({ ...BASE_OCC, status: 'skipped' })
+    vi.mocked(api.updateOccurrence).mockResolvedValue({ ...BASE_OCC, status: 'skipped' })
     render(<OccurrenceList />)
     await waitFor(() => screen.getByTitle('Mark this occurrence as skipped'))
     fireEvent.click(screen.getByTitle('Mark this occurrence as skipped'))
@@ -103,7 +104,7 @@ describe('OccurrenceList — mark status', () => {
   })
 
   it('shows Reopen button for completed occurrence', async () => {
-    api.fetchOccurrences.mockResolvedValue([{ ...BASE_OCC, status: 'completed' }])
+    vi.mocked(api.fetchOccurrences).mockResolvedValue([{ ...BASE_OCC, status: 'completed' }])
     render(<OccurrenceList />)
     await waitFor(() => screen.getByDisplayValue('Upcoming + Overdue'))
     fireEvent.change(screen.getByDisplayValue('Upcoming + Overdue'), { target: { value: 'completed' } })
@@ -111,7 +112,7 @@ describe('OccurrenceList — mark status', () => {
   })
 
   it('does NOT show ✓ button for already-completed occurrence', async () => {
-    api.fetchOccurrences.mockResolvedValue([{ ...BASE_OCC, status: 'completed' }])
+    vi.mocked(api.fetchOccurrences).mockResolvedValue([{ ...BASE_OCC, status: 'completed' }])
     render(<OccurrenceList />)
     await waitFor(() => screen.getByDisplayValue('Upcoming + Overdue'))
     fireEvent.change(screen.getByDisplayValue('Upcoming + Overdue'), { target: { value: 'completed' } })
@@ -129,7 +130,7 @@ describe('OccurrenceList — create task', () => {
   })
 
   it('clicking "→ Task" calls createTaskFromOccurrence', async () => {
-    api.createTaskFromOccurrence.mockResolvedValue({})
+    vi.mocked(api.createTaskFromOccurrence).mockResolvedValue({})
     render(<OccurrenceList />)
     await waitFor(() => screen.getByTitle('Create a task from this occurrence'))
     fireEvent.click(screen.getByTitle('Create a task from this occurrence'))
@@ -137,7 +138,7 @@ describe('OccurrenceList — create task', () => {
   })
 
   it('shows "✓ Task" after task is created', async () => {
-    api.createTaskFromOccurrence.mockResolvedValue({})
+    vi.mocked(api.createTaskFromOccurrence).mockResolvedValue({})
     render(<OccurrenceList />)
     await waitFor(() => screen.getByTitle('Create a task from this occurrence'))
     fireEvent.click(screen.getByTitle('Create a task from this occurrence'))

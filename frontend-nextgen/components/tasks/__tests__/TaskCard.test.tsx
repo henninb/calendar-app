@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
+import React from 'react'
 import TaskCard from '../TaskCard'
 import { STATUS_LABELS } from '../helpers'
 
 vi.mock('@dnd-kit/core', () => ({
-  DndContext: ({ children }) => children,
+  DndContext: ({ children }: { children: React.ReactNode }) => children,
   closestCenter: {},
   MouseSensor: class {},
   TouchSensor: class {},
@@ -12,13 +13,13 @@ vi.mock('@dnd-kit/core', () => ({
   useSensors: () => [],
 }))
 vi.mock('@dnd-kit/sortable', () => ({
-  SortableContext: ({ children }) => children,
+  SortableContext: ({ children }: { children: React.ReactNode }) => children,
   verticalListSortingStrategy: {},
   useSortable: () => ({
     attributes: {}, listeners: {}, setNodeRef: () => {},
     transform: null, transition: undefined, isDragging: false,
   }),
-  arrayMove: (arr, from, to) => {
+  arrayMove: (arr: unknown[], from: number, to: number) => {
     const a = [...arr]; a.splice(to, 0, a.splice(from, 1)[0]); return a
   },
 }))
@@ -43,9 +44,9 @@ const BASE_PROPS = {
   categories: [],
 }
 
-function renderCard(taskOverrides = {}, propOverrides = {}) {
+function renderCard(taskOverrides: Record<string, unknown> = {}, propOverrides: Record<string, unknown> = {}) {
   const task = { ...BASE_TASK, ...taskOverrides }
-  const cbs  = {
+  const cbs = {
     onToggleExpand:    vi.fn(),
     onEdit:            vi.fn(),
     onPatchTask:       vi.fn(),
@@ -726,7 +727,7 @@ describe('TaskCard — inline due date editing', () => {
   it('changing the due date input calls onPatchTask', () => {
     const { cbs } = renderCard({ due_date: '2099-01-15' })
     fireEvent.click(screen.getByTitle('Click to set due date'))
-    const input = document.querySelector('input[type="date"]')
+    const input = document.querySelector('input[type="date"]') as HTMLInputElement
     fireEvent.change(input, { target: { value: '2099-06-01' } })
     expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { due_date: '2099-06-01' })
   })
@@ -734,7 +735,7 @@ describe('TaskCard — inline due date editing', () => {
   it('pressing Escape on the due date input closes the editor', () => {
     renderCard({ due_date: '2099-01-15' })
     fireEvent.click(screen.getByTitle('Click to set due date'))
-    const input = document.querySelector('input[type="date"]')
+    const input = document.querySelector('input[type="date"]') as HTMLInputElement
     fireEvent.keyDown(input, { key: 'Escape' })
     expect(document.querySelector('input[type="date"]')).not.toBeInTheDocument()
   })
@@ -742,7 +743,7 @@ describe('TaskCard — inline due date editing', () => {
   it('pressing Enter on the due date input calls onPatchTask', () => {
     const { cbs } = renderCard({ due_date: '2099-01-15' })
     fireEvent.click(screen.getByTitle('Click to set due date'))
-    const input = document.querySelector('input[type="date"]')
+    const input = document.querySelector('input[type="date"]') as HTMLInputElement
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(cbs.onPatchTask).toHaveBeenCalled()
   })
@@ -750,7 +751,7 @@ describe('TaskCard — inline due date editing', () => {
   it('blurring the due date input calls onPatchTask', () => {
     const { cbs } = renderCard({ due_date: '2099-01-15' })
     fireEvent.click(screen.getByTitle('Click to set due date'))
-    const input = document.querySelector('input[type="date"]')
+    const input = document.querySelector('input[type="date"]') as HTMLInputElement
     fireEvent.blur(input)
     expect(cbs.onPatchTask).toHaveBeenCalled()
   })

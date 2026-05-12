@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
+import React from 'react'
 import UndoToast from '../UndoToast'
 
 const TOAST_MS = 8000
 const FADE_MS  = 300
 
-function makeAction(overrides = {}) {
+function makeAction(overrides: Record<string, unknown> = {}) {
   return { id: Date.now(), description: 'Task updated', ...overrides }
 }
 

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useUndoStack } from '../useUndoStack'
 
-function makeEntry(overrides = {}) {
+function makeEntry(overrides: Record<string, unknown> = {}) {
   return {
     description: 'Test action',
     undo: vi.fn().mockResolvedValue(undefined),
@@ -33,8 +33,8 @@ describe('useUndoStack', () => {
     act(() => { result.current.push(entry) })
 
     expect(result.current.lastAction).not.toBeNull()
-    expect(result.current.lastAction.description).toBe('My action')
-    expect(typeof result.current.lastAction.id).toBe('number')
+    expect(result.current.lastAction!.description).toBe('My action')
+    expect(typeof result.current.lastAction!.id).toBe('number')
   })
 
   it('undo pops the top entry, calls its undo fn, and clears lastAction', async () => {
@@ -110,16 +110,16 @@ describe('useUndoStack', () => {
     act(() => { result.current.dismissToast() })
     act(() => { result.current.push(makeEntry({ description: 'second' })) })
 
-    expect(result.current.lastAction.description).toBe('second')
+    expect(result.current.lastAction!.description).toBe('second')
   })
 
   it('each pushed entry gets a unique id', () => {
     const { result } = renderHook(() => useUndoStack())
-    const ids = []
+    const ids: number[] = []
 
     for (let i = 0; i < 5; i++) {
       act(() => { result.current.push(makeEntry()) })
-      ids.push(result.current.lastAction.id)
+      ids.push(result.current.lastAction!.id)
     }
 
     const uniqueIds = new Set(ids)

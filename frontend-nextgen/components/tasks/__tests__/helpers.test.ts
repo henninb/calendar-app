@@ -245,35 +245,35 @@ describe('getDaysBadge', () => {
   it('returns overdue badge for a past due_date', () => {
     const badge = getDaysBadge({ due_date: '2024-01-10', status: 'todo' }, NOW)
     expect(badge).not.toBeNull()
-    expect(badge.text).toBe('5d overdue')
-    expect(badge.cls).toContain('text-red-500')
+    expect(badge!.text).toBe('5d overdue')
+    expect(badge!.cls).toContain('text-red-500')
   })
 
   it('returns "today" badge when due_date is today', () => {
     const badge = getDaysBadge({ due_date: '2024-01-15', status: 'todo' }, NOW)
     expect(badge).not.toBeNull()
-    expect(badge.text).toBe('today')
-    expect(badge.cls).toContain('text-amber-500')
+    expect(badge!.text).toBe('today')
+    expect(badge!.cls).toContain('text-amber-500')
   })
 
   it('returns amber badge for due within 3 days', () => {
     const badge = getDaysBadge({ due_date: '2024-01-17', status: 'todo' }, NOW)
     expect(badge).not.toBeNull()
-    expect(badge.text).toBe('2d')
-    expect(badge.cls).toContain('text-amber-500')
-    expect(badge.cls).not.toContain('font-semibold')
+    expect(badge!.text).toBe('2d')
+    expect(badge!.cls).toContain('text-amber-500')
+    expect(badge!.cls).not.toContain('font-semibold')
   })
 
   it('returns slate badge for due in more than 3 days', () => {
     const badge = getDaysBadge({ due_date: '2024-01-20', status: 'todo' }, NOW)
     expect(badge).not.toBeNull()
-    expect(badge.text).toBe('5d')
-    expect(badge.cls).toContain('text-slate-400')
+    expect(badge!.text).toBe('5d')
+    expect(badge!.cls).toContain('text-slate-400')
   })
 
   it('returns amber badge exactly at the 3-day boundary', () => {
     const badge = getDaysBadge({ due_date: '2024-01-18', status: 'todo' }, NOW)
-    expect(badge.text).toBe('3d')
-    expect(badge.cls).toContain('text-amber-500')
+    expect(badge!.text).toBe('3d')
+    expect(badge!.cls).toContain('text-amber-500')
   })
 })
