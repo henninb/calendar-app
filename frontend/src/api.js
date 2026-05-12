@@ -59,7 +59,7 @@ async function streamSSE(url, onProgress, signal) {
 }
 
 // Default fetch limit — matches backend max of 1000; callers can override via params
-const FETCH_LIMIT = 500
+const FETCH_LIMIT = 1000
 
 export const fetchCategories = (signal) => request('/categories', { signal })
 

@@ -5,7 +5,7 @@ export function parseMinutes(value) {
 
 export const STATUS_OPTIONS = ['todo', 'in_progress', 'done', 'cancelled']
 export const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', done: 'Done', cancelled: 'Cancelled' }
-export const TASK_FETCH_LIMIT = 500
+export const TASK_FETCH_LIMIT = 1000
 
 export const SECTION_DEFS = [
   { key: 'done',          label: 'Done',          hideWhenEmpty: true },

@@ -424,11 +424,11 @@ describe('TaskList — task grouping by due date', () => {
 // ── Section collapse ──────────────────────────────────────────────────────────
 
 describe('TaskList — section collapse/expand', () => {
-  it('collapses the Overdue/Today section when its header is clicked', async () => {
+  it('collapses the Overdue section when its header is clicked', async () => {
     render(<TaskList />)
     await waitFor(() => screen.getByText('Weekly chore'))
 
-    fireEvent.click(screen.getByText('Overdue / Today'))
+    fireEvent.click(screen.getByText('Overdue'))
 
     await waitFor(() =>
       expect(screen.queryByText('Weekly chore')).not.toBeInTheDocument()

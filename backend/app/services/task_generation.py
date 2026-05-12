@@ -180,6 +180,29 @@ def generate_pending_tasks(db: Session) -> int:
     return len(new_tasks)
 
 
+def archive_old_tasks(db: Session, days: int = 7) -> int:
+    """Archive done/cancelled tasks whose due_date (or completed_at) is older than `days` days.
+
+    Returns the count of tasks archived.
+    """
+    cutoff = date.today() - timedelta(days=days)
+    tasks = (
+        db.query(Task)
+        .filter(
+            Task.is_archived.is_(False),
+            Task.status.in_([TaskStatus.done, TaskStatus.cancelled]),
+            Task.due_date <= cutoff,
+        )
+        .all()
+    )
+    for task in tasks:
+        task.is_archived = True
+    if tasks:
+        db.commit()
+    log.info("Archived %d completed/cancelled tasks (due <= %s)", len(tasks), cutoff)
+    return len(tasks)
+
+
 def cancel_tasks_for_occurrence(db: Session, occurrence: Occurrence) -> int:
     """Cancel all non-terminal tasks linked to this occurrence.
 

@@ -45,6 +45,7 @@ async def lifespan(app: FastAPI):
         "ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT now()",
         "UPDATE credit_cards SET created_at = now() WHERE created_at IS NULL",
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS "order" INTEGER NOT NULL DEFAULT 0',
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE",
     ]
     with engine.connect() as conn:
         for stmt in _migrations:

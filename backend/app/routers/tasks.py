@@ -56,7 +56,8 @@ def list_tasks(
     assignee_id: int | None = Query(None),
     category_id: int | None = Query(None),
     occurrence_id: int | None = Query(None),
-    limit: int = Query(200, ge=1, le=1000),
+    include_archived: bool = Query(False),
+    limit: int = Query(1000, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[Task]:
@@ -65,6 +66,8 @@ def list_tasks(
         .options(*_TASK_LOAD_OPTIONS)
         .order_by(Task.due_date.asc().nullslast(), Task.created_at)
     )
+    if not include_archived:
+        q = q.filter(Task.is_archived.is_(False))
     if status:
         q = q.filter(Task.status == status)
     if assignee_id:

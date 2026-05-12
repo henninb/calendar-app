@@ -10,12 +10,19 @@ import { CSS } from '@dnd-kit/utilities'
 import TaskCard from './TaskCard'
 
 const SECTION_ACCENT = {
-  overdue_today: {
+  overdue: {
     border:  'border-l-red-500',
     label:   'text-red-700 dark:text-red-400',
     bg:      'bg-red-50 dark:bg-red-950/30',
     hover:   'hover:bg-red-100/70 dark:hover:bg-red-950/50',
     badge:   'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400',
+  },
+  today: {
+    border:  'border-l-orange-500',
+    label:   'text-orange-700 dark:text-orange-400',
+    bg:      'bg-orange-50 dark:bg-orange-950/30',
+    hover:   'hover:bg-orange-100/70 dark:hover:bg-orange-950/50',
+    badge:   'bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400',
   },
   tomorrow: {
     border:  'border-l-amber-500',
