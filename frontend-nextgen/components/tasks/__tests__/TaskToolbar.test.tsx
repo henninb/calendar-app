@@ -8,7 +8,7 @@ vi.mock('@/lib/api', () => ({
 }))
 
 import * as api from '@/lib/api'
-import TaskToolbar from '../TaskToolbar'
+import TaskToolbar, { type SortField, type SortDir } from '../TaskToolbar'
 import { STATUS_OPTIONS } from '../helpers'
 
 function renderToolbar(overrides: Record<string, unknown> = {}) {
@@ -25,6 +25,9 @@ function renderToolbar(overrides: Record<string, unknown> = {}) {
     categories: [],
     loading: false,
     onRefresh: vi.fn(),
+    sortField: 'due_date' as SortField,
+    sortDir: 'asc' as SortDir,
+    onSort: vi.fn(),
     ...overrides,
   }
   return render(<TaskToolbar {...props} />)

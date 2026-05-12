@@ -27,6 +27,9 @@ function renderWithToolbar() {
       categories={[]}
       loading={false}
       onRefresh={vi.fn()}
+      sortField="due_date"
+      sortDir="asc"
+      onSort={vi.fn()}
     />
   )
 }

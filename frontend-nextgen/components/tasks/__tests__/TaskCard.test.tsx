@@ -790,7 +790,7 @@ describe('TaskCard — inline estimated minutes editing', () => {
   it('blurring the minutes input calls onPatchTask', () => {
     const { cbs } = renderCard({})
     fireEvent.click(screen.getByTitle('Click to edit duration'))
-    const input = screen.getByPlaceholderText('min')
+    const input = screen.getByPlaceholderText('e.g. 1h30m')
     fireEvent.change(input, { target: { value: '45' } })
     fireEvent.blur(input)
     expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { estimated_minutes: 45 })
@@ -799,7 +799,7 @@ describe('TaskCard — inline estimated minutes editing', () => {
   it('pressing Enter in the minutes input calls onPatchTask', () => {
     const { cbs } = renderCard({})
     fireEvent.click(screen.getByTitle('Click to edit duration'))
-    const input = screen.getByPlaceholderText('min')
+    const input = screen.getByPlaceholderText('e.g. 1h30m')
     fireEvent.change(input, { target: { value: '30' } })
     fireEvent.keyDown(input, { key: 'Enter', target: { value: '30' } })
     expect(cbs.onPatchTask).toHaveBeenCalled()
@@ -808,8 +808,8 @@ describe('TaskCard — inline estimated minutes editing', () => {
   it('pressing Escape on the minutes input closes it', () => {
     renderCard({})
     fireEvent.click(screen.getByTitle('Click to edit duration'))
-    fireEvent.keyDown(screen.getByPlaceholderText('min'), { key: 'Escape' })
-    expect(screen.queryByPlaceholderText('min')).not.toBeInTheDocument()
+    fireEvent.keyDown(screen.getByPlaceholderText('e.g. 1h30m'), { key: 'Escape' })
+    expect(screen.queryByPlaceholderText('e.g. 1h30m')).not.toBeInTheDocument()
   })
 })
 

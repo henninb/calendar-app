@@ -165,7 +165,7 @@ describe('TaskPanel — create flow', () => {
     renderPanel({ mode: 'create', onCreateTask })
 
     fireEvent.change(screen.getByPlaceholderText('Task title'), { target: { value: 'Quick task' } })
-    const minutesInput = screen.getByPlaceholderText('—')
+    const minutesInput = screen.getByPlaceholderText('e.g. 1h 30m')
     fireEvent.change(minutesInput, { target: { value: '30' } })
     fireEvent.keyDown(minutesInput, { key: 'Enter' })
 

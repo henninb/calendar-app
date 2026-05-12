@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { STATUS_OPTIONS, STATUS_LABELS, localDate } from './helpers'
+import { STATUS_OPTIONS, STATUS_LABELS, localDate, parseHumanMinutes, formatMinutes } from './helpers'
 import type { Task, Person, Category, Subtask, TaskStatus, TaskPriority, RecurrenceOption } from './helpers'
 
 const RECURRENCE_OPTIONS: { value: RecurrenceOption; label: string }[] = [
@@ -38,7 +38,7 @@ interface TaskForm {
   priority: TaskPriority
   status: TaskStatus
   due_date: string
-  estimated_minutes: number | string
+  estimated_minutes_text: string
   assignee_id: number | string
   category_id: number | string
   recurrence: RecurrenceOption
@@ -139,7 +139,7 @@ export default function TaskPanel({
   onPatchSubtask, onAddSubtask, onDeleteSubtask,
 }: TaskPanelProps) {
   const isCreate = mode === 'create'
-  const [form, setForm]                 = useState<TaskForm>({ title: '', description: '', priority: 'medium', status: 'todo', due_date: '', estimated_minutes: '', assignee_id: '', category_id: '', recurrence: 'none' })
+  const [form, setForm]                 = useState<TaskForm>({ title: '', description: '', priority: 'medium', status: 'todo', due_date: '', estimated_minutes_text: '', assignee_id: '', category_id: '', recurrence: 'none' })
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
   const [editingSubtask, setEditingSubtask]   = useState<number | null>(null)
   const [editSubForm, setEditSubForm]         = useState<SubtaskEditForm>({ title: '', due_date: '' })
@@ -149,18 +149,18 @@ export default function TaskPanel({
   useEffect(() => {
     if (!open) return
     if (isCreate) {
-      setForm({ title: '', description: '', priority: 'medium', status: 'todo', due_date: localDate(), estimated_minutes: '', assignee_id: '', category_id: '', recurrence: 'none' })
+      setForm({ title: '', description: '', priority: 'medium', status: 'todo', due_date: localDate(), estimated_minutes_text: '', assignee_id: '', category_id: '', recurrence: 'none' })
     } else if (task) {
       setForm({
-        title:              task.title ?? '',
-        description:        task.description ?? '',
-        priority:           task.priority ?? 'medium',
-        status:             task.status ?? 'todo',
-        due_date:           task.due_date ?? '',
-        estimated_minutes:  task.estimated_minutes ?? '',
-        assignee_id:        task.assignee_id ?? '',
-        category_id:        task.category_id ?? '',
-        recurrence:         (task.recurrence as RecurrenceOption) ?? 'none',
+        title:                  task.title ?? '',
+        description:            task.description ?? '',
+        priority:               task.priority ?? 'medium',
+        status:                 task.status ?? 'todo',
+        due_date:               task.due_date ?? '',
+        estimated_minutes_text: formatMinutes(task.estimated_minutes) ?? '',
+        assignee_id:            task.assignee_id ?? '',
+        category_id:            task.category_id ?? '',
+        recurrence:             (task.recurrence as RecurrenceOption) ?? 'none',
       })
     }
     setNewSubtaskTitle('')
@@ -191,7 +191,7 @@ export default function TaskPanel({
       priority:           form.priority,
       status:             form.status,
       due_date:           form.due_date || null,
-      estimated_minutes:  form.estimated_minutes ? parseInt(String(form.estimated_minutes), 10) : null,
+      estimated_minutes:  parseHumanMinutes(String(form.estimated_minutes_text)),
       assignee_id:        form.assignee_id ? parseInt(String(form.assignee_id), 10) : null,
       category_id:        form.category_id ? parseInt(String(form.category_id), 10) : null,
       recurrence:         form.recurrence,
@@ -325,13 +325,12 @@ export default function TaskPanel({
               />
             </div>
             <div>
-              <label className={labelCls}>Est. Minutes</label>
+              <label className={labelCls}>Duration</label>
               <input
-                type="number"
-                min="1"
-                value={form.estimated_minutes}
-                onChange={e => set('estimated_minutes', e.target.value)}
-                placeholder="—"
+                type="text"
+                value={form.estimated_minutes_text}
+                onChange={e => set('estimated_minutes_text', e.target.value)}
+                placeholder="e.g. 1h 30m"
                 className={fieldCls}
               />
             </div>

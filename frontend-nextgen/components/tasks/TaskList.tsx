@@ -12,10 +12,11 @@ import {
   undoDescription, reversePayload,
 } from './helpers'
 import type { Task, Subtask, Person, Category, TaskStatus } from './helpers'
-import TaskToolbar from './TaskToolbar'
+import TaskToolbar, { type SortField, type SortDir } from './TaskToolbar'
 import TaskSection from './TaskSection'
 import TaskPanel from './TaskPanel'
 import UndoToast from './UndoToast'
+import CommandPalette from './CommandPalette'
 import { useUndoStack } from './useUndoStack'
 
 interface PanelState {
@@ -38,6 +39,10 @@ export default function TaskList() {
   const [loading, setLoading]               = useState(true)
   const [error, setError]                   = useState<string | null>(null)
   const [dismissingIds, setDismissingIds]   = useState<Set<number>>(new Set())
+  const [sortField, setSortField]           = useState<SortField>('due_date')
+  const [sortDir, setSortDir]               = useState<SortDir>('asc')
+  const [focusedTaskId, setFocusedTaskId]   = useState<number | null>(null)
+  const [paletteOpen, setPaletteOpen]       = useState(false)
 
   const tasksRef = useRef<Task[]>(tasks)
   tasksRef.current = tasks
@@ -49,6 +54,10 @@ export default function TaskList() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault()
         undo()
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        setPaletteOpen(o => !o)
       }
     }
     document.addEventListener('keydown', handle)
@@ -117,8 +126,11 @@ export default function TaskList() {
   const week1end = localDate(7)
   const week2end = localDate(14)
 
+  const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 }
+
   const visible = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
+    const dir = sortDir === 'asc' ? 1 : -1
     return tasks
       .filter(t => {
         if (filterStatus.length && !filterStatus.includes(t.status)) return false
@@ -129,12 +141,19 @@ export default function TaskList() {
         return true
       })
       .sort((a, b) => {
+        if (sortField === 'priority') {
+          return dir * ((PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1))
+        }
+        if (sortField === 'created_at') {
+          return dir * ((a.created_at ?? '').localeCompare(b.created_at ?? ''))
+        }
+        // due_date: nulls last regardless of direction
         if (!a.due_date && !b.due_date) return 0
         if (!a.due_date) return 1
         if (!b.due_date) return -1
-        return a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0
+        return dir * (a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0)
       })
-  }, [tasks, filterStatus, filterAssignee, filterCategory, searchQuery])
+  }, [tasks, filterStatus, filterAssignee, filterCategory, searchQuery, sortField, sortDir])
 
   const grouped = useMemo(() => {
     const result: Record<string, Task[]> = {
@@ -171,6 +190,11 @@ export default function TaskList() {
   const toggleStatus = useCallback((s: TaskStatus) =>
     setFilterStatus(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]),
   [])
+
+  const handleSort = useCallback((field: SortField, dir: SortDir) => {
+    setSortField(field)
+    setSortDir(dir)
+  }, [])
 
   const toggleSection = useCallback((key: string, isEmpty: boolean) =>
     setCollapsedSections(p => {
@@ -386,6 +410,47 @@ export default function TaskList() {
     }
   }, [])
 
+  useEffect(() => {
+    function handle(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+
+      const orderedIds = SECTION_DEFS
+        .flatMap(def => grouped[def.key] ?? [])
+        .map(t => t.id)
+
+      if (e.key === 'ArrowDown' || e.key === 'j') {
+        e.preventDefault()
+        setFocusedTaskId(prev => {
+          if (prev === null || !orderedIds.includes(prev)) return orderedIds[0] ?? null
+          const idx = orderedIds.indexOf(prev)
+          return orderedIds[Math.min(idx + 1, orderedIds.length - 1)]
+        })
+      } else if (e.key === 'ArrowUp' || e.key === 'k') {
+        e.preventDefault()
+        setFocusedTaskId(prev => {
+          if (prev === null || !orderedIds.includes(prev)) return orderedIds[orderedIds.length - 1] ?? null
+          const idx = orderedIds.indexOf(prev)
+          return orderedIds[Math.max(idx - 1, 0)]
+        })
+      } else if (e.key === ' ' && focusedTaskId !== null) {
+        e.preventDefault()
+        const t = tasksRef.current.find(x => x.id === focusedTaskId)
+        if (t && t.status !== 'done' && t.status !== 'cancelled') {
+          patchTask(focusedTaskId, { status: 'done' })
+        }
+      } else if (e.key === 'Enter' && focusedTaskId !== null) {
+        e.preventDefault()
+        toggleExpand(focusedTaskId)
+      } else if (e.key === 'Escape') {
+        setFocusedTaskId(null)
+      }
+    }
+    document.addEventListener('keydown', handle)
+    return () => document.removeEventListener('keydown', handle)
+  }, [grouped, focusedTaskId, patchTask, toggleExpand])
+
   return (
     <div className="max-w-4xl mx-auto">
       <TaskToolbar
@@ -401,6 +466,9 @@ export default function TaskList() {
         categories={categories}
         loading={loading}
         onRefresh={load}
+        sortField={sortField}
+        sortDir={sortDir}
+        onSort={handleSort}
       />
 
       {error && (
@@ -474,6 +542,8 @@ export default function TaskList() {
                 persons={persons}
                 categories={categories}
                 dismissingIds={dismissingIds}
+                focusedTaskId={focusedTaskId}
+                onOpenCreate={openCreate}
               />
             )
           })}
@@ -498,6 +568,15 @@ export default function TaskList() {
         action={lastAction}
         onUndo={undo}
         onDismiss={dismissToast}
+      />
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        tasks={tasks}
+        onOpenCreate={() => { setPaletteOpen(false); openCreate() }}
+        onEditTask={(task) => { setPaletteOpen(false); openEdit(task) }}
+        onPatchTask={patchTask}
       />
 
       <button

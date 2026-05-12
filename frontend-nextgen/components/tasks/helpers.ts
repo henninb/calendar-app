@@ -62,6 +62,33 @@ export function parseMinutes(value: string | number): number | null {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
+export function parseHumanMinutes(value: string): number | null {
+  const s = value.trim()
+  if (!s) return null
+  // "2h30m", "2h 30m", "2.5h", "2h"
+  const hm = s.match(/^(\d+(?:\.\d+)?)\s*h\s*(?:(\d+)\s*m?)?$/i)
+  if (hm) {
+    const total = Math.round(parseFloat(hm[1]) * 60) + (hm[2] ? parseInt(hm[2], 10) : 0)
+    return total > 0 ? total : null
+  }
+  // "90m" or plain "90"
+  const mo = s.match(/^(\d+)\s*m?$/i)
+  if (mo) {
+    const n = parseInt(mo[1], 10)
+    return n > 0 ? n : null
+  }
+  return null
+}
+
+export function formatMinutes(mins: number | null | undefined): string | null {
+  if (!mins || mins <= 0) return null
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  if (h && m) return `${h}h ${m}m`
+  if (h) return `${h}h`
+  return `${m}m`
+}
+
 export const STATUS_OPTIONS: TaskStatus[] = ['todo', 'in_progress', 'done', 'cancelled']
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: 'To Do',

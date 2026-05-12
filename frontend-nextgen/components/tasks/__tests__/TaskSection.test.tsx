@@ -119,7 +119,7 @@ describe('TaskSection', () => {
 
   it('shows "No tasks" empty-state when expanded with no tasks', () => {
     renderSection({ tasks: [], collapsed: false })
-    expect(screen.getByText('No tasks')).toBeInTheDocument()
+    expect(screen.getByText('No tasks in this section')).toBeInTheDocument()
   })
 
   it('shows "Needs attention" for overdue_today section when count > 0', () => {

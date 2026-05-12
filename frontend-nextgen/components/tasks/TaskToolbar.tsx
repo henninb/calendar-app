@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { CloudUpload, SlidersHorizontal, RefreshCw, X } from 'lucide-react'
+import { CloudUpload, SlidersHorizontal, RefreshCw, X, ArrowUpDown } from 'lucide-react'
 import { STATUS_OPTIONS, STATUS_LABELS } from './helpers'
 import type { TaskStatus, Person, Category } from './helpers'
 import { gcalAuthStatus, syncToGtasks } from '@/lib/api'
@@ -136,6 +136,15 @@ function FilterPopover({
   )
 }
 
+export type SortField = 'due_date' | 'priority' | 'created_at'
+export type SortDir   = 'asc' | 'desc'
+
+const SORT_LABELS: Record<SortField, string> = {
+  due_date:   'Due date',
+  priority:   'Priority',
+  created_at: 'Created',
+}
+
 interface TaskToolbarProps {
   searchQuery: string
   onSearch: (query: string) => void
@@ -149,6 +158,9 @@ interface TaskToolbarProps {
   categories: Category[]
   loading: boolean
   onRefresh: () => void
+  sortField: SortField
+  sortDir: SortDir
+  onSort: (field: SortField, dir: SortDir) => void
 }
 
 export default function TaskToolbar({
@@ -164,8 +176,22 @@ export default function TaskToolbar({
   categories,
   loading,
   onRefresh,
+  sortField,
+  sortDir,
+  onSort,
 }: TaskToolbarProps) {
   const [filterOpen, setFilterOpen] = useState(false)
+  const [sortOpen, setSortOpen]     = useState(false)
+  const sortBtnRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!sortOpen) return
+    function handle(e: MouseEvent) {
+      if (sortBtnRef.current && !sortBtnRef.current.contains(e.target as Node)) setSortOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [sortOpen])
 
   const [gtasksSyncing, setGtasksSyncing] = useState(false)
   const [gcalAuth, setGcalAuth]           = useState<boolean | null>(null)
@@ -298,6 +324,52 @@ export default function TaskToolbar({
               categories={categories}
               onClose={() => setFilterOpen(false)}
             />
+          )}
+        </div>
+
+        <div ref={sortBtnRef} className="relative">
+          <button
+            onClick={() => setSortOpen(o => !o)}
+            title="Sort tasks"
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium transition-all
+              ${sortOpen || sortField !== 'due_date'
+                ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/25'
+                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+              }`}
+          >
+            <ArrowUpDown size={14} />
+            {SORT_LABELS[sortField]}
+          </button>
+          {sortOpen && (
+            <div className="absolute right-0 top-full mt-2 z-30 w-52
+              bg-white dark:bg-slate-900
+              border border-slate-200 dark:border-slate-700
+              rounded-2xl shadow-2xl p-3 space-y-1">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-1 mb-2">Sort by</p>
+              {(['due_date', 'priority', 'created_at'] as SortField[]).map(field => (
+                <div key={field} className="flex items-center gap-1">
+                  <button
+                    onClick={() => { onSort(field, sortDir); setSortOpen(false) }}
+                    className={`flex-1 text-left px-3 py-1.5 rounded-lg text-sm transition-colors
+                      ${sortField === field
+                        ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 font-medium'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                  >
+                    {SORT_LABELS[field]}
+                  </button>
+                  {sortField === field && (
+                    <button
+                      onClick={() => { onSort(field, sortDir === 'asc' ? 'desc' : 'asc'); setSortOpen(false) }}
+                      title={sortDir === 'asc' ? 'Ascending — click for descending' : 'Descending — click for ascending'}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors text-xs font-bold"
+                    >
+                      {sortDir === 'asc' ? '↑' : '↓'}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
 

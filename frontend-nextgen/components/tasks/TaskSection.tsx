@@ -152,6 +152,8 @@ interface TaskSectionProps {
   persons: Person[]
   categories: Category[]
   dismissingIds?: Set<number>
+  focusedTaskId?: number | null
+  onOpenCreate?: () => void
 }
 
 export default function TaskSection({
@@ -173,6 +175,8 @@ export default function TaskSection({
   persons,
   categories,
   dismissingIds = new Set(),
+  focusedTaskId = null,
+  onOpenCreate,
 }: TaskSectionProps) {
   const count = tasks.length
   const accent = SECTION_ACCENT[sectionKey] ?? SECTION_ACCENT.later
@@ -261,6 +265,7 @@ export default function TaskSection({
                         persons={persons}
                         categories={categories}
                         dismissing={dismissing}
+                        focused={focusedTaskId === task.id}
                       />
                     </div>
                   </SortableTaskWrapper>
@@ -273,9 +278,23 @@ export default function TaskSection({
 
       {!collapsed && count === 0 && (
         <div className="border border-t-0 border-slate-200 dark:border-slate-700/50 rounded-b-xl
-          bg-slate-50/50 dark:bg-slate-900/30 px-4 py-6 text-center
-          text-sm text-slate-400 dark:text-slate-500 italic">
-          No tasks
+          bg-slate-50/50 dark:bg-slate-900/30 px-4 py-5 flex items-center justify-between gap-3">
+          <span className="text-sm text-slate-400 dark:text-slate-500">
+            No tasks in this section
+          </span>
+          {onOpenCreate && (
+            <button
+              onClick={onOpenCreate}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold
+                text-blue-600 dark:text-blue-400
+                bg-blue-50 dark:bg-blue-500/10
+                hover:bg-blue-100 dark:hover:bg-blue-500/20
+                border border-blue-200 dark:border-blue-500/25
+                transition-colors"
+            >
+              + Add task
+            </button>
+          )}
         </div>
       )}
     </div>

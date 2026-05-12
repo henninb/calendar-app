@@ -10,7 +10,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  isOverdue, fmt, withAlpha, parseMinutes,
+  isOverdue, fmt, withAlpha, parseHumanMinutes, formatMinutes,
   STATUS_LABELS, STATUS_OPTIONS, getDaysBadge,
 } from './helpers'
 import type { Task, Subtask, Person, Category, TaskStatus, TaskPriority } from './helpers'
@@ -388,6 +388,7 @@ interface TaskCardProps {
   persons: Person[]
   categories: Category[]
   dismissing?: boolean
+  focused?: boolean
 }
 
 export default function TaskCard({
@@ -404,6 +405,7 @@ export default function TaskCard({
   persons,
   categories,
   dismissing = false,
+  focused = false,
 }: TaskCardProps) {
   const [editingField, setEditingField] = useState<FieldKey | null>(null)
   const [showSubtaskConfirm, setShowSubtaskConfirm] = useState(false)
@@ -547,6 +549,7 @@ export default function TaskCard({
         ${overdue ? 'bg-red-50/40 dark:bg-red-950/20' : ''}
         ${isDimmed ? 'opacity-55' : ''}
         ${dismissing ? 'opacity-0 scale-x-[0.98] -translate-y-1 pointer-events-none' : ''}
+        ${focused ? 'ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-slate-900' : ''}
       `}
     >
       <div className="px-5 py-4">
@@ -750,30 +753,29 @@ export default function TaskCard({
 
             <InlineMetaField
               icon="⏱"
-              label={task.estimated_minutes ? `${task.estimated_minutes}m` : 'Add duration'}
+              label={formatMinutes(task.estimated_minutes) ?? 'Add duration'}
               title="Click to edit duration"
               editing={editingField === FIELDS.ESTIMATED_MINUTES}
               onStartEdit={!isDimmed ? () => setEditingField(FIELDS.ESTIMATED_MINUTES) : undefined}
               ghost={!task.estimated_minutes}
             >
               <input
-                type="number"
+                type="text"
                 autoFocus
-                min="1"
-                defaultValue={task.estimated_minutes ?? ''}
-                placeholder="min"
+                defaultValue={formatMinutes(task.estimated_minutes) ?? ''}
+                placeholder="e.g. 1h30m"
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
-                    onPatchTask(task.id, { estimated_minutes: parseMinutes((e.target as HTMLInputElement).value) })
+                    onPatchTask(task.id, { estimated_minutes: parseHumanMinutes((e.target as HTMLInputElement).value) })
                     setEditingField(null)
                   }
                   if (e.key === 'Escape') setEditingField(null)
                 }}
                 onBlur={e => {
-                  onPatchTask(task.id, { estimated_minutes: parseMinutes(e.target.value) })
+                  onPatchTask(task.id, { estimated_minutes: parseHumanMinutes(e.target.value) })
                   setEditingField(null)
                 }}
-                className={`w-20 ${inlineCls}`}
+                className={`w-24 ${inlineCls}`}
               />
             </InlineMetaField>
           </div>
