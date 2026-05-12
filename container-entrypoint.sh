@@ -12,26 +12,26 @@ cd "$ROOT/backend"
 uvicorn app.main:app --host "$BACKEND_HOST" --port "$BACKEND_PORT" &
 BACKEND_PID=$!
 
-# Wait for the backend to accept connections before starting Vite
+# Wait for the backend to accept connections before starting Next.js
 echo "Waiting for backend on $BACKEND_HOST:$BACKEND_PORT…"
 until python3 -c "import socket; s=socket.create_connection(('$BACKEND_HOST', $BACKEND_PORT), timeout=1); s.close()" 2>/dev/null; do
     sleep 0.5
 done
 echo "Backend ready."
 
-# Vite dev server — exposed on FRONTEND_PORT, proxies /api → localhost:BACKEND_PORT
-cd "$ROOT/frontend"
-BACKEND_PORT="$BACKEND_PORT" npx vite --host :: --port "$FRONTEND_PORT" &
-VITE_PID=$!
+# Next.js server — exposed on FRONTEND_PORT, proxies /api → localhost:BACKEND_PORT
+cd "$ROOT/frontend-nextgen"
+BACKEND_PORT="$BACKEND_PORT" npx next start --hostname "::" --port "$FRONTEND_PORT" &
+NEXT_PID=$!
 
 # Forward SIGTERM/SIGINT to children so they shut down cleanly.
 # Bash running as PID 1 ignores SIGTERM unless explicitly trapped.
 _shutdown() {
-    kill -TERM "$BACKEND_PID" "$VITE_PID" 2>/dev/null || true
-    wait "$BACKEND_PID" "$VITE_PID" 2>/dev/null || true
+    kill -TERM "$BACKEND_PID" "$NEXT_PID" 2>/dev/null || true
+    wait "$BACKEND_PID" "$NEXT_PID" 2>/dev/null || true
     exit 0
 }
 trap _shutdown TERM INT
 
 # Exit the container if either process dies
-wait -n $BACKEND_PID $VITE_PID
+wait -n $BACKEND_PID $NEXT_PID

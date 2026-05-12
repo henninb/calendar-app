@@ -19,12 +19,16 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r backend/requirements.txt
 
 # Node dependencies
-COPY frontend/package*.json ./frontend/
-RUN cd frontend && npm install
+COPY frontend-nextgen/package*.json ./frontend-nextgen/
+RUN cd frontend-nextgen && npm ci
 
 # Application source
 COPY backend/ ./backend/
-COPY frontend/ ./frontend/
+COPY frontend-nextgen/ ./frontend-nextgen/
+
+# Build Next.js for production (BACKEND_PORT baked in as default; overridable at runtime)
+ARG BACKEND_PORT=9000
+RUN cd frontend-nextgen && BACKEND_PORT=${BACKEND_PORT} npm run build
 
 COPY container-entrypoint.sh ./
 RUN chmod +x container-entrypoint.sh && \

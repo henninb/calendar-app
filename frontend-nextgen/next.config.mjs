@@ -5,6 +5,10 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        source: '/health',
+        destination: `http://localhost:${BACKEND_PORT}/health`,
+      },
+      {
         source: '/api/:path*',
         destination: `http://localhost:${BACKEND_PORT}/api/:path*`,
       },
