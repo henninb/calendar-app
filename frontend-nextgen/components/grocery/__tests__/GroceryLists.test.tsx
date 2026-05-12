@@ -135,4 +135,82 @@ describe('GroceryLists — error state', () => {
     render(<GroceryLists stores={STORES} catalogItems={[]} />)
     await waitFor(() => expect(screen.getByText('Network error')).toBeInTheDocument())
   })
+
+  it('dismisses error banner when ✕ is clicked', async () => {
+    vi.mocked(api.fetchGroceryLists).mockRejectedValue(new Error('Network error'))
+    render(<GroceryLists stores={STORES} catalogItems={[]} />)
+    await waitFor(() => expect(screen.getByText('Network error')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByText('✕')[0])
+    expect(screen.queryByText('Network error')).not.toBeInTheDocument()
+  })
+})
+
+describe('GroceryLists — create list', () => {
+  it('opens create panel when FAB is clicked', async () => {
+    render(<GroceryLists stores={STORES} catalogItems={[]} />)
+    await waitFor(() => expect(screen.getByText('Weekly Run')).toBeInTheDocument())
+    fireEvent.click(screen.getByTitle('New shopping list'))
+    expect(screen.getByText('New Shopping List')).toBeInTheDocument()
+  })
+
+  it('calls createGroceryList and adds list to state', async () => {
+    render(<GroceryLists stores={STORES} catalogItems={[]} />)
+    await waitFor(() => expect(screen.getByText('Weekly Run')).toBeInTheDocument())
+    fireEvent.click(screen.getByTitle('New shopping list'))
+    fireEvent.change(screen.getByPlaceholderText('e.g. Weekly ALDI Run'), { target: { value: 'My New List' } })
+    fireEvent.click(screen.getByText('Create List'))
+    await waitFor(() => expect(api.createGroceryList).toHaveBeenCalled())
+  })
+})
+
+describe('GroceryLists — edit list', () => {
+  it('opens edit panel when Edit is clicked', async () => {
+    render(<GroceryLists stores={STORES} catalogItems={[]} />)
+    await waitFor(() => expect(screen.getByText('Weekly Run')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByTitle('Edit list')[0])
+    expect(screen.getByText('Edit List')).toBeInTheDocument()
+  })
+})
+
+describe('GroceryLists — navigate to detail', () => {
+  it('shows list detail when a list card is clicked', async () => {
+    render(<GroceryLists stores={STORES} catalogItems={[]} />)
+    await waitFor(() => expect(screen.getByText('Quick Trip')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Quick Trip'))
+    await waitFor(() =>
+      expect(screen.getByText('← Back to Lists')).toBeInTheDocument()
+    )
+  })
+
+  it('returns to list view when back button is clicked', async () => {
+    render(<GroceryLists stores={STORES} catalogItems={[]} />)
+    await waitFor(() => expect(screen.getByText('Quick Trip')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Quick Trip'))
+    await waitFor(() => expect(screen.getByText('← Back to Lists')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('← Back to Lists'))
+    await waitFor(() => expect(screen.getByText('Weekly Run')).toBeInTheDocument())
+  })
+})
+
+describe('GroceryLists — list card details', () => {
+  it('shows shopping date on list card', async () => {
+    render(<GroceryLists stores={STORES} catalogItems={[]} />)
+    await waitFor(() => expect(screen.getByText(/2026-05-10/)).toBeInTheDocument())
+  })
+
+  it('shows item progress bar when total > 0', async () => {
+    render(<GroceryLists stores={STORES} catalogItems={[]} />)
+    await waitFor(() => expect(screen.getByText('Weekly Run')).toBeInTheDocument())
+    const progressBar = document.querySelector('.bg-emerald-500')
+    expect(progressBar).toBeInTheDocument()
+  })
+})
+
+describe('GroceryLists — refresh button', () => {
+  it('calls fetchGroceryLists again when Refresh is clicked', async () => {
+    render(<GroceryLists stores={STORES} catalogItems={[]} />)
+    await waitFor(() => expect(screen.getByText('Weekly Run')).toBeInTheDocument())
+    fireEvent.click(screen.getByText(/↺ Refresh/))
+    await waitFor(() => expect(api.fetchGroceryLists).toHaveBeenCalledTimes(2))
+  })
 })

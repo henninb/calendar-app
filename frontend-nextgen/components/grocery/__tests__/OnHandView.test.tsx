@@ -146,4 +146,106 @@ describe('OnHandView — delete item', () => {
     fireEvent.click(screen.getAllByTitle('Remove from catalog')[0])
     expect(api.deleteGroceryItem).not.toHaveBeenCalled()
   })
+
+  it('shows error when deleteGroceryItem fails', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    vi.mocked(api.deleteGroceryItem).mockRejectedValue(new Error('Delete catalog error'))
+    render(<OnHandView catalogItems={CATALOG_ITEMS} stores={STORES} onCatalogChange={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Apples')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByTitle('Remove from catalog')[0])
+    await waitFor(() => expect(screen.getByText('Delete catalog error')).toBeInTheDocument())
+  })
+})
+
+describe('OnHandView — load error', () => {
+  it('shows error when fetchOnHand fails', async () => {
+    vi.mocked(api.fetchOnHand).mockRejectedValue(new Error('Load error'))
+    render(<OnHandView catalogItems={CATALOG_ITEMS} stores={STORES} onCatalogChange={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Load error')).toBeInTheDocument())
+  })
+})
+
+describe('OnHandView — inline edit row', () => {
+  it('opens editing UI when Edit button is clicked', async () => {
+    render(<OnHandView catalogItems={CATALOG_ITEMS} stores={STORES} onCatalogChange={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Apples')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByTitle('Edit item')[0])
+    expect(screen.getByDisplayValue('Apples')).toBeInTheDocument()
+  })
+
+  it('calls updateGroceryItem and upsertOnHand when Save is clicked', async () => {
+    render(<OnHandView catalogItems={CATALOG_ITEMS} stores={STORES} onCatalogChange={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Apples')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByTitle('Edit item')[0])
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateGroceryItem).toHaveBeenCalledWith(1, expect.any(Object)))
+    await waitFor(() => expect(api.upsertOnHand).toHaveBeenCalledWith(1, expect.any(Object)))
+  })
+
+  it('hides editing UI when Cancel is clicked', async () => {
+    render(<OnHandView catalogItems={CATALOG_ITEMS} stores={STORES} onCatalogChange={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Apples')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByTitle('Edit item')[0])
+    expect(screen.getByDisplayValue('Apples')).toBeInTheDocument()
+    // AddItemPanel Cancel is first (always in DOM); edit row Cancel is second
+    const cancelBtns = screen.getAllByText('Cancel')
+    fireEvent.click(cancelBtns[cancelBtns.length - 1])
+    expect(screen.queryByDisplayValue('Apples')).not.toBeInTheDocument()
+  })
+
+  it('shows error when saveEdit fails', async () => {
+    vi.mocked(api.updateGroceryItem).mockRejectedValue(new Error('Save error'))
+    render(<OnHandView catalogItems={CATALOG_ITEMS} stores={STORES} onCatalogChange={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Apples')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByTitle('Edit item')[0])
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(screen.getByText('Save error')).toBeInTheDocument())
+  })
+
+  it('opens editing UI on quantity click', async () => {
+    render(<OnHandView catalogItems={CATALOG_ITEMS} stores={STORES} onCatalogChange={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Apples')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('3'))
+    expect(screen.getByDisplayValue('Apples')).toBeInTheDocument()
+  })
+
+  it('saves edit via Enter key on name input', async () => {
+    render(<OnHandView catalogItems={CATALOG_ITEMS} stores={STORES} onCatalogChange={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Apples')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByTitle('Edit item')[0])
+    fireEvent.keyDown(screen.getByDisplayValue('Apples'), { key: 'Enter' })
+    await waitFor(() => expect(api.updateGroceryItem).toHaveBeenCalled())
+  })
+
+  it('cancels edit via Escape key on name input', async () => {
+    render(<OnHandView catalogItems={CATALOG_ITEMS} stores={STORES} onCatalogChange={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Apples')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByTitle('Edit item')[0])
+    fireEvent.keyDown(screen.getByDisplayValue('Apples'), { key: 'Escape' })
+    expect(screen.queryByDisplayValue('Apples')).not.toBeInTheDocument()
+  })
+})
+
+describe('OnHandView — create item error', () => {
+  it('shows error when createGroceryItem fails', async () => {
+    vi.mocked(api.createGroceryItem).mockRejectedValue(new Error('Create error'))
+    render(<OnHandView catalogItems={CATALOG_ITEMS} stores={STORES} onCatalogChange={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Apples')).toBeInTheDocument())
+    fireEvent.click(screen.getByTitle('Add catalog item'))
+    fireEvent.change(screen.getByPlaceholderText('e.g. Bone Broth'), { target: { value: 'NewItem' } })
+    fireEvent.click(screen.getByText('Save Item'))
+    await waitFor(() => expect(screen.getByText('Create error')).toBeInTheDocument())
+  })
+})
+
+describe('OnHandView — error banner dismiss', () => {
+  it('dismisses error banner when ✕ is clicked', async () => {
+    vi.mocked(api.fetchOnHand).mockRejectedValue(new Error('Load error'))
+    render(<OnHandView catalogItems={[]} stores={STORES} onCatalogChange={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Load error')).toBeInTheDocument())
+    // With no catalog items the panel ✕ is first, error banner ✕ is second
+    const xBtns = screen.getAllByText('✕')
+    fireEvent.click(xBtns[xBtns.length - 1])
+    expect(screen.queryByText('Load error')).not.toBeInTheDocument()
+  })
 })

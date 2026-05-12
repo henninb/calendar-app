@@ -420,6 +420,17 @@ describe('TaskList — task grouping by due date', () => {
     )
     expect(screen.queryByText(/All status filters are off/)).not.toBeInTheDocument()
   })
+
+  it('places a task due today in the Today section', async () => {
+    const today = new Date()
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    vi.mocked(api.fetchTasks).mockResolvedValue([{ ...baseTask, due_date: todayStr }])
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Today'))
+    fireEvent.click(screen.getByText('Today'))
+    fireEvent.click(screen.getByText('Today'))
+    await waitFor(() => screen.getByText('Weekly chore'))
+  })
 })
 
 // ── Section collapse ──────────────────────────────────────────────────────────

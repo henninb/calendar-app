@@ -744,3 +744,118 @@ def test_category_color_map_values_are_strings_1_to_11():
     for key, val in CATEGORY_COLOR_MAP.items():
         assert val.isdigit(), f"{key!r} has non-digit colorId {val!r}"
         assert 1 <= int(val) <= 11, f"{key!r} colorId {val!r} out of range"
+
+
+# ── exchange_code exception paths (lines 119-120, 123-124) ───────────────────
+
+def test_exchange_code_handles_invalid_json_in_verifier_file(tmp_path):
+    """Lines 119-120: except handler when reading verifier file with bad JSON."""
+    gcal_svc._pending_flow = None
+    creds = MagicMock()
+    creds.to_json.return_value = "{}"
+    flow = MagicMock()
+    flow.code_verifier = None
+    flow.credentials = creds
+
+    cvf = MagicMock()
+    cvf.exists.return_value = True
+    cvf.read_text.return_value = "not-valid-json"  # triggers json.JSONDecodeError
+    cvf.unlink = MagicMock()
+
+    with patch("app.services.google_calendar._code_verifier_file", return_value=cvf), \
+         patch("app.services.google_calendar._build_flow", return_value=flow), \
+         patch("app.services.google_calendar._save_token"), \
+         patch("app.services.google_calendar._invalidate_auth_cache"), \
+         patch("app.services.google_calendar.settings") as mock_settings:
+        mock_settings.google_redirect_uri = "http://localhost/callback"
+        result = exchange_code("auth_code")
+
+    assert result is creds
+
+
+def test_exchange_code_handles_unlink_error(tmp_path):
+    """Lines 123-124: except handler when verifier file cannot be deleted."""
+    gcal_svc._pending_flow = None
+    creds = MagicMock()
+    creds.to_json.return_value = "{}"
+    flow = MagicMock()
+    flow.code_verifier = None
+    flow.credentials = creds
+
+    cvf = MagicMock()
+    cvf.exists.return_value = True
+    cvf.read_text.return_value = json.dumps(
+        {"code_verifier": "cv", "redirect_uri": "http://cb", "state": "s"}
+    )
+    cvf.unlink.side_effect = OSError("permission denied")
+
+    with patch("app.services.google_calendar._code_verifier_file", return_value=cvf), \
+         patch("app.services.google_calendar._build_flow", return_value=flow), \
+         patch("app.services.google_calendar._save_token"), \
+         patch("app.services.google_calendar._invalidate_auth_cache"), \
+         patch("app.services.google_calendar.settings") as mock_settings:
+        mock_settings.google_redirect_uri = "http://localhost/callback"
+        result = exchange_code("auth_code")
+
+    assert result is creds
+
+
+# ── is_authenticated OSError on 401 token removal (lines 220-221) ────────────
+
+def test_is_authenticated_handles_osremove_error_on_401():
+    """Lines 220-221: os.remove fails with OSError during 401 cleanup."""
+    creds = MagicMock()
+    cal_svc = MagicMock()
+    cal_svc.calendarList.return_value.list.return_value.execute.side_effect = _http_error(401)
+    tasks_svc = MagicMock()
+
+    with patch("app.services.google_calendar.get_credentials", return_value=creds), \
+         patch("app.services.google_calendar.build", side_effect=[cal_svc, tasks_svc]), \
+         patch("app.services.google_calendar.os.remove", side_effect=OSError("already gone")), \
+         patch("app.services.google_calendar.settings") as mock_settings:
+        mock_settings.google_token_file = "/nonexistent/token.json"
+        auth, email = is_authenticated()
+
+    assert auth is False
+    assert email is None
+
+
+# ── _resolve_gcal_id non-404 HttpError (line 403) ────────────────────────────
+
+def test_resolve_gcal_id_raises_non_404_http_error():
+    """Line 403: stored event update fails with non-404 error → re-raise."""
+    occ = _make_occurrence(gcal_event_id="evt123")
+    svc = MagicMock()
+
+    with patch("app.services.google_calendar._execute", side_effect=_http_error(500, "serverError")):
+        with pytest.raises(HttpError) as exc_info:
+            _resolve_gcal_id(svc, occ, "primary", {})
+
+    assert exc_info.value.resp.status == 500
+
+
+# ── _resolve_gcal_id stale event HttpError on delete (lines 433-434) ─────────
+
+def test_resolve_gcal_id_continues_when_stale_event_already_deleted():
+    """Lines 433-434: stale event delete raises HttpError (already gone) → insert proceeds."""
+    occ = _make_occurrence(gcal_event_id=None)
+    occ.occurrence_date = date(2026, 5, 10)
+    svc = MagicMock()
+
+    found_event = {"id": "stale_evt", "start": {"date": "2025-01-01"}}
+    call_count = [0]
+
+    def mock_exec(request):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return {"items": [found_event]}
+        return {"id": "fresh_evt"}
+
+    # The stale-event delete inside _resolve_gcal_id calls .execute() directly (not _execute)
+    svc.events.return_value.delete.return_value.execute.side_effect = _http_error(404)
+
+    with patch("app.services.google_calendar._execute", side_effect=mock_exec):
+        gcal_id, action = _resolve_gcal_id(svc, occ, "primary", {})
+
+    assert action == "inserted"
+    assert gcal_id == "fresh_evt"

@@ -128,4 +128,79 @@ describe('StoreManager — error banner', () => {
     fireEvent.click(screen.getAllByText('✕')[0])
     expect(screen.queryByText('Server error')).not.toBeInTheDocument()
   })
+
+  it('shows error when createStore fails', async () => {
+    vi.mocked(api.createStore).mockRejectedValue(new Error('Create failed'))
+    render(<StoreManager stores={[]} onStoresChange={vi.fn()} />)
+    fireEvent.click(screen.getByTitle('Add store'))
+    fireEvent.change(screen.getByPlaceholderText('e.g. ALDI'), { target: { value: 'Kroger' } })
+    fireEvent.click(screen.getByText('Save Store'))
+    await waitFor(() => expect(screen.getByText('Create failed')).toBeInTheDocument())
+  })
+})
+
+describe('StoreManager — inline edit', () => {
+  it('opens inline edit form when Edit store is clicked', () => {
+    render(<StoreManager stores={STORES} onStoresChange={vi.fn()} />)
+    fireEvent.click(screen.getAllByTitle('Edit store')[0])
+    expect(screen.getByDisplayValue('ALDI')).toBeInTheDocument()
+  })
+
+  it('calls updateStore when Save is clicked in edit row', async () => {
+    const onStoresChange = vi.fn()
+    render(<StoreManager stores={STORES} onStoresChange={onStoresChange} />)
+    fireEvent.click(screen.getAllByTitle('Edit store')[0])
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateStore).toHaveBeenCalledWith(1, expect.any(Object)))
+    await waitFor(() => expect(onStoresChange).toHaveBeenCalled())
+  })
+
+  it('hides edit form when Cancel is clicked', () => {
+    render(<StoreManager stores={STORES} onStoresChange={vi.fn()} />)
+    fireEvent.click(screen.getAllByTitle('Edit store')[0])
+    expect(screen.getByDisplayValue('ALDI')).toBeInTheDocument()
+    fireEvent.click(screen.getAllByText('Cancel')[0])
+    expect(screen.queryByDisplayValue('ALDI')).not.toBeInTheDocument()
+  })
+
+  it('saves edit via Enter key on name field', async () => {
+    render(<StoreManager stores={STORES} onStoresChange={vi.fn()} />)
+    fireEvent.click(screen.getAllByTitle('Edit store')[0])
+    fireEvent.keyDown(screen.getByDisplayValue('ALDI'), { key: 'Enter' })
+    await waitFor(() => expect(api.updateStore).toHaveBeenCalledWith(1, expect.any(Object)))
+  })
+
+  it('cancels edit via Escape key on name field', () => {
+    render(<StoreManager stores={STORES} onStoresChange={vi.fn()} />)
+    fireEvent.click(screen.getAllByTitle('Edit store')[0])
+    fireEvent.keyDown(screen.getByDisplayValue('ALDI'), { key: 'Escape' })
+    expect(screen.queryByDisplayValue('ALDI')).not.toBeInTheDocument()
+  })
+
+  it('shows error when updateStore fails', async () => {
+    vi.mocked(api.updateStore).mockRejectedValue(new Error('Update failed'))
+    render(<StoreManager stores={STORES} onStoresChange={vi.fn()} />)
+    fireEvent.click(screen.getAllByTitle('Edit store')[0])
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(screen.getByText('Update failed')).toBeInTheDocument())
+  })
+})
+
+describe('StoreManager — AddStorePanel keyboard', () => {
+  it('saves store when Enter is pressed in name field', async () => {
+    render(<StoreManager stores={[]} onStoresChange={vi.fn()} />)
+    fireEvent.click(screen.getByTitle('Add store'))
+    fireEvent.change(screen.getByPlaceholderText('e.g. ALDI'), { target: { value: 'Sprouts' } })
+    fireEvent.keyDown(screen.getByPlaceholderText('e.g. ALDI'), { key: 'Enter' })
+    await waitFor(() => expect(api.createStore).toHaveBeenCalledWith({ name: 'Sprouts', location: null }))
+  })
+
+  it('closes panel via Escape key', () => {
+    render(<StoreManager stores={[]} onStoresChange={vi.fn()} />)
+    fireEvent.click(screen.getByTitle('Add store'))
+    expect(screen.getByText('New Store')).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    const panel = document.querySelector('.translate-x-full')
+    expect(panel).toBeInTheDocument()
+  })
 })

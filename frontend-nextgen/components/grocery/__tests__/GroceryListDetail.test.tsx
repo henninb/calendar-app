@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import React from 'react'
 import GroceryListDetail from '../GroceryListDetail'
 
@@ -177,5 +177,129 @@ describe('GroceryListDetail — add item panel', () => {
         1, { item_id: 103, quantity: '1', unit: 'each', price: null }
       )
     )
+  })
+
+  it('shows error when addGroceryListItem fails', async () => {
+    vi.mocked(api.addGroceryListItem).mockRejectedValue(new Error('Add failed'))
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByTitle('Add item'))
+    fireEvent.change(screen.getByPlaceholderText('Search catalog…'), { target: { value: 'Carrots' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add Item' }))
+    await waitFor(() => expect(screen.getByText('Add failed')).toBeInTheDocument())
+  })
+
+  it('closes panel on backdrop click', () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByTitle('Add item'))
+    expect(screen.getByRole('heading', { name: 'Add Item' })).toBeInTheDocument()
+    fireEvent.click(document.querySelector('.fixed.inset-0')!)
+    const panel = document.querySelector('.translate-x-full')
+    expect(panel).toBeInTheDocument()
+  })
+})
+
+describe('GroceryListDetail — error handling', () => {
+  it('shows error banner when togglePurchased API call fails', async () => {
+    vi.mocked(api.updateGroceryListItem).mockRejectedValue(new Error('Toggle error'))
+    vi.mocked(api.fetchGroceryList).mockResolvedValue(LIST)
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    const [applesCheckbox] = screen.getAllByRole('checkbox')
+    fireEvent.click(applesCheckbox)
+    await waitFor(() => expect(screen.getByText('Toggle error')).toBeInTheDocument())
+  })
+
+  it('shows error banner when removeItem API call fails', async () => {
+    vi.mocked(api.removeGroceryListItem).mockRejectedValue(new Error('Remove error'))
+    vi.mocked(api.fetchGroceryList).mockResolvedValue(LIST)
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getAllByTitle('Remove from list')[0])
+    await waitFor(() => expect(screen.getByText('Remove error')).toBeInTheDocument())
+  })
+
+  it('dismisses error banner when ✕ is clicked', async () => {
+    vi.mocked(api.updateGroceryListItem).mockRejectedValue(new Error('Toggle error'))
+    vi.mocked(api.fetchGroceryList).mockResolvedValue(LIST)
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    const [applesCheckbox] = screen.getAllByRole('checkbox')
+    fireEvent.click(applesCheckbox)
+    await waitFor(() => expect(screen.getByText('Toggle error')).toBeInTheDocument())
+    const errorBanner = screen.getByText('Toggle error').closest('div')!
+    fireEvent.click(within(errorBanner).getByText('✕'))
+    expect(screen.queryByText('Toggle error')).not.toBeInTheDocument()
+  })
+
+  it('shows error when handleAdvance fails', async () => {
+    vi.mocked(api.updateGroceryList).mockRejectedValue(new Error('Advance error'))
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByText('Mark Completed'))
+    await waitFor(() => expect(screen.getByText('Advance error')).toBeInTheDocument())
+  })
+})
+
+describe('GroceryListDetail — onListChanged callback', () => {
+  it('calls onListChanged after advancing status', async () => {
+    const onListChanged = vi.fn()
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} onListChanged={onListChanged} />)
+    fireEvent.click(screen.getByText('Mark Completed'))
+    await waitFor(() => expect(api.updateGroceryList).toHaveBeenCalled())
+    await waitFor(() => expect(onListChanged).toHaveBeenCalled())
+  })
+})
+
+describe('GroceryListDetail — ItemRow editing', () => {
+  it('opens inline edit form when quantity cell is clicked', () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    const qtyCells = screen.getAllByTitle('Click to edit')
+    fireEvent.click(qtyCells[0])
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+  })
+
+  it('calls updateGroceryListItem when Save is clicked in edit row', async () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    const qtyCells = screen.getAllByTitle('Click to edit')
+    fireEvent.click(qtyCells[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(api.updateGroceryListItem).toHaveBeenCalledWith(
+        1, 101, expect.objectContaining({ quantity: '2', unit: 'each' })
+      )
+    )
+  })
+
+  it('hides edit form when Cancel is clicked in edit row', () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    const qtyCells = screen.getAllByTitle('Click to edit')
+    fireEvent.click(qtyCells[0])
+    // Save button is unique to edit row — find its sibling Cancel within the same td
+    const saveBtn = screen.getByRole('button', { name: 'Save' })
+    const cancelBtn = saveBtn.parentElement!.querySelector('button:last-child') as HTMLElement
+    fireEvent.click(cancelBtn)
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+
+  it('saves edit via Enter key in quantity input', async () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    const qtyCells = screen.getAllByTitle('Click to edit')
+    fireEvent.click(qtyCells[0])
+    const qtyInput = screen.getAllByRole('spinbutton')[0]
+    fireEvent.keyDown(qtyInput, { key: 'Enter' })
+    await waitFor(() => expect(api.updateGroceryListItem).toHaveBeenCalled())
+  })
+
+  it('cancels edit via Escape key in quantity input', () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    const qtyCells = screen.getAllByTitle('Click to edit')
+    fireEvent.click(qtyCells[0])
+    const qtyInput = screen.getAllByRole('spinbutton')[0]
+    fireEvent.keyDown(qtyInput, { key: 'Escape' })
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+})
+
+describe('GroceryListDetail — purchased/needed separator', () => {
+  it('renders both needed and purchased items', () => {
+    render(<GroceryListDetail list={LIST} catalogItems={CATALOG} onBack={vi.fn()} />)
+    expect(screen.getByText('Apples')).toBeInTheDocument()
+    expect(screen.getByText('Bananas')).toBeInTheDocument()
   })
 })

@@ -415,3 +415,293 @@ class TestSyncOneTask:
             result = _sync_one_task(3, "list-id")
 
         assert result[1] == "failed"
+
+
+# ── _gcal_sync_events progress loop (lines 170-185) ──────────────────────────
+
+class TestGcalSyncEventsProgress:
+    def _run(self, action: str, force: bool = False):
+        from app.routers.sync import _gcal_sync_events
+
+        occ_mock = MagicMock(id=1)
+        with patch("app.routers.sync.SessionLocal") as mock_sl:
+            mock_db = MagicMock()
+            # force=False → .filter().filter().all(); force=True → .filter().all()
+            mock_db.query.return_value.filter.return_value.filter.return_value.all.return_value = [occ_mock]
+            mock_db.query.return_value.filter.return_value.all.return_value = [occ_mock]
+            mock_sl.return_value = mock_db
+
+            with patch("app.routers.sync.gcal.get_credentials", return_value=MagicMock()):
+                with patch("app.routers.sync._sync_one",
+                           return_value=(1, action, "2026-06-01", "gcal-1", "err" if action == "failed" else "")):
+                    return list(_gcal_sync_events(days_ahead=30, force=force))
+
+    def _parse(self, events):
+        return [json.loads(e.replace("data: ", "").strip()) for e in events if e.strip()]
+
+    def test_inserted_action(self):
+        payloads = self._parse(self._run("inserted"))
+        progress = [p for p in payloads if p["type"] == "progress"]
+        assert len(progress) == 1
+        assert progress[0]["action"] == "inserted"
+        done = next(p for p in payloads if p["type"] == "done")
+        assert done["synced"] == 1
+        assert done["failed"] == 0
+
+    def test_updated_action(self):
+        payloads = self._parse(self._run("updated"))
+        progress = [p for p in payloads if p["type"] == "progress"]
+        assert progress[0]["action"] == "updated"
+        done = next(p for p in payloads if p["type"] == "done")
+        assert done["synced"] == 1
+
+    def test_skipped_action(self):
+        payloads = self._parse(self._run("skipped"))
+        progress = [p for p in payloads if p["type"] == "progress"]
+        assert progress[0]["action"] == "skipped"
+        done = next(p for p in payloads if p["type"] == "done")
+        assert done["synced"] == 0
+        assert done["failed"] == 0
+
+    def test_failed_action(self):
+        payloads = self._parse(self._run("failed"))
+        progress = [p for p in payloads if p["type"] == "progress"]
+        assert progress[0]["action"] == "failed"
+        done = next(p for p in payloads if p["type"] == "done")
+        assert done["failed"] == 1
+        assert len(done["errors"]) == 1
+
+    def test_force_flag_uses_single_filter(self):
+        payloads = self._parse(self._run("inserted", force=True))
+        types = [p["type"] for p in payloads]
+        assert "done" in types
+
+
+# ── sync_to_gcal endpoint (line 205) ─────────────────────────────────────────
+
+class TestSyncToGcalEndpoint:
+    def test_returns_event_stream_content_type(self, client: TestClient):
+        with patch("app.routers.sync._gcal_sync_events", return_value=iter([])):
+            resp = client.post("/api/sync/gcal")
+        assert resp.status_code == 200
+        assert "text/event-stream" in resp.headers.get("content-type", "")
+
+
+# ── _run_gcal_delete_all (lines 221-233) ─────────────────────────────────────
+
+class TestRunGcalDeleteAll:
+    def test_deletes_occurrences_and_commits(self):
+        from app.routers.sync import _run_gcal_delete_all
+
+        mock_occ = MagicMock()
+        mock_occ.id = 42
+
+        with patch("app.routers.sync.SessionLocal") as mock_sl, \
+             patch("app.routers.sync.gcal.delete_gcal_event") as mock_del:
+            mock_db = MagicMock()
+            mock_db.query.return_value.filter.return_value.all.return_value = [mock_occ]
+            mock_sl.return_value = mock_db
+
+            _run_gcal_delete_all()
+
+        mock_del.assert_called_once_with(mock_occ)
+        mock_db.commit.assert_called_once()
+
+    def test_handles_delete_error_without_raising(self):
+        from app.routers.sync import _run_gcal_delete_all
+
+        mock_occ = MagicMock()
+        mock_occ.id = 7
+
+        with patch("app.routers.sync.SessionLocal") as mock_sl, \
+             patch("app.routers.sync.gcal.delete_gcal_event", side_effect=Exception("api error")):
+            mock_db = MagicMock()
+            mock_db.query.return_value.filter.return_value.all.return_value = [mock_occ]
+            mock_sl.return_value = mock_db
+
+            _run_gcal_delete_all()  # must not raise
+
+        # No successful deletes → deleted_ids empty → no commit
+        mock_db.commit.assert_not_called()
+
+    def test_no_occurrences_skips_commit(self):
+        from app.routers.sync import _run_gcal_delete_all
+
+        with patch("app.routers.sync.SessionLocal") as mock_sl:
+            mock_db = MagicMock()
+            mock_db.query.return_value.filter.return_value.all.return_value = []
+            mock_sl.return_value = mock_db
+
+            _run_gcal_delete_all()
+
+        mock_db.commit.assert_not_called()
+
+
+# ── sync_single success path (line 303) ──────────────────────────────────────
+
+class TestSyncSingleSuccess:
+    def test_sync_single_success_returns_synced_1(self, client: TestClient):
+        from app.models import Category, Event, Occurrence
+        from tests.conftest import _TestSession
+        from datetime import date
+
+        db = _TestSession()
+        try:
+            cat = Category(name="ics_test_cat", color="#000", icon="x")
+            db.add(cat)
+            db.flush()
+            ev = Event(title="Sync Me", category_id=cat.id, dtstart=date(2026, 7, 1))
+            db.add(ev)
+            db.flush()
+            occ = Occurrence(event_id=ev.id, occurrence_date=date(2026, 7, 1))
+            db.add(occ)
+            db.commit()
+            occ_id = occ.id
+        finally:
+            db.close()
+
+        with patch("app.routers.sync.gcal.sync_occurrence", return_value="inserted"):
+            resp = client.post(f"/api/sync/gcal/{occ_id}")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["synced"] == 1
+        assert data["failed"] == 0
+
+
+# ── _gtasks_sync_events progress loop (lines 363-378) ────────────────────────
+
+class TestGtasksSyncEventsProgress:
+    def _run(self, action: str):
+        from app.routers.sync import _gtasks_sync_events
+
+        task_mock = MagicMock(id=5)
+        with patch("app.routers.sync.SessionLocal") as mock_sl:
+            mock_db = MagicMock()
+            mock_db.query.return_value.filter.return_value.all.return_value = [task_mock]
+            mock_sl.return_value = mock_db
+
+            with patch("app.routers.sync.gtasks.get_or_create_tasklist",
+                       return_value=(MagicMock(), "list-id")):
+                title = "Do thing" if action != "failed" else ""
+                err = "err" if action == "failed" else ""
+                with patch("app.routers.sync._sync_one_task",
+                           return_value=(5, action, title, err)):
+                    return list(_gtasks_sync_events())
+
+    def _parse(self, events):
+        return [json.loads(e.replace("data: ", "").strip()) for e in events if e.strip()]
+
+    def test_inserted_action(self):
+        payloads = self._parse(self._run("inserted"))
+        progress = [p for p in payloads if p["type"] == "progress"]
+        assert len(progress) == 1
+        assert progress[0]["action"] == "inserted"
+        done = next(p for p in payloads if p["type"] == "done")
+        assert done["synced"] == 1
+
+    def test_skipped_action(self):
+        payloads = self._parse(self._run("skipped"))
+        progress = [p for p in payloads if p["type"] == "progress"]
+        assert progress[0]["action"] == "skipped"
+
+    def test_failed_action(self):
+        payloads = self._parse(self._run("failed"))
+        done = next(p for p in payloads if p["type"] == "done")
+        assert done["failed"] == 1
+        assert len(done["errors"]) == 1
+
+    def test_unexpected_exception_in_thread_loop_yields_done_with_error(self):
+        from app.routers.sync import _gtasks_sync_events
+
+        task_mock = MagicMock(id=5)
+        with patch("app.routers.sync.SessionLocal") as mock_sl:
+            mock_db = MagicMock()
+            mock_db.query.return_value.filter.return_value.all.return_value = [task_mock]
+            mock_sl.return_value = mock_db
+
+            with patch("app.routers.sync.gtasks.get_or_create_tasklist",
+                       return_value=(MagicMock(), "list-id")):
+                with patch("app.routers.sync.as_completed", side_effect=RuntimeError("boom")):
+                    events = list(_gtasks_sync_events())
+
+        payloads = self._parse(events)
+        done = next(p for p in payloads if p["type"] == "done")
+        assert any("Sync interrupted" in e for e in done["errors"])
+
+
+# ── sync_to_gtasks endpoint (line 388) ───────────────────────────────────────
+
+class TestSyncToGtasksEndpoint:
+    def test_returns_event_stream_content_type(self, client: TestClient):
+        with patch("app.routers.sync._gtasks_sync_events", return_value=iter([])):
+            resp = client.post("/api/sync/gtasks")
+        assert resp.status_code == 200
+        assert "text/event-stream" in resp.headers.get("content-type", "")
+
+
+# ── export_ics for-loop body (lines 430-443) ──────────────────────────────────
+
+class TestExportIcsWithData:
+    def _seed(self, *, description=None, location=None, amount=None, category_name="ics_cat"):
+        from app.models import Category, Event, Occurrence
+        from tests.conftest import _TestSession
+        from datetime import date
+
+        db = _TestSession()
+        try:
+            cat = Category(name=category_name, color="#aaa", icon="i")
+            db.add(cat)
+            db.flush()
+            ev = Event(
+                title="ICS Event",
+                category_id=cat.id,
+                dtstart=date(2026, 8, 1),
+                duration_days=1,
+                description=description,
+                location=location,
+                amount=amount,
+            )
+            db.add(ev)
+            db.flush()
+            occ = Occurrence(event_id=ev.id, occurrence_date=date(2026, 8, 1))
+            db.add(occ)
+            db.commit()
+        finally:
+            db.close()
+
+    def test_ics_includes_event_title(self, client: TestClient):
+        self._seed(category_name="ics_cat_title")
+        resp = client.get(
+            "/api/sync/export/ics",
+            params={"start_date": "2026-01-01", "end_date": "2026-12-31"},
+        )
+        assert resp.status_code == 200
+        assert b"ICS Event" in resp.content
+
+    def test_ics_includes_description(self, client: TestClient):
+        self._seed(description="A note", category_name="ics_cat_desc")
+        resp = client.get(
+            "/api/sync/export/ics",
+            params={"start_date": "2026-01-01", "end_date": "2026-12-31"},
+        )
+        assert resp.status_code == 200
+        assert b"A note" in resp.content
+
+    def test_ics_includes_location(self, client: TestClient):
+        self._seed(location="Main St", category_name="ics_cat_loc")
+        resp = client.get(
+            "/api/sync/export/ics",
+            params={"start_date": "2026-01-01", "end_date": "2026-12-31"},
+        )
+        assert resp.status_code == 200
+        assert b"Main St" in resp.content
+
+    def test_ics_includes_amount_comment(self, client: TestClient):
+        self._seed(amount=99.99, category_name="ics_cat_amt")
+        resp = client.get(
+            "/api/sync/export/ics",
+            params={"start_date": "2026-01-01", "end_date": "2026-12-31"},
+        )
+        assert resp.status_code == 200
+        assert b"99" in resp.content
