@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { gcalAuthStatus, syncToGtasks } from '@/lib/api'
+import { gcalAuthStatus, syncToGtasks, type SyncResult } from '@/lib/api'
 
 type LogLevel = 'info' | 'ok' | 'warn' | 'error'
 

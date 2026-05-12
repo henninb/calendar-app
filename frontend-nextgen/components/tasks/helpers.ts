@@ -25,7 +25,7 @@ export interface Subtask {
 export interface Task {
   id: number
   title: string
-  description?: string
+  description?: string | null
   status: TaskStatus
   priority: TaskPriority
   due_date?: string | null
@@ -36,6 +36,8 @@ export interface Task {
   category?: Category | null
   recurrence?: RecurrenceOption | null
   subtasks?: Subtask[]
+  order?: number
+  created_at?: string
 }
 
 export interface NewTaskDraft {

@@ -6,6 +6,7 @@ import { loadConfig } from '@/components/ConfigPage'
 import {
   gcalAuthStatus, generateAll, syncToGcal,
   deleteAllGcalEvents, wipeAllGcalEvents, syncToGtasks,
+  type SyncResult,
 } from '@/lib/api'
 
 type LogLevel = 'info' | 'ok' | 'warn' | 'error'

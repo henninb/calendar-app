@@ -1,8 +1,9 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import {
   DndContext, closestCenter, MouseSensor, TouchSensor, useSensor, useSensors,
+  type DragEndEvent,
 } from '@dnd-kit/core'
 import {
   SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
@@ -12,6 +13,7 @@ import {
   isOverdue, fmt, withAlpha, parseMinutes,
   STATUS_LABELS, STATUS_OPTIONS, getDaysBadge,
 } from './helpers'
+import type { Task, Subtask, Person, Category, TaskStatus, TaskPriority } from './helpers'
 
 const FIELDS = {
   STATUS:            'status',
@@ -19,7 +21,9 @@ const FIELDS = {
   ASSIGNEE_ID:       'assignee_id',
   ESTIMATED_MINUTES: 'estimated_minutes',
   CATEGORY:          'category_id',
-}
+} as const
+
+type FieldKey = typeof FIELDS[keyof typeof FIELDS]
 
 const MOUSE_ACTIVATION = { activationConstraint: { distance: 5 } }
 const TOUCH_ACTIVATION = { activationConstraint: { delay: 200, tolerance: 5 } }
@@ -28,20 +32,20 @@ const inlineCls = `text-sm px-2 py-0.5 rounded-lg border border-blue-400 dark:bo
   bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200
   focus:outline-none focus:ring-2 focus:ring-blue-500/50`
 
-const PRIORITY_STRIPE = {
+const PRIORITY_STRIPE: Record<TaskPriority, string> = {
   high:   'border-l-red-500   dark:border-l-red-500   hover:border-l-red-600   dark:hover:border-l-red-400',
   medium: 'border-l-amber-500 dark:border-l-amber-500 hover:border-l-amber-600 dark:hover:border-l-amber-400',
   low:    'border-l-slate-400 dark:border-l-slate-600 hover:border-l-slate-500 dark:hover:border-l-slate-500',
 }
 
-const STATUS_PILL = {
+const STATUS_PILL: Record<TaskStatus, string> = {
   todo:        'bg-blue-50 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:ring-blue-500/25',
   in_progress: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/25',
   done:        'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/25',
   cancelled:   'bg-slate-100 text-slate-500 ring-1 ring-slate-200 dark:bg-slate-500/10 dark:text-slate-400 dark:ring-slate-500/25',
 }
 
-const STATUS_ICON = {
+const STATUS_ICON: Record<TaskStatus, string> = {
   todo:        '○',
   in_progress: '◑',
   done:        '✓',
@@ -55,7 +59,18 @@ const subtaskInputCls = `flex-1 text-sm px-2.5 py-1.5 rounded-lg
   placeholder-slate-400 dark:placeholder-slate-500
   focus:outline-none focus:ring-2 focus:ring-blue-500/40`
 
-function InlineMetaField({ icon, label, title, editing, onStartEdit, extra, children, ghost }) {
+interface InlineMetaFieldProps {
+  icon: ReactNode
+  label: ReactNode
+  title?: string
+  editing: boolean
+  onStartEdit?: () => void
+  extra?: ReactNode
+  children?: ReactNode
+  ghost?: boolean
+}
+
+function InlineMetaField({ icon, label, title, editing, onStartEdit, extra, children, ghost }: InlineMetaFieldProps) {
   if (editing) {
     return (
       <span className="flex items-center gap-1.5">
@@ -88,18 +103,30 @@ function InlineMetaField({ icon, label, title, editing, onStartEdit, extra, chil
   )
 }
 
-function OverflowMenu({ items }) {
+interface MenuItem {
+  label: string
+  icon: string
+  hidden?: boolean
+  danger?: boolean
+  onClick: () => void
+}
+
+interface OverflowMenuProps {
+  items: MenuItem[]
+}
+
+function OverflowMenu({ items }: OverflowMenuProps) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, right: 0 })
-  const btnRef = useRef(null)
-  const menuRef = useRef(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
-    function handle(e) {
+    function handle(e: MouseEvent) {
       if (
-        btnRef.current && !btnRef.current.contains(e.target) &&
-        menuRef.current && !menuRef.current.contains(e.target)
+        btnRef.current && !btnRef.current.contains(e.target as Node) &&
+        menuRef.current && !menuRef.current.contains(e.target as Node)
       ) setOpen(false)
     }
     document.addEventListener('mousedown', handle)
@@ -109,10 +136,10 @@ function OverflowMenu({ items }) {
   const visible = items.filter(item => !item.hidden)
   if (visible.length === 0) return null
 
-  function handleOpen(e) {
+  function handleOpen(e: React.MouseEvent) {
     e.stopPropagation()
     if (!open) {
-      const rect = btnRef.current.getBoundingClientRect()
+      const rect = btnRef.current!.getBoundingClientRect()
       setPos({ top: rect.bottom + window.scrollY + 4, right: window.innerWidth - rect.right })
     }
     setOpen(o => !o)
@@ -157,9 +184,17 @@ function OverflowMenu({ items }) {
   )
 }
 
-function SubtaskConfirmModal({ task, incompleteSubtasks, onCompleteAll, onDoneAnyway, onCancel }) {
+interface SubtaskConfirmModalProps {
+  task: Task
+  incompleteSubtasks: Subtask[]
+  onCompleteAll: () => void
+  onDoneAnyway: () => void
+  onCancel: () => void
+}
+
+function SubtaskConfirmModal({ task, incompleteSubtasks, onCompleteAll, onDoneAnyway, onCancel }: SubtaskConfirmModalProps) {
   useEffect(() => {
-    function handle(e) { if (e.key === 'Escape') onCancel() }
+    function handle(e: KeyboardEvent) { if (e.key === 'Escape') onCancel() }
     document.addEventListener('keydown', handle)
     return () => document.removeEventListener('keydown', handle)
   }, [onCancel])
@@ -224,20 +259,38 @@ function SubtaskConfirmModal({ task, incompleteSubtasks, onCompleteAll, onDoneAn
   )
 }
 
+interface SubtaskDraft {
+  id: number
+  title: string
+}
+
+interface SortableSubtaskRowProps {
+  sub: Subtask
+  taskId: number
+  isDimmed: boolean
+  subtaskDraft: SubtaskDraft | null
+  onStartEdit: (sub: Subtask) => void
+  onSaveEdit: () => void
+  onCancelEdit: () => void
+  onEditChange: (title: string) => void
+  onPatchSubtask: (taskId: number, subtaskId: number, data: Partial<Subtask>) => void
+  onDeleteSubtask: (taskId: number, subtaskId: number) => void
+}
+
 function SortableSubtaskRow({
   sub, taskId, isDimmed,
   subtaskDraft,
   onStartEdit, onSaveEdit, onCancelEdit, onEditChange,
   onPatchSubtask, onDeleteSubtask,
-}) {
+}: SortableSubtaskRowProps) {
   const {
     attributes, listeners, setNodeRef,
     transform, transition, isDragging,
   } = useSortable({ id: sub.id })
 
-  const style = {
+  const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: transition ?? undefined,
     zIndex: isDragging ? 10 : undefined,
   }
 
@@ -268,7 +321,7 @@ function SortableSubtaskRow({
           <span className="w-4 h-4 flex-shrink-0" />
           <input
             autoFocus
-            value={subtaskDraft.title}
+            value={subtaskDraft!.title}
             onChange={e => onEditChange(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter')  onSaveEdit()
@@ -321,6 +374,22 @@ function SortableSubtaskRow({
   )
 }
 
+interface TaskCardProps {
+  task: Task
+  expanded: boolean
+  onToggleExpand: (id: number) => void
+  onEdit: (task: Task) => void
+  onPatchTask: (id: number, data: Partial<Task>) => void | Promise<void>
+  onDeleteTask: (id: number) => void
+  onPatchSubtask: (taskId: number, subtaskId: number, data: Partial<Subtask>) => void | Promise<void>
+  onAddSubtask: (taskId: number, title: string) => Promise<void>
+  onDeleteSubtask: (taskId: number, subtaskId: number) => void
+  onReorderSubtasks: (taskId: number, subs: Subtask[]) => void
+  persons: Person[]
+  categories: Category[]
+  dismissing?: boolean
+}
+
 export default function TaskCard({
   task,
   expanded,
@@ -335,14 +404,14 @@ export default function TaskCard({
   persons,
   categories,
   dismissing = false,
-}) {
-  const [editingField, setEditingField] = useState(null)
+}: TaskCardProps) {
+  const [editingField, setEditingField] = useState<FieldKey | null>(null)
   const [showSubtaskConfirm, setShowSubtaskConfirm] = useState(false)
   const [pendingDelete, setPendingDelete] = useState(false)
-  const [titleDraft, setTitleDraft] = useState(null)
-  const [subtaskDraft, setSubtaskDraft] = useState(null)
+  const [titleDraft, setTitleDraft] = useState<string | null>(null)
+  const [subtaskDraft, setSubtaskDraft] = useState<SubtaskDraft | null>(null)
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
-  const newSubtaskRef   = useRef(null)
+  const newSubtaskRef   = useRef<HTMLInputElement>(null)
   const pendingFocusAdd = useRef(false)
 
   useEffect(() => {
@@ -354,7 +423,7 @@ export default function TaskCard({
 
   useEffect(() => {
     if (!pendingDelete) return
-    function handle(e) { if (e.key === 'Escape') setPendingDelete(false) }
+    function handle(e: KeyboardEvent) { if (e.key === 'Escape') setPendingDelete(false) }
     document.addEventListener('keydown', handle)
     return () => document.removeEventListener('keydown', handle)
   }, [pendingDelete])
@@ -420,7 +489,7 @@ export default function TaskCard({
     newSubtaskRef.current?.focus()
   }, [onAddSubtask, task.id, newSubtaskTitle])
 
-  const handleStartEditSubtask = useCallback((sub) => {
+  const handleStartEditSubtask = useCallback((sub: Subtask) => {
     setSubtaskDraft({ id: sub.id, title: sub.title })
   }, [])
 
@@ -433,7 +502,7 @@ export default function TaskCard({
 
   const handleCancelEditSubtask = useCallback(() => setSubtaskDraft(null), [])
 
-  const handleEditSubtaskChange = useCallback((title) => {
+  const handleEditSubtaskChange = useCallback((title: string) => {
     setSubtaskDraft(prev => prev ? { ...prev, title } : prev)
   }, [])
 
@@ -442,7 +511,7 @@ export default function TaskCard({
     useSensor(TouchSensor, TOUCH_ACTIVATION),
   )
 
-  const handleDragEnd = useCallback(({ active, over }) => {
+  const handleDragEnd = useCallback(({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return
     const oldIndex = sortedSubtasks.findIndex(s => s.id === active.id)
     const newIndex = sortedSubtasks.findIndex(s => s.id === over.id)
@@ -452,7 +521,7 @@ export default function TaskCard({
 
   const daysBadge = getDaysBadge(task)
 
-  const menuItems = useMemo(() => [
+  const menuItems: MenuItem[] = useMemo(() => [
     { label: 'Edit',     icon: '✎', onClick: () => onEdit(task) },
     { label: 'Copy',     icon: '⎘', onClick: () => navigator.clipboard.writeText(task.title) },
     { label: 'Start',    icon: '▶', hidden: task.status !== 'todo', onClick: () => onPatchTask(task.id, { status: 'in_progress' }) },
@@ -549,7 +618,7 @@ export default function TaskCard({
             <select
               autoFocus
               defaultValue={task.status}
-              onChange={e => { onPatchTask(task.id, { status: e.target.value }); setEditingField(null) }}
+              onChange={e => { onPatchTask(task.id, { status: e.target.value as TaskStatus }); setEditingField(null) }}
               onBlur={() => setEditingField(null)}
               onKeyDown={e => e.key === 'Escape' && setEditingField(null)}
               className={`flex-shrink-0 ${inlineCls}`}
@@ -588,7 +657,7 @@ export default function TaskCard({
                   className={`text-xs ${inlineCls}`}
                 >
                   <option value="">No category</option>
-                  {(categories ?? []).map(c => (
+                  {categories.map(c => (
                     <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
                   ))}
                 </select>
@@ -632,7 +701,7 @@ export default function TaskCard({
                 <input
                   type="date"
                   autoFocus
-                  defaultValue={task.due_date}
+                  defaultValue={task.due_date ?? undefined}
                   onChange={e => {
                     if (e.target.value) {
                       onPatchTask(task.id, { due_date: e.target.value })
@@ -645,7 +714,7 @@ export default function TaskCard({
                   }}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
-                      onPatchTask(task.id, { due_date: e.target.value || null })
+                      onPatchTask(task.id, { due_date: (e.target as HTMLInputElement).value || null })
                       setEditingField(null)
                     }
                     if (e.key === 'Escape') setEditingField(null)
@@ -667,7 +736,7 @@ export default function TaskCard({
                 autoFocus
                 defaultValue={task.assignee_id ?? ''}
                 onChange={e => {
-                  onPatchTask(task.id, { assignee_id: e.target.value || null })
+                  onPatchTask(task.id, { assignee_id: (e.target.value || null) as unknown as number | null })
                   setEditingField(null)
                 }}
                 onBlur={() => setEditingField(null)}
@@ -675,7 +744,7 @@ export default function TaskCard({
                 className={inlineCls}
               >
                 <option value="">Unassigned</option>
-                {(persons ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {persons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </InlineMetaField>
 
@@ -695,7 +764,7 @@ export default function TaskCard({
                 placeholder="min"
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
-                    onPatchTask(task.id, { estimated_minutes: parseMinutes(e.target.value) })
+                    onPatchTask(task.id, { estimated_minutes: parseMinutes((e.target as HTMLInputElement).value) })
                     setEditingField(null)
                   }
                   if (e.key === 'Escape') setEditingField(null)

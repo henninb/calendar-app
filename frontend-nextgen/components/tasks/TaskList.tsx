@@ -11,34 +11,41 @@ import {
   SECTION_DEFS, TASK_FETCH_LIMIT, STATUS_OPTIONS, localDate,
   undoDescription, reversePayload,
 } from './helpers'
+import type { Task, Subtask, Person, Category, TaskStatus } from './helpers'
 import TaskToolbar from './TaskToolbar'
 import TaskSection from './TaskSection'
 import TaskPanel from './TaskPanel'
 import UndoToast from './UndoToast'
 import { useUndoStack } from './useUndoStack'
 
+interface PanelState {
+  open: boolean
+  mode: 'create' | 'edit'
+  task: Task | null
+}
+
 export default function TaskList() {
-  const [tasks, setTasks]                   = useState([])
-  const [persons, setPersons]               = useState([])
-  const [categories, setCategories]         = useState([])
-  const [filterStatus, setFilterStatus]     = useState(['todo', 'in_progress'])
+  const [tasks, setTasks]                   = useState<Task[]>([])
+  const [persons, setPersons]               = useState<Person[]>([])
+  const [categories, setCategories]         = useState<Category[]>([])
+  const [filterStatus, setFilterStatus]     = useState<TaskStatus[]>(['todo', 'in_progress'])
   const [filterAssignee, setFilterAssignee] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [searchQuery, setSearchQuery]       = useState('')
-  const [collapsedSections, setCollapsedSections] = useState({})
-  const [expandedCards, setExpandedCards]   = useState({})
-  const [panel, setPanel]                   = useState({ open: false, mode: 'create', task: null })
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
+  const [expandedCards, setExpandedCards]   = useState<Record<number, boolean>>({})
+  const [panel, setPanel]                   = useState<PanelState>({ open: false, mode: 'create', task: null })
   const [loading, setLoading]               = useState(true)
-  const [error, setError]                   = useState(null)
-  const [dismissingIds, setDismissingIds]   = useState(new Set())
+  const [error, setError]                   = useState<string | null>(null)
+  const [dismissingIds, setDismissingIds]   = useState<Set<number>>(new Set())
 
-  const tasksRef = useRef(tasks)
+  const tasksRef = useRef<Task[]>(tasks)
   tasksRef.current = tasks
 
   const { push: pushUndo, undo, canUndo, lastAction, dismissToast } = useUndoStack()
 
   useEffect(() => {
-    function handle(e) {
+    function handle(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault()
         undo()
@@ -48,13 +55,13 @@ export default function TaskList() {
     return () => document.removeEventListener('keydown', handle)
   }, [undo])
 
-  const [, tick] = useReducer(x => x + 1, 0)
+  const [, tick] = useReducer((x: number) => x + 1, 0)
   useEffect(() => {
     const id = setInterval(tick, 60_000)
     return () => clearInterval(id)
   }, [])
 
-  const abortRef = useRef(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   const silentLoad = useCallback(async () => {
     try {
@@ -67,7 +74,7 @@ export default function TaskList() {
       setCategories(c)
     } catch (err) {
       console.error('[TaskList] silentLoad failed:', err)
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
     }
   }, [])
 
@@ -92,9 +99,9 @@ export default function TaskList() {
       setPersons(p)
       setCategories(c)
     } catch (err) {
-      if (err.name === 'AbortError') return
+      if (err instanceof Error && err.name === 'AbortError') return
       console.error('[TaskList] load failed:', err)
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
@@ -130,7 +137,10 @@ export default function TaskList() {
   }, [tasks, filterStatus, filterAssignee, filterCategory, searchQuery])
 
   const grouped = useMemo(() => {
-    const result = { done: [], overdue: [], today: [], tomorrow: [], this_week: [], next_week: [], later: [], no_date: [] }
+    const result: Record<string, Task[]> = {
+      done: [], overdue: [], today: [], tomorrow: [],
+      this_week: [], next_week: [], later: [], no_date: [],
+    }
     for (const task of visible) {
       if (task.status === 'done') {
         result.done.push(task)
@@ -152,59 +162,59 @@ export default function TaskList() {
     }
     for (const key of Object.keys(result)) {
       result[key].sort((a, b) =>
-        (a.order ?? 0) - (b.order ?? 0) || a.created_at.localeCompare(b.created_at)
+        (a.order ?? 0) - (b.order ?? 0) || (a.created_at ?? '').localeCompare(b.created_at ?? '')
       )
     }
     return result
   }, [visible, today, tomorrow, week1end, week2end])
 
-  const toggleStatus = useCallback(s =>
+  const toggleStatus = useCallback((s: TaskStatus) =>
     setFilterStatus(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]),
   [])
 
-  const toggleSection = useCallback((key, isEmpty) =>
+  const toggleSection = useCallback((key: string, isEmpty: boolean) =>
     setCollapsedSections(p => {
       const current = p[key] !== undefined ? p[key] : isEmpty
       return { ...p, [key]: !current }
     }),
   [])
 
-  const toggleExpand = useCallback(id =>
+  const toggleExpand = useCallback((id: number) =>
     setExpandedCards(p => ({ ...p, [id]: !p[id] })),
   [])
 
   const openCreate = useCallback(() => setPanel({ open: true, mode: 'create', task: null }), [])
-  const openEdit   = useCallback(task => setPanel({ open: true, mode: 'edit', task }), [])
+  const openEdit   = useCallback((task: Task) => setPanel({ open: true, mode: 'edit', task }), [])
   const closePanel = useCallback(() => setPanel(p => ({ ...p, open: false })), [])
 
-  const handleCreateTask = useCallback(async payload => {
+  const handleCreateTask = useCallback(async (payload: Partial<Task>) => {
     try {
       const created = await createTask(payload)
       setTasks(prev => [created, ...prev])
       closePanel()
     } catch (err) {
       console.error('[TaskList] createTask failed:', err)
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
     }
   }, [closePanel])
 
-  const handleUpdateTask = useCallback(async (taskId, payload) => {
+  const handleUpdateTask = useCallback(async (taskId: number, payload: Partial<Task>) => {
     try {
       const updated = await updateTask(taskId, payload)
       if (payload.status === 'done') {
         await load()
       } else {
         setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updated } : t))
-        setPanel(p => p.task?.id === taskId ? { ...p, task: { ...p.task, ...updated } } : p)
+        setPanel(p => p.task?.id === taskId ? { ...p, task: { ...p.task!, ...updated } } : p)
       }
       closePanel()
     } catch (err) {
       console.error(`[TaskList] updateTask(${taskId}) failed:`, err)
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
     }
   }, [load, closePanel])
 
-  const patchTask = useCallback(async (taskId, data) => {
+  const patchTask = useCallback(async (taskId: number, data: Partial<Task>) => {
     const prevTask = tasksRef.current.find(t => t.id === taskId)
     try {
       if (data.status === 'done') {
@@ -233,34 +243,34 @@ export default function TaskList() {
     } catch (err) {
       setDismissingIds(prev => { const s = new Set(prev); s.delete(taskId); return s })
       console.error(`[TaskList] patchTask(${taskId}) failed:`, err)
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
     }
   }, [silentLoad, pushUndo])
 
-  const deleteTaskCb = useCallback(async taskId => {
+  const deleteTaskCb = useCallback(async (taskId: number) => {
     try {
       await deleteTask(taskId)
       setTasks(prev => prev.filter(t => t.id !== taskId))
     } catch (err) {
       console.error(`[TaskList] deleteTask(${taskId}) failed:`, err)
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
     }
   }, [])
 
-  const patchSubtask = useCallback(async (taskId, subtaskId, data) => {
+  const patchSubtask = useCallback(async (taskId: number, subtaskId: number, data: Partial<Subtask>) => {
     const prevTask = tasksRef.current.find(t => t.id === taskId)
     const prevSub  = prevTask?.subtasks?.find(s => s.id === subtaskId)
     try {
-      const updated = await updateSubtask(taskId, subtaskId, data)
-      const applyUpdate = subs => subs.map(s => s.id === subtaskId ? updated : s)
+      const updated: Subtask = await updateSubtask(taskId, subtaskId, data)
+      const applyUpdate = (subs: Subtask[] | undefined): Subtask[] =>
+        (subs ?? []).map(s => s.id === subtaskId ? updated : s)
       setTasks(prev => prev.map(t =>
         t.id === taskId ? { ...t, subtasks: applyUpdate(t.subtasks) } : t
       ))
-      setPanel(p =>
-        p.task?.id === taskId
-          ? { ...p, task: { ...p.task, subtasks: applyUpdate(p.task.subtasks) } }
-          : p
-      )
+      setPanel(p => {
+        if (!p.task || p.task.id !== taskId) return p
+        return { ...p, task: { ...p.task, subtasks: applyUpdate(p.task.subtasks) } }
+      })
       if (prevSub) {
         const desc = data.status === 'done'
           ? `Subtask "${prevSub.title}" checked`
@@ -270,74 +280,75 @@ export default function TaskList() {
         pushUndo({
           description: desc,
           undo: async () => {
-            const revert  = reversePayload(prevSub, data)
-            const reverted = await updateSubtask(taskId, subtaskId, revert)
-            const applyRevert = subs => subs.map(s => s.id === subtaskId ? reverted : s)
+            const revert   = reversePayload(prevSub, data)
+            const reverted: Subtask = await updateSubtask(taskId, subtaskId, revert)
+            const applyRevert = (subs: Subtask[] | undefined): Subtask[] =>
+              (subs ?? []).map(s => s.id === subtaskId ? reverted : s)
             setTasks(prev => prev.map(t =>
               t.id === taskId ? { ...t, subtasks: applyRevert(t.subtasks) } : t
             ))
-            setPanel(p =>
-              p.task?.id === taskId
-                ? { ...p, task: { ...p.task, subtasks: applyRevert(p.task.subtasks) } }
-                : p
-            )
+            setPanel(p => {
+              if (!p.task || p.task.id !== taskId) return p
+              return { ...p, task: { ...p.task, subtasks: applyRevert(p.task.subtasks) } }
+            })
           },
         })
       }
     } catch (err) {
-      console.error(`[TaskList] patchSubtask failed:`, err)
-      setError(err.message)
+      console.error('[TaskList] patchSubtask failed:', err)
+      setError(err instanceof Error ? err.message : String(err))
     }
   }, [pushUndo])
 
-  const addSubtask = useCallback(async (taskId, title) => {
+  const addSubtask = useCallback(async (taskId: number, title: string) => {
     try {
-      const sub = await createSubtask(taskId, { title })
-      const updater = t => t.id === taskId ? { ...t, subtasks: [...(t.subtasks ?? []), sub] } : t
+      const sub: Subtask = await createSubtask(taskId, { title })
+      const updater = (t: Task): Task =>
+        t.id === taskId ? { ...t, subtasks: [...(t.subtasks ?? []), sub] } : t
       setTasks(prev => prev.map(updater))
-      setPanel(p => p.task?.id === taskId ? { ...p, task: updater(p.task) } : p)
+      setPanel(p => p.task?.id === taskId ? { ...p, task: updater(p.task!) } : p)
     } catch (err) {
       console.error(`[TaskList] createSubtask(${taskId}) failed:`, err)
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
     }
   }, [])
 
-  const deleteSubtaskCb = useCallback(async (taskId, subtaskId) => {
+  const deleteSubtaskCb = useCallback(async (taskId: number, subtaskId: number) => {
     const prevTask = tasksRef.current.find(t => t.id === taskId)
     const prevSub  = prevTask?.subtasks?.find(s => s.id === subtaskId)
     try {
       await deleteSubtask(taskId, subtaskId)
-      const updater = t => t.id === taskId ? { ...t, subtasks: t.subtasks.filter(s => s.id !== subtaskId) } : t
+      const updater = (t: Task): Task =>
+        t.id === taskId ? { ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== subtaskId) } : t
       setTasks(prev => prev.map(updater))
-      setPanel(p => p.task?.id === taskId ? { ...p, task: updater(p.task) } : p)
+      setPanel(p => p.task?.id === taskId ? { ...p, task: updater(p.task!) } : p)
       if (prevSub) {
         pushUndo({
           description: `Subtask "${prevSub.title}" deleted`,
           undo: async () => {
-            const restored = await createSubtask(taskId, {
+            const restored: Subtask = await createSubtask(taskId, {
               title:     prevSub.title,
               status:    prevSub.status,
               due_date:  prevSub.due_date ?? null,
               order:     prevSub.order,
             })
-            const applyRestore = t => t.id === taskId
-              ? { ...t, subtasks: [...(t.subtasks ?? []), restored] }
-              : t
+            const applyRestore = (t: Task): Task =>
+              t.id === taskId ? { ...t, subtasks: [...(t.subtasks ?? []), restored] } : t
             setTasks(prev => prev.map(applyRestore))
-            setPanel(p => p.task?.id === taskId ? { ...p, task: applyRestore(p.task) } : p)
+            setPanel(p => p.task?.id === taskId ? { ...p, task: applyRestore(p.task!) } : p)
           },
         })
       }
     } catch (err) {
-      console.error(`[TaskList] deleteSubtask failed:`, err)
-      setError(err.message)
+      console.error('[TaskList] deleteSubtask failed:', err)
+      setError(err instanceof Error ? err.message : String(err))
     }
   }, [pushUndo])
 
-  const reorderTasks = useCallback(async (reorderedSectionTasks) => {
+  const reorderTasks = useCallback(async (reorderedSectionTasks: Task[]) => {
     const withOrder = reorderedSectionTasks.map((t, i) => ({ ...t, order: i }))
     const byId = new Map(withOrder.map(t => [t.id, t]))
-    setTasks(prev => prev.map(t => byId.has(t.id) ? byId.get(t.id) : t))
+    setTasks(prev => prev.map(t => byId.get(t.id) ?? t))
     const original = tasksRef.current
     try {
       await Promise.all(
@@ -350,15 +361,15 @@ export default function TaskList() {
       )
     } catch (err) {
       console.error('[TaskList] reorderTasks failed:', err)
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
     }
   }, [])
 
-  const reorderSubtasks = useCallback(async (taskId, reorderedSubs) => {
+  const reorderSubtasks = useCallback(async (taskId: number, reorderedSubs: Subtask[]) => {
     const withOrder = reorderedSubs.map((s, i) => ({ ...s, order: i }))
-    const updater = t => t.id === taskId ? { ...t, subtasks: withOrder } : t
+    const updater = (t: Task): Task => t.id === taskId ? { ...t, subtasks: withOrder } : t
     setTasks(prev => prev.map(updater))
-    setPanel(p => p.task?.id === taskId ? { ...p, task: updater(p.task) } : p)
+    setPanel(p => p.task?.id === taskId ? { ...p, task: updater(p.task!) } : p)
     const original = tasksRef.current.find(t => t.id === taskId)?.subtasks ?? []
     try {
       await Promise.all(
@@ -370,8 +381,8 @@ export default function TaskList() {
           .map(s => updateSubtask(taskId, s.id, { order: s.order }))
       )
     } catch (err) {
-      console.error(`[TaskList] reorderSubtasks failed:`, err)
-      setError(err.message)
+      console.error('[TaskList] reorderSubtasks failed:', err)
+      setError(err instanceof Error ? err.message : String(err))
     }
   }, [])
 
@@ -436,7 +447,7 @@ export default function TaskList() {
       {!loading && filterStatus.length > 0 && visible.length > 0 && (
         <div>
           {SECTION_DEFS.map(({ key, label, hideWhenEmpty }) => {
-            const sectionTasks = grouped[key]
+            const sectionTasks: Task[] = grouped[key] ?? []
             const isEmpty = sectionTasks.length === 0
             if (hideWhenEmpty && isEmpty) return null
             const isCollapsed = collapsedSections[key] !== undefined
