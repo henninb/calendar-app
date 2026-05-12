@@ -14,7 +14,6 @@ import {
 import type { Task, Subtask, Person, Category, TaskStatus } from './helpers'
 import TaskToolbar from './TaskToolbar'
 import TaskSection from './TaskSection'
-import TasksActions from '@/components/TasksActions'
 import TaskPanel from './TaskPanel'
 import UndoToast from './UndoToast'
 import { useUndoStack } from './useUndoStack'
@@ -389,7 +388,6 @@ export default function TaskList() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <TasksActions />
       <TaskToolbar
         searchQuery={searchQuery}
         onSearch={setSearchQuery}

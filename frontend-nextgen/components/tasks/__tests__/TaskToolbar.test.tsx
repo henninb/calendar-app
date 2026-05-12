@@ -1,6 +1,13 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import React from 'react'
+
+vi.mock('@/lib/api', () => ({
+  gcalAuthStatus: vi.fn(),
+  syncToGtasks:   vi.fn(),
+}))
+
+import * as api from '@/lib/api'
 import TaskToolbar from '../TaskToolbar'
 import { STATUS_OPTIONS } from '../helpers'
 
@@ -18,11 +25,16 @@ function renderToolbar(overrides: Record<string, unknown> = {}) {
     categories: [],
     loading: false,
     onRefresh: vi.fn(),
-    onNewTask: vi.fn(),
     ...overrides,
   }
   return render(<TaskToolbar {...props} />)
 }
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(api.gcalAuthStatus).mockResolvedValue({ authenticated: true })
+  vi.mocked(api.syncToGtasks).mockResolvedValue({ type: 'done', synced: 5, failed: 0, errors: [] })
+})
 
 describe('TaskToolbar', () => {
   // ── Search ───────────────────────────────────────────────────────────────
@@ -121,7 +133,7 @@ describe('TaskToolbar', () => {
 
   it('Refresh button is disabled while loading', () => {
     renderToolbar({ loading: true })
-    const btn = screen.getByText('…').closest('button')
+    const btn = screen.getByRole('button', { name: 'Reload tasks from server' })
     expect(btn).toBeDisabled()
   })
 
@@ -167,5 +179,94 @@ describe('TaskToolbar', () => {
     const categorySection = screen.getByText('Category').closest('div')!
     fireEvent.change(categorySection.querySelector('select')!, { target: { value: '3' } })
     expect(onFilterCategory).toHaveBeenCalledWith('3')
+  })
+
+  // ── Google Sync ───────────────────────────────────────────────────────────
+
+  it('renders the Google Sync button', () => {
+    renderToolbar()
+    expect(screen.getByText(/Google Sync/)).toBeInTheDocument()
+  })
+
+  it('calls gcalAuthStatus on mount', async () => {
+    renderToolbar()
+    await waitFor(() => expect(api.gcalAuthStatus).toHaveBeenCalledTimes(1))
+  })
+
+  it('calls syncToGtasks when authenticated and button is clicked', async () => {
+    renderToolbar()
+    await waitFor(() => expect(api.gcalAuthStatus).toHaveBeenCalled())
+    fireEvent.click(screen.getByText(/Google Sync/))
+    await waitFor(() => expect(api.syncToGtasks).toHaveBeenCalledTimes(1))
+  })
+
+  it('shows "Syncing…" while in progress', async () => {
+    let resolve!: (v: unknown) => void
+    vi.mocked(api.syncToGtasks).mockReturnValue(new Promise(r => { resolve = r }))
+    renderToolbar()
+    await waitFor(() => expect(api.gcalAuthStatus).toHaveBeenCalled())
+    fireEvent.click(screen.getByText(/Google Sync/))
+    await waitFor(() => expect(screen.getByText('Syncing…')).toBeInTheDocument())
+    resolve({ type: 'done', synced: 0, failed: 0, errors: [] })
+  })
+
+  it('disables Google Sync button while syncing', async () => {
+    let resolve!: (v: unknown) => void
+    vi.mocked(api.syncToGtasks).mockReturnValue(new Promise(r => { resolve = r }))
+    renderToolbar()
+    await waitFor(() => expect(api.gcalAuthStatus).toHaveBeenCalled())
+    const btn = screen.getByRole('button', { name: /Google Sync/ })
+    fireEvent.click(btn)
+    await waitFor(() => expect(btn).toBeDisabled())
+    resolve({ type: 'done', synced: 0, failed: 0, errors: [] })
+  })
+
+  it('logs success after sync completes', async () => {
+    renderToolbar()
+    await waitFor(() => expect(api.gcalAuthStatus).toHaveBeenCalled())
+    fireEvent.click(screen.getByText(/Google Sync/))
+    await waitFor(() =>
+      expect(screen.getByText(/Synced 5 tasks to Google Tasks/)).toBeInTheDocument()
+    )
+  })
+
+  it('shows clear-log button after sync', async () => {
+    renderToolbar()
+    await waitFor(() => expect(api.gcalAuthStatus).toHaveBeenCalled())
+    fireEvent.click(screen.getByText(/Google Sync/))
+    await waitFor(() => expect(screen.getByTitle('Clear log')).toBeInTheDocument())
+  })
+
+  it('clears log panel when clear button is clicked', async () => {
+    renderToolbar()
+    await waitFor(() => expect(api.gcalAuthStatus).toHaveBeenCalled())
+    fireEvent.click(screen.getByText(/Google Sync/))
+    await waitFor(() => expect(screen.getByText(/Synced 5 tasks/)).toBeInTheDocument())
+    fireEvent.click(screen.getByTitle('Clear log'))
+    expect(screen.queryByText(/Synced 5 tasks/)).not.toBeInTheDocument()
+  })
+
+  it('logs error when syncToGtasks throws', async () => {
+    vi.mocked(api.syncToGtasks).mockRejectedValue(new Error('Gtasks sync failed'))
+    renderToolbar()
+    await waitFor(() => expect(api.gcalAuthStatus).toHaveBeenCalled())
+    fireEvent.click(screen.getByText(/Google Sync/))
+    await waitFor(() =>
+      expect(screen.getByText(/Google Tasks sync failed: Gtasks sync failed/)).toBeInTheDocument()
+    )
+  })
+
+  it('redirects to /api/sync/auth when not authenticated', async () => {
+    vi.mocked(api.gcalAuthStatus).mockResolvedValue({ authenticated: false })
+    const locationMock = { href: '' }
+    vi.stubGlobal('location', locationMock)
+
+    renderToolbar()
+    await waitFor(() => expect(api.gcalAuthStatus).toHaveBeenCalled())
+    fireEvent.click(screen.getByText(/Google Sync/))
+    expect(locationMock.href).toBe('/api/sync/auth')
+    expect(api.syncToGtasks).not.toHaveBeenCalled()
+
+    vi.unstubAllGlobals()
   })
 })

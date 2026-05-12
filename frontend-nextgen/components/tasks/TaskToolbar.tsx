@@ -1,13 +1,33 @@
 'use client'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { CloudUpload, SlidersHorizontal, RefreshCw, X } from 'lucide-react'
 import { STATUS_OPTIONS, STATUS_LABELS } from './helpers'
 import type { TaskStatus, Person, Category } from './helpers'
+import { gcalAuthStatus, syncToGtasks } from '@/lib/api'
 
 const STATUS_PILL_ACTIVE: Record<TaskStatus, string> = {
   todo:        'bg-blue-100 text-blue-700 ring-1 ring-blue-300 dark:bg-blue-500/20 dark:text-blue-300 dark:ring-blue-500/40',
   in_progress: 'bg-amber-100 text-amber-700 ring-1 ring-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40',
   done:        'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:ring-emerald-500/40',
   cancelled:   'bg-slate-200 text-slate-600 ring-1 ring-slate-300 dark:bg-slate-600/40 dark:text-slate-300 dark:ring-slate-500/40',
+}
+
+type LogLevel = 'info' | 'ok' | 'warn' | 'error'
+interface LogEntry { id: number; level: LogLevel; text: string; time: string }
+
+const LOG_COLOR: Record<LogLevel, string> = {
+  info:  'text-blue-300',
+  ok:    'text-emerald-300',
+  warn:  'text-amber-300',
+  error: 'text-red-300',
+}
+
+function timestamp() {
+  return new Date().toLocaleTimeString('en-US', { hour12: false })
+}
+
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
 }
 
 interface FilterPopoverProps {
@@ -52,7 +72,7 @@ function FilterPopover({
   return (
     <div
       ref={ref}
-      className="absolute left-0 top-full mt-2 z-30 w-72
+      className="absolute right-0 top-full mt-2 z-30 w-72
         bg-white dark:bg-slate-900
         border border-slate-200 dark:border-slate-700
         rounded-2xl shadow-2xl p-4 space-y-4"
@@ -147,80 +167,179 @@ export default function TaskToolbar({
 }: TaskToolbarProps) {
   const [filterOpen, setFilterOpen] = useState(false)
 
+  const [gtasksSyncing, setGtasksSyncing] = useState(false)
+  const [gcalAuth, setGcalAuth]           = useState<boolean | null>(null)
+  const [logs, setLogs]                   = useState<LogEntry[]>([])
+  const [logCount, setLogCount]           = useState(0)
+  const logEndRef                         = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    gcalAuthStatus()
+      .then((s: { authenticated: boolean }) => setGcalAuth(s.authenticated))
+      .catch(() => setGcalAuth(false))
+  }, [])
+
+  const addLog = useCallback((level: LogLevel, text: string): number => {
+    const id = Date.now() + Math.random()
+    setLogs(prev => [...prev, { id, level, text, time: timestamp() }])
+    setLogCount(c => c + 1)
+    return id
+  }, [])
+
+  const updateLog = useCallback((id: number, text: string) => {
+    setLogs(prev => prev.map(entry => entry.id === id ? { ...entry, text } : entry))
+  }, [])
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [logCount])
+
+  const handleGtasksSync = async () => {
+    if (!gcalAuth) {
+      window.location.href = '/api/sync/auth'
+      return
+    }
+    setGtasksSyncing(true)
+    addLog('info', 'Syncing tasks to Google Tasks…')
+    const progressId = addLog('info', 'Waiting for server…')
+    try {
+      const res = await syncToGtasks((data: { type: string; total?: number; msg?: string }) => {
+        if (data.type === 'start') {
+          updateLog(progressId, `[gtasks sync] 0/${data.total} starting…`)
+        } else if (data.type === 'progress') {
+          updateLog(progressId, `[gtasks sync] ${data.msg}`)
+        }
+      })
+      setLogs(prev => prev.filter(entry => entry.id !== progressId))
+      const level: LogLevel = res.failed > 0 ? 'warn' : 'ok'
+      addLog(level, `Synced ${res.synced} tasks to Google Tasks.${res.failed ? ` ${res.failed} failed.` : ''}`)
+      if (res.failed > 0) {
+        const quotaErrors = (res.errors as string[] | undefined)?.filter((e: string) => e.includes('quotaExceeded') || e.includes('Quota Exceeded')) ?? []
+        if (quotaErrors.length > 0) {
+          addLog('warn', 'Google Tasks API quota exceeded — daily limit reached.')
+        } else {
+          addLog('warn', `${res.failed} task(s) failed to sync — you may need to reconnect Google.`)
+          ;(res.errors as string[] | undefined)?.slice(0, 5).forEach((err: string) => addLog('error', err))
+        }
+      }
+    } catch (e) {
+      setLogs(prev => prev.filter(entry => entry.id !== progressId))
+      addLog('error', `Google Tasks sync failed: ${errMsg(e)}`)
+    } finally {
+      setGtasksSyncing(false)
+    }
+  }
+
   const activeFilterCount =
     (filterStatus.length < STATUS_OPTIONS.length ? 1 : 0) +
     (filterAssignee ? 1 : 0) +
     (filterCategory ? 1 : 0)
 
-  const headerControls = (
-    <>
-      <input
-        type="search"
-        placeholder="Search tasks…"
-        value={searchQuery}
-        onChange={e => onSearch(e.target.value)}
-        className="px-3 py-1.5 text-sm rounded-xl w-44 md:w-64
-          bg-white dark:bg-slate-700
-          border border-slate-200 dark:border-slate-600
-          text-slate-800 dark:text-slate-200
-          placeholder-slate-400 dark:placeholder-slate-400
-          focus:outline-none focus:ring-2 focus:ring-blue-500/50
-          transition-shadow"
-      />
-
-      <div className="relative">
+  return (
+    <div className="mb-4 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <button
-          onClick={() => setFilterOpen(o => !o)}
+          onClick={handleGtasksSync}
+          disabled={gtasksSyncing}
+          title={gcalAuth ? 'Sync tasks to Google Tasks' : 'Connect your Google account to enable Google Tasks sync'}
           className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium transition-all
-            ${filterOpen || activeFilterCount > 0
-              ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/25'
-              : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+            disabled:opacity-50 disabled:cursor-not-allowed
+            ${gcalAuth
+              ? 'bg-violet-600 hover:bg-violet-500 text-white shadow-sm shadow-violet-500/25'
+              : 'bg-blue-600 hover:bg-blue-500 text-white shadow-sm shadow-blue-500/25'
             }`}
         >
-          <span>⚙</span>
-          Filters
-          {activeFilterCount > 0 && (
-            <span className="ml-0.5 w-5 h-5 rounded-full bg-white/20 text-xs font-bold flex items-center justify-center">
-              {activeFilterCount}
-            </span>
-          )}
+          <CloudUpload size={14} />
+          {gtasksSyncing ? 'Syncing…' : 'Google Sync'}
         </button>
-        {filterOpen && (
-          <FilterPopover
-            filterStatus={filterStatus}
-            onToggleStatus={onToggleStatus}
-            filterAssignee={filterAssignee}
-            onFilterAssignee={onFilterAssignee}
-            filterCategory={filterCategory}
-            onFilterCategory={onFilterCategory}
-            persons={persons}
-            categories={categories}
-            onClose={() => setFilterOpen(false)}
-          />
-        )}
+
+        <div className="flex-1" />
+
+        <input
+          type="search"
+          placeholder="Search tasks…"
+          value={searchQuery}
+          onChange={e => onSearch(e.target.value)}
+          className="px-3 py-1.5 text-sm rounded-xl w-44 md:w-64
+            bg-white dark:bg-slate-700
+            border border-slate-200 dark:border-slate-600
+            text-slate-800 dark:text-slate-200
+            placeholder-slate-400 dark:placeholder-slate-400
+            focus:outline-none focus:ring-2 focus:ring-blue-500/50
+            transition-shadow"
+        />
+
+        <div className="relative">
+          <button
+            onClick={() => setFilterOpen(o => !o)}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium transition-all
+              ${filterOpen || activeFilterCount > 0
+                ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/25'
+                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+              }`}
+          >
+            <SlidersHorizontal size={14} />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="ml-0.5 w-5 h-5 rounded-full bg-white/20 text-xs font-bold flex items-center justify-center">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          {filterOpen && (
+            <FilterPopover
+              filterStatus={filterStatus}
+              onToggleStatus={onToggleStatus}
+              filterAssignee={filterAssignee}
+              onFilterAssignee={onFilterAssignee}
+              filterCategory={filterCategory}
+              onFilterCategory={onFilterCategory}
+              persons={persons}
+              categories={categories}
+              onClose={() => setFilterOpen(false)}
+            />
+          )}
+        </div>
+
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          title="Reload tasks from server"
+          aria-label="Reload tasks from server"
+          className="p-2 rounded-xl
+            bg-white dark:bg-slate-800
+            border border-slate-200 dark:border-slate-700
+            text-slate-600 dark:text-slate-300
+            hover:border-slate-300 dark:hover:border-slate-600
+            disabled:opacity-40 disabled:cursor-not-allowed
+            transition-all"
+        >
+          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+        </button>
       </div>
 
-      <button
-        onClick={onRefresh}
-        disabled={loading}
-        title="Reload tasks from server"
-        aria-label="Reload tasks from server"
-        className="p-2 rounded-xl text-sm font-medium
-          bg-white dark:bg-slate-800
-          border border-slate-200 dark:border-slate-700
-          text-slate-600 dark:text-slate-300
-          hover:border-slate-300 dark:hover:border-slate-600
-          disabled:opacity-40 disabled:cursor-not-allowed
-          transition-all"
-      >
-        {loading ? '…' : '↻'}
-      </button>
-    </>
-  )
-
-  return (
-    <div className="flex items-center gap-2 flex-wrap mb-4">
-      {headerControls}
+      {logs.length > 0 && (
+        <div className="relative rounded-xl border border-slate-700 bg-slate-900 dark:bg-slate-950">
+          <button
+            onClick={() => setLogs([])}
+            title="Clear log"
+            className="absolute top-2 right-2 p-1 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-700/60 transition-colors"
+          >
+            <X size={13} />
+          </button>
+          <div
+            className="px-4 py-3 pr-8 max-h-24 overflow-y-auto font-mono text-xs space-y-0.5"
+          >
+            {logs.map(entry => (
+              <div key={entry.id} className={`leading-relaxed ${LOG_COLOR[entry.level]}`}>
+                <span className="opacity-50 mr-3">{entry.time}</span>
+                {entry.text}
+              </div>
+            ))}
+            <div ref={logEndRef} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
