@@ -5,23 +5,44 @@ import dayGridPlugin from '@fullcalendar/daygrid'
 import listPlugin from '@fullcalendar/list'
 import interactionPlugin from '@fullcalendar/interaction'
 import { fetchOccurrences, fetchCategories, updateOccurrence, deleteOccurrence, createEvent } from '@/lib/api'
+import type { EventClickArg } from '@fullcalendar/core'
 import EventPanel from '@/components/EventPanel'
 
-function fmt(dateStr) {
+interface CalCategory {
+  id: number
+  name: string
+  color: string
+  icon: string
+}
+
+interface CalOccurrence {
+  id: number
+  occurrence_date: string
+  status: string
+  event: {
+    title: string
+    description?: string | null
+    amount?: number | string | null
+    reminder_days?: number[]
+    category: { name: string; color?: string }
+  }
+}
+
+function fmt(dateStr: string) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
   })
 }
 
 export default function CalendarView() {
-  const [occs, setOccs]           = useState([])
-  const [cats, setCats]           = useState([])
-  const [selected, setSelected]   = useState(null)
+  const [occs, setOccs]           = useState<CalOccurrence[]>([])
+  const [cats, setCats]           = useState<CalCategory[]>([])
+  const [selected, setSelected]   = useState<CalOccurrence | null>(null)
   const [saving, setSaving]       = useState(false)
-  const [activeFilter, setFilter] = useState(null)
-  const [error, setError]         = useState(null)
+  const [activeFilter, setFilter] = useState<string | null>(null)
+  const [error, setError]         = useState<string | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
-  const dateRangeRef              = useRef(null)
+  const dateRangeRef              = useRef<{ start: string; end: string } | null>(null)
 
   useEffect(() => { fetchCategories().then(setCats) }, [])
 
@@ -41,15 +62,15 @@ export default function CalendarView() {
         }
       }), [occs, cats, activeFilter])
 
-  const handleDatesSet = useCallback(async ({ startStr, endStr }) => {
+  const handleDatesSet = useCallback(async ({ startStr, endStr }: { startStr: string; endStr: string }) => {
     const start = startStr.slice(0, 10)
     const end   = endStr.slice(0, 10)
     dateRangeRef.current = { start, end }
-    const data  = await fetchOccurrences({ start_date: start, end_date: end })
+    const data = await fetchOccurrences({ start_date: start, end_date: end })
     setOccs(data)
   }, [])
 
-  const handleCreateEvent = useCallback(async (payload) => {
+  const handleCreateEvent = useCallback(async (payload: unknown) => {
     await createEvent(payload)
     if (dateRangeRef.current) {
       const data = await fetchOccurrences({
@@ -61,25 +82,26 @@ export default function CalendarView() {
     setPanelOpen(false)
   }, [])
 
-  const handleEventClick = ({ event }) => setSelected(event.extendedProps.occ)
+  const handleEventClick = (arg: EventClickArg) =>
+    setSelected((arg.event.extendedProps as { occ: CalOccurrence }).occ)
 
   useEffect(() => {
     if (!selected) return
-    const onKey = (e) => { if (e.key === 'Escape') setSelected(null) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelected(null) }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [selected])
 
-  const markStatus = async (status) => {
+  const markStatus = async (status: string) => {
     if (!selected) return
     setSaving(true)
     setError(null)
     try {
-      const updated = await updateOccurrence(selected.id, { status })
+      const updated: CalOccurrence = await updateOccurrence(selected.id, { status })
       setSelected(updated)
       setOccs(prev => prev.map(o => o.id === updated.id ? updated : o))
     } catch (e) {
-      setError(`Failed to update status: ${e.message}`)
+      setError(`Failed to update status: ${(e as Error).message}`)
     } finally {
       setSaving(false)
     }
@@ -95,7 +117,7 @@ export default function CalendarView() {
       setOccs(prev => prev.filter(o => o.id !== selected.id))
       setSelected(null)
     } catch (e) {
-      setError(`Failed to delete occurrence: ${e.message}`)
+      setError(`Failed to delete occurrence: ${(e as Error).message}`)
     } finally {
       setSaving(false)
     }
@@ -223,10 +245,10 @@ export default function CalendarView() {
               <span>${Number(selected.event.amount).toFixed(2)}</span>
             </div>
           )}
-          {selected.event?.reminder_days?.length > 0 && (
+          {(selected.event?.reminder_days?.length ?? 0) > 0 && (
             <div className="detail-row">
               <span>Reminders</span>
-              <span>{selected.event.reminder_days.map(d => `${d}d before`).join(', ')}</span>
+              <span>{selected.event.reminder_days!.map(d => `${d}d before`).join(', ')}</span>
             </div>
           )}
 

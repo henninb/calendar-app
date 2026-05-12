@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { gcalAuthStatus } from '@/lib/api'
 
-interface Config {
+export interface Config {
   gcalSyncDays: number
   gcalSyncForce: boolean
   apiKey: string

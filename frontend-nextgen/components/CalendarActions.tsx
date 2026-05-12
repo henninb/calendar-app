@@ -1,44 +1,56 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { loadConfig } from '@/components/ConfigPage'
+import { loadConfig, type Config } from '@/components/ConfigPage'
 import {
   gcalAuthStatus, generateAll, syncToGcal,
   deleteAllGcalEvents, wipeAllGcalEvents,
+  type SyncResult,
 } from '@/lib/api'
 
-const LOG_COLOR = { info: '#93c5fd', ok: '#86efac', warn: '#fde68a', error: '#fca5a5' }
+type LogLevel = 'info' | 'ok' | 'warn' | 'error'
+
+interface LogEntry {
+  id: number
+  level: LogLevel
+  text: string
+  time: string
+}
+
+const LOG_COLOR: Record<LogLevel, string> = {
+  info: '#93c5fd', ok: '#86efac', warn: '#fde68a', error: '#fca5a5',
+}
 
 function timestamp() {
   return new Date().toLocaleTimeString('en-US', { hour12: false })
 }
 
 export default function CalendarActions() {
-  const [config, setConfig]               = useState({ gcalSyncDays: 365, gcalSyncForce: false, apiKey: '' })
-  const [syncing, setSyncing]             = useState(false)
-  const [gcalSyncing, setGcalSyncing]     = useState(false)
-  const [gcalDeleting, setGcalDeleting]   = useState(false)
-  const [gcalWiping, setGcalWiping]       = useState(false)
-  const [gcalAuth, setGcalAuth]           = useState(null)
-  const [logs, setLogs]                   = useState([])
-  const [logCount, setLogCount]           = useState(0)
-  const logEndRef                         = useRef(null)
+  const [config, setConfig]             = useState<Config>({ gcalSyncDays: 365, gcalSyncForce: false, apiKey: '' })
+  const [syncing, setSyncing]           = useState(false)
+  const [gcalSyncing, setGcalSyncing]   = useState(false)
+  const [gcalDeleting, setGcalDeleting] = useState(false)
+  const [gcalWiping, setGcalWiping]     = useState(false)
+  const [gcalAuth, setGcalAuth]         = useState<boolean | null>(null)
+  const [logs, setLogs]                 = useState<LogEntry[]>([])
+  const [logCount, setLogCount]         = useState(0)
+  const logEndRef                       = useRef<HTMLDivElement>(null)
 
   useEffect(() => { setConfig(loadConfig()) }, [])
 
-  const addLog = useCallback((level, text) => {
+  const addLog = useCallback((level: LogLevel, text: string): number => {
     const id = Date.now() + Math.random()
     setLogs(prev => [...prev, { id, level, text, time: timestamp() }])
     setLogCount(c => c + 1)
     return id
   }, [])
 
-  const updateLog = useCallback((id, text) => {
+  const updateLog = useCallback((id: number, text: string) => {
     setLogs(prev => prev.map(entry => entry.id === id ? { ...entry, text } : entry))
   }, [])
 
   useEffect(() => {
     gcalAuthStatus()
-      .then(s => {
+      .then((s: { authenticated: boolean; email?: string }) => {
         setGcalAuth(s.authenticated)
         addLog('info', `Google auth status: ${s.authenticated ? `authenticated (${s.email || 'no email'})` : 'not authenticated'}`)
       })
@@ -56,7 +68,7 @@ export default function CalendarActions() {
       const res = await generateAll()
       addLog('ok', `Generated ${res.occurrences_created} new occurrences across ${res.events_processed} events.`)
     } catch (e) {
-      addLog('error', `Generate failed: ${e.message}`)
+      addLog('error', `Generate failed: ${(e as Error).message}`)
     } finally {
       setSyncing(false)
     }
@@ -72,7 +84,7 @@ export default function CalendarActions() {
     addLog('info', `Starting Google Calendar sync (force=${config.gcalSyncForce}, ${config.gcalSyncDays} days)…`)
     const progressId = addLog('info', 'Waiting for server…')
     try {
-      const res = await syncToGcal(config.gcalSyncDays, config.gcalSyncForce, (data) => {
+      const res: SyncResult = await syncToGcal(config.gcalSyncDays, config.gcalSyncForce, (data) => {
         if (data.type === 'start') {
           updateLog(progressId, `[gcal sync] 0/${data.total} starting…`)
         } else if (data.type === 'progress') {
@@ -80,12 +92,12 @@ export default function CalendarActions() {
         }
       })
       setLogs(prev => prev.filter(entry => entry.id !== progressId))
-      const level = res.failed > 0 ? 'warn' : 'ok'
+      const level: LogLevel = res.failed > 0 ? 'warn' : 'ok'
       addLog(level, `Synced ${res.synced} events to Google Calendar.${res.failed ? ` ${res.failed} failed.` : ''}`)
       if (res.failed > 0) {
         const quotaErrors = res.errors?.filter(e => e.includes('quotaExceeded') || e.includes('Quota Exceeded')) ?? []
         if (quotaErrors.length > 0) {
-          addLog('warn', `Google Calendar API quota exceeded — daily limit reached. Try again tomorrow or increase your quota in the Google Cloud Console.`)
+          addLog('warn', 'Google Calendar API quota exceeded — daily limit reached. Try again tomorrow or increase your quota in the Google Cloud Console.')
         } else {
           addLog('warn', `${res.failed} event(s) failed to sync — you may need to reconnect Google.`)
           res.errors?.slice(0, 5).forEach(err => addLog('error', err))
@@ -93,7 +105,7 @@ export default function CalendarActions() {
       }
     } catch (e) {
       setLogs(prev => prev.filter(entry => entry.id !== progressId))
-      addLog('error', `Google Calendar sync failed: ${e.message}`)
+      addLog('error', `Google Calendar sync failed: ${(e as Error).message}`)
     } finally {
       setGcalSyncing(false)
     }
@@ -108,7 +120,7 @@ export default function CalendarActions() {
       const res = await deleteAllGcalEvents()
       addLog('ok', res.message || 'Delete started in background.')
     } catch (e) {
-      addLog('error', `Delete failed: ${e.message}`)
+      addLog('error', `Delete failed: ${(e as Error).message}`)
     } finally {
       setGcalDeleting(false)
     }
@@ -123,7 +135,7 @@ export default function CalendarActions() {
       const res = await wipeAllGcalEvents()
       addLog('ok', res.message || 'Full wipe started in background.')
     } catch (e) {
-      addLog('error', `Wipe failed: ${e.message}`)
+      addLog('error', `Wipe failed: ${(e as Error).message}`)
     } finally {
       setGcalWiping(false)
     }

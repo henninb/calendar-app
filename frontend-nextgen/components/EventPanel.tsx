@@ -26,23 +26,43 @@ function today() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export default function EventPanel({ open, onClose, onCreateEvent, categories }) {
-  const [form, setForm] = useState({})
+interface EventCategory {
+  id: number
+  name: string
+  icon: string
+  color: string
+}
+
+interface EventForm {
+  title: string
+  category_id: string
+  dtstart: string
+  rrule: string
+  dtend_rule: string
+  duration_days: string
+  description: string
+  amount: string
+}
+
+interface EventPanelProps {
+  open: boolean
+  onClose: () => void
+  onCreateEvent: (payload: unknown) => Promise<void>
+  categories: EventCategory[]
+}
+
+export default function EventPanel({ open, onClose, onCreateEvent, categories }: EventPanelProps) {
+  const [form, setForm]   = useState<EventForm>({ title: '', category_id: '', dtstart: '', rrule: '', dtend_rule: '', duration_days: '1', description: '', amount: '' })
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(null)
-  const titleRef = useRef(null)
+  const [error, setError]   = useState<string | null>(null)
+  const titleRef            = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!open) return
     setForm({
-      title: '',
-      category_id: '',
-      dtstart: today(),
-      rrule: '',
-      dtend_rule: '',
-      duration_days: '1',
-      description: '',
-      amount: '',
+      title: '', category_id: '', dtstart: today(),
+      rrule: '', dtend_rule: '', duration_days: '1',
+      description: '', amount: '',
     })
     setError(null)
   }, [open])
@@ -53,12 +73,12 @@ export default function EventPanel({ open, onClose, onCreateEvent, categories })
 
   useEffect(() => {
     if (!open) return
-    function handle(e) { if (e.key === 'Escape') onClose() }
+    function handle(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handle)
     return () => document.removeEventListener('keydown', handle)
   }, [open, onClose])
 
-  function set(field, value) {
+  function set<K extends keyof EventForm>(field: K, value: EventForm[K]) {
     setForm(p => ({ ...p, [field]: value }))
   }
 
@@ -76,12 +96,12 @@ export default function EventPanel({ open, onClose, onCreateEvent, categories })
       dtend_rule:    form.dtend_rule || null,
       duration_days: Math.max(1, parseInt(form.duration_days, 10) || 1),
       description:   form.description.trim() || null,
-      amount:        form.amount ? form.amount : null,
+      amount:        form.amount || null,
     }
     try {
       await onCreateEvent(payload)
     } catch (e) {
-      setError(e.message)
+      setError((e as Error).message)
     } finally {
       setSaving(false)
     }
@@ -124,7 +144,7 @@ export default function EventPanel({ open, onClose, onCreateEvent, categories })
             <label className={labelCls}>Title <span className="text-red-500 normal-case tracking-normal">*</span></label>
             <input
               ref={titleRef}
-              value={form.title ?? ''}
+              value={form.title}
               onChange={e => set('title', e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSave()}
               placeholder="Event title"
@@ -134,7 +154,7 @@ export default function EventPanel({ open, onClose, onCreateEvent, categories })
 
           <div>
             <label className={labelCls}>Category <span className="text-red-500 normal-case tracking-normal">*</span></label>
-            <select value={form.category_id ?? ''} onChange={e => set('category_id', e.target.value)} className={fieldCls}>
+            <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className={fieldCls}>
               <option value="">Select category…</option>
               {categories.map(c => (
                 <option key={c.id} value={c.id}>{c.icon} {c.name.replace(/_/g, ' ')}</option>
@@ -147,7 +167,7 @@ export default function EventPanel({ open, onClose, onCreateEvent, categories })
               <label className={labelCls}>Start Date <span className="text-red-500 normal-case tracking-normal">*</span></label>
               <input
                 type="date"
-                value={form.dtstart ?? ''}
+                value={form.dtstart}
                 onChange={e => set('dtstart', e.target.value)}
                 className={fieldCls}
               />
@@ -157,7 +177,7 @@ export default function EventPanel({ open, onClose, onCreateEvent, categories })
               <input
                 type="number"
                 min="1"
-                value={form.duration_days ?? '1'}
+                value={form.duration_days}
                 onChange={e => set('duration_days', e.target.value)}
                 className={fieldCls}
               />
@@ -166,7 +186,7 @@ export default function EventPanel({ open, onClose, onCreateEvent, categories })
 
           <div>
             <label className={labelCls}>Recurrence</label>
-            <select value={form.rrule ?? ''} onChange={e => set('rrule', e.target.value)} className={fieldCls}>
+            <select value={form.rrule} onChange={e => set('rrule', e.target.value)} className={fieldCls}>
               {RRULE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </div>
@@ -176,7 +196,7 @@ export default function EventPanel({ open, onClose, onCreateEvent, categories })
               <label className={labelCls}>Repeat Until (optional)</label>
               <input
                 type="date"
-                value={form.dtend_rule ?? ''}
+                value={form.dtend_rule}
                 onChange={e => set('dtend_rule', e.target.value)}
                 className={fieldCls}
               />
@@ -186,7 +206,7 @@ export default function EventPanel({ open, onClose, onCreateEvent, categories })
           <div>
             <label className={labelCls}>Description</label>
             <textarea
-              value={form.description ?? ''}
+              value={form.description}
               onChange={e => set('description', e.target.value)}
               placeholder="Optional notes…"
               rows={3}
@@ -200,7 +220,7 @@ export default function EventPanel({ open, onClose, onCreateEvent, categories })
               type="number"
               min="0"
               step="0.01"
-              value={form.amount ?? ''}
+              value={form.amount}
               onChange={e => set('amount', e.target.value)}
               placeholder="—"
               className={fieldCls}
@@ -212,7 +232,7 @@ export default function EventPanel({ open, onClose, onCreateEvent, categories })
         <div className="flex items-center gap-3 px-5 py-4 border-t border-slate-200 dark:border-slate-700/60 flex-shrink-0">
           <button
             onClick={handleSave}
-            disabled={saving || !form.title?.trim()}
+            disabled={saving || !form.title.trim()}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold
               bg-blue-600 hover:bg-blue-500 text-white
               disabled:opacity-50 disabled:cursor-not-allowed

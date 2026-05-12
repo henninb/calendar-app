@@ -2,18 +2,40 @@
 import { useEffect, useState } from 'react'
 import { fetchCreditCardTracker, createCreditCard } from '@/lib/api'
 
-function fmt(dateStr) {
+function fmt(dateStr: string | null | undefined): string {
   if (!dateStr) return '—'
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
   })
 }
 
-function DaysCell({ dateStr, days }) {
+interface CreditCardRow {
+  id: number
+  name: string
+  issuer?: string
+  last_four?: string
+  grace?: number
+  prev_close?: string | null
+  prev_due?: string | null
+  prev_due_overdue?: boolean
+  next_close?: string | null
+  next_close_days?: number
+  next_due?: string | null
+  next_due_days?: number
+  annual_fee_date?: string | null
+  annual_fee_days?: number
+}
+
+interface DaysCellProps {
+  dateStr?: string | null
+  days?: number
+}
+
+function DaysCell({ dateStr, days }: DaysCellProps) {
   if (!dateStr) return <td>—</td>
   let cls = ''
-  if (days <= 3)  cls = 'cc-overdue'
-  else if (days <= 7) cls = 'cc-soon'
+  if ((days ?? 0) <= 3)       cls = 'cc-overdue'
+  else if ((days ?? 0) <= 7)  cls = 'cc-soon'
   return (
     <td className={cls}>
       {fmt(dateStr)}{' '}
@@ -24,46 +46,55 @@ function DaysCell({ dateStr, days }) {
   )
 }
 
-const EMPTY_FORM = {
-  name: '',
-  issuer: '',
-  last_four: '',
-  statement_close_day: '',
-  grace_period_days: '',
-  weekend_shift: '',
-  due_day_same_month: '',
-  due_day_next_month: '',
-  annual_fee_month: '',
+interface CreditCardForm {
+  name: string
+  issuer: string
+  last_four: string
+  statement_close_day: string
+  grace_period_days: string
+  weekend_shift: string
+  due_day_same_month: string
+  due_day_next_month: string
+  annual_fee_month: string
+}
+
+const EMPTY_FORM: CreditCardForm = {
+  name: '', issuer: '', last_four: '',
+  statement_close_day: '', grace_period_days: '',
+  weekend_shift: '', due_day_same_month: '',
+  due_day_next_month: '', annual_fee_month: '',
 }
 
 export default function CreditCardTracker() {
-  const [rows, setRows]       = useState([])
+  const [rows, setRows]       = useState<CreditCardRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(null)
+  const [error, setError]     = useState<string | null>(null)
   const [adding, setAdding]   = useState(false)
-  const [form, setForm]       = useState(EMPTY_FORM)
+  const [form, setForm]       = useState<CreditCardForm>(EMPTY_FORM)
   const [saving, setSaving]   = useState(false)
-  const [formError, setFormError] = useState(null)
+  const [formError, setFormError] = useState<string | null>(null)
 
   const reload = () =>
     fetchCreditCardTracker()
       .then(setRows)
-      .catch(e => setError(e.message))
+      .catch((e: Error) => setError(e.message))
 
   useEffect(() => {
     fetchCreditCardTracker()
       .then(setRows)
-      .catch(e => setError(e.message))
+      .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
 
-  const set = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }))
+  const set = (field: keyof CreditCardForm) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setForm(f => ({ ...f, [field]: e.target.value }))
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
     if (!form.name.trim()) { setFormError('Name is required.'); return }
-    const payload = { name: form.name.trim() }
+    const payload: Record<string, string | number> = { name: form.name.trim() }
     if (form.issuer.trim())             payload.issuer              = form.issuer.trim()
     if (form.last_four.trim())          payload.last_four           = form.last_four.trim()
     if (form.statement_close_day !== '') payload.statement_close_day = Number(form.statement_close_day)
@@ -79,7 +110,7 @@ export default function CreditCardTracker() {
       setAdding(false)
       await reload()
     } catch (err) {
-      setFormError(err.message)
+      setFormError((err as Error).message)
     } finally {
       setSaving(false)
     }
