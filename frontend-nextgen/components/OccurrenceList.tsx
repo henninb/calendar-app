@@ -2,18 +2,45 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchOccurrences, fetchCategories, updateOccurrence, createTaskFromOccurrence } from '@/lib/api'
 
-function today() { return new Date().toISOString().slice(0, 10) }
-function daysOut(n) {
+interface OccurrenceCategory {
+  name: string
+}
+
+interface OccurrenceEvent {
+  title: string
+  category?: OccurrenceCategory
+  priority?: string
+}
+
+interface Occurrence {
+  id: number
+  occurrence_date: string
+  status: string
+  event?: OccurrenceEvent
+}
+
+interface ApiCategory {
+  id: number
+  name: string
+  icon: string
+  color: string
+}
+
+function today(): string { return new Date().toISOString().slice(0, 10) }
+
+function daysOut(n: number): string {
   const d = new Date(); d.setDate(d.getDate() + n)
   return d.toISOString().slice(0, 10)
 }
-function fmt(dateStr) {
+
+function fmt(dateStr: string): string {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
   })
 }
-function daysUntil(dateStr) {
-  const diff = Math.round((new Date(dateStr + 'T00:00:00') - new Date(today() + 'T00:00:00')) / 86400000)
+
+function daysUntil(dateStr: string): string {
+  const diff = Math.round((new Date(dateStr + 'T00:00:00').getTime() - new Date(today() + 'T00:00:00').getTime()) / 86400000)
   if (diff === 0) return 'Today'
   if (diff === 1) return 'Tomorrow'
   if (diff < 0)  return `${Math.abs(diff)}d ago`
@@ -21,20 +48,20 @@ function daysUntil(dateStr) {
 }
 
 export default function OccurrenceList() {
-  const [occs, setOccs]         = useState([])
-  const [cats, setCats]         = useState([])
-  const [loading, setLoading]   = useState(true)
-  const [taskedIds, setTaskedIds] = useState(new Set())
-  const [catFilter, setCatFilter] = useState('')
+  const [occs, setOccs]             = useState<Occurrence[]>([])
+  const [cats, setCats]             = useState<ApiCategory[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [taskedIds, setTaskedIds]   = useState<Set<number>>(new Set())
+  const [catFilter, setCatFilter]   = useState('')
   const [statusFilter, setStatusFilter] = useState('upcoming,overdue')
-  const [days, setDays]       = useState(60)
+  const [days, setDays]             = useState(60)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const params = { start_date: today(), end_date: daysOut(days) }
-      if (catFilter)    params.category_id = catFilter
-      const data = await fetchOccurrences(params)
+      const params: Record<string, string | number> = { start_date: today(), end_date: daysOut(days) }
+      if (catFilter) params.category_id = catFilter
+      const data: Occurrence[] = await fetchOccurrences(params)
       const statuses = statusFilter ? statusFilter.split(',') : []
       setOccs(statuses.length ? data.filter(o => statuses.includes(o.status)) : data)
     } catch (e) {
@@ -47,16 +74,16 @@ export default function OccurrenceList() {
   useEffect(() => { fetchCategories().then(setCats) }, [])
   useEffect(() => { load() }, [load])
 
-  const mark = async (occ, status) => {
+  const mark = async (occ: Occurrence, status: string) => {
     try {
-      const updated = await updateOccurrence(occ.id, { status })
+      const updated: Occurrence = await updateOccurrence(occ.id, { status })
       setOccs(prev => prev.map(o => o.id === updated.id ? updated : o))
     } catch (e) {
       console.error('Failed to update occurrence:', e)
     }
   }
 
-  const makeTask = async (occ) => {
+  const makeTask = async (occ: Occurrence) => {
     await createTaskFromOccurrence(occ.id)
     setTaskedIds(prev => new Set(prev).add(occ.id))
   }

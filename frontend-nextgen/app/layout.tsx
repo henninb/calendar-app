@@ -1,4 +1,5 @@
 import './globals.css'
+import type { ReactNode } from 'react'
 import AppHeader from '@/components/AppHeader'
 
 export const metadata = {
@@ -6,7 +7,7 @@ export const metadata = {
   description: 'Calendar, tasks, grocery, and credit card tracker',
 }
 
-export default function RootLayout({ children }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>

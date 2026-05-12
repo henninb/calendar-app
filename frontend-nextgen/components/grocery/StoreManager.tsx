@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { createStore, updateStore, deleteStore } from '@/lib/api'
+import type { Store } from './helpers'
 
 const fieldCls = `px-2.5 py-1.5 text-sm rounded-lg
   bg-white dark:bg-slate-800
@@ -11,15 +12,38 @@ const fieldCls = `px-2.5 py-1.5 text-sm rounded-lg
 
 const labelCls = 'block text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5'
 
-const EMPTY = { name: '', location: '' }
+interface StoreForm {
+  name: string
+  location: string
+}
 
-export default function StoreManager({ stores, onStoresChange }) {
-  const [editingId, setEditingId] = useState(null)
-  const [editForm, setEditForm]   = useState({})
+const EMPTY: StoreForm = { name: '', location: '' }
+
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
+interface StoreManagerProps {
+  stores: Store[]
+  onStoresChange: () => void
+}
+
+interface AddStorePanelProps {
+  open: boolean
+  onClose: () => void
+  newForm: StoreForm
+  setNewForm: React.Dispatch<React.SetStateAction<StoreForm>>
+  onSave: () => void
+  saving: boolean
+}
+
+export default function StoreManager({ stores, onStoresChange }: StoreManagerProps) {
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editForm, setEditForm]   = useState<StoreForm>(EMPTY)
   const [panelOpen, setPanelOpen] = useState(false)
-  const [newForm, setNewForm]     = useState(EMPTY)
+  const [newForm, setNewForm]     = useState<StoreForm>(EMPTY)
   const [saving, setSaving]       = useState(false)
-  const [error, setError]         = useState(null)
+  const [error, setError]         = useState<string | null>(null)
 
   async function handleCreate() {
     if (!newForm.name.trim()) return
@@ -30,36 +54,36 @@ export default function StoreManager({ stores, onStoresChange }) {
       setPanelOpen(false)
       onStoresChange()
     } catch (err) {
-      setError(err.message)
+      setError(errMsg(err))
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleSaveEdit(id) {
+  async function handleSaveEdit(id: number) {
     setSaving(true)
     try {
       await updateStore(id, { name: editForm.name.trim(), location: editForm.location.trim() || null })
       setEditingId(null)
       onStoresChange()
     } catch (err) {
-      setError(err.message)
+      setError(errMsg(err))
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleDelete(store) {
+  async function handleDelete(store: Store) {
     if (!window.confirm(`Delete store "${store.name}"?`)) return
     try {
       await deleteStore(store.id)
       onStoresChange()
     } catch (err) {
-      setError(err.message)
+      setError(errMsg(err))
     }
   }
 
-  function startEdit(store) {
+  function startEdit(store: Store) {
     setEditingId(store.id)
     setEditForm({ name: store.name, location: store.location ?? '' })
   }
@@ -175,8 +199,8 @@ export default function StoreManager({ stores, onStoresChange }) {
   )
 }
 
-function AddStorePanel({ open, onClose, newForm, setNewForm, onSave, saving }) {
-  const nameRef = useRef(null)
+function AddStorePanel({ open, onClose, newForm, setNewForm, onSave, saving }: AddStorePanelProps) {
+  const nameRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (open) setTimeout(() => nameRef.current?.focus(), 50)
@@ -184,7 +208,7 @@ function AddStorePanel({ open, onClose, newForm, setNewForm, onSave, saving }) {
 
   useEffect(() => {
     if (!open) return
-    function handle(e) { if (e.key === 'Escape') onClose() }
+    function handle(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handle)
     return () => document.removeEventListener('keydown', handle)
   }, [open, onClose])

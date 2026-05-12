@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { fetchGroceryLists, createGroceryList, updateGroceryList, deleteGroceryList } from '@/lib/api'
 import { LIST_STATUS_CLS, LIST_STATUS_LABEL, listSummary } from './helpers'
+import type { GroceryList, Store, CatalogItem } from './helpers'
 import GroceryListPanel from './GroceryListPanel'
 import GroceryListDetail from './GroceryListDetail'
 
@@ -12,13 +13,28 @@ const STATUS_FILTERS = [
   { id: 'completed', label: 'Completed' },
 ]
 
-export default function GroceryLists({ stores, catalogItems }) {
-  const [lists, setLists]             = useState([])
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
+interface PanelState {
+  open: boolean
+  mode: 'create' | 'edit'
+  list: GroceryList | null
+}
+
+interface GroceryListsProps {
+  stores: Store[]
+  catalogItems: CatalogItem[]
+}
+
+export default function GroceryLists({ stores, catalogItems }: GroceryListsProps) {
+  const [lists, setLists]               = useState<GroceryList[]>([])
   const [statusFilter, setStatusFilter] = useState('')
-  const [selectedId, setSelectedId]   = useState(null)
-  const [panel, setPanel]             = useState({ open: false, mode: 'create', list: null })
-  const [loading, setLoading]         = useState(true)
-  const [error, setError]             = useState(null)
+  const [selectedId, setSelectedId]     = useState<number | null>(null)
+  const [panel, setPanel]               = useState<PanelState>({ open: false, mode: 'create', list: null })
+  const [loading, setLoading]           = useState(true)
+  const [error, setError]               = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -27,7 +43,7 @@ export default function GroceryLists({ stores, catalogItems }) {
       const data = await fetchGroceryLists()
       setLists(data)
     } catch (err) {
-      setError(err.message)
+      setError(errMsg(err))
     } finally {
       setLoading(false)
     }
@@ -41,30 +57,30 @@ export default function GroceryLists({ stores, catalogItems }) {
 
   const selectedList = lists.find(l => l.id === selectedId) ?? null
 
-  async function handleCreate(payload) {
+  async function handleCreate(payload: Parameters<typeof createGroceryList>[0]) {
     const created = await createGroceryList(payload)
     setLists(prev => [created, ...prev])
     setPanel({ open: false, mode: 'create', list: null })
   }
 
-  async function handleUpdate(payload) {
-    const updated = await updateGroceryList(panel.list.id, payload)
+  async function handleUpdate(payload: Parameters<typeof updateGroceryList>[1]) {
+    const updated = await updateGroceryList(panel.list!.id, payload)
     setLists(prev => prev.map(l => l.id === updated.id ? updated : l))
     setPanel({ open: false, mode: 'create', list: null })
   }
 
-  async function handleDelete(list) {
+  async function handleDelete(list: GroceryList) {
     if (!window.confirm(`Delete "${list.name}"?`)) return
     try {
       await deleteGroceryList(list.id)
       setLists(prev => prev.filter(l => l.id !== list.id))
       if (selectedId === list.id) setSelectedId(null)
     } catch (err) {
-      setError(err.message)
+      setError(errMsg(err))
     }
   }
 
-  function handleListChanged(updated) {
+  function handleListChanged(updated: GroceryList) {
     setLists(prev => prev.map(l => l.id === updated.id ? updated : l))
   }
 
@@ -170,8 +186,15 @@ export default function GroceryLists({ stores, catalogItems }) {
   )
 }
 
-function ListCard({ list, onOpen, onEdit, onDelete }) {
-  const { total, done } = listSummary(list.items)
+interface ListCardProps {
+  list: GroceryList
+  onOpen: () => void
+  onEdit: () => void
+  onDelete: () => void
+}
+
+function ListCard({ list, onOpen, onEdit, onDelete }: ListCardProps) {
+  const { total, done } = listSummary(list.items ?? [])
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
 
   return (

@@ -1,14 +1,21 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
+import type { ReactNode } from 'react'
 import { gcalAuthStatus } from '@/lib/api'
 
-export const CONFIG_DEFAULTS = {
+interface Config {
+  gcalSyncDays: number
+  gcalSyncForce: boolean
+  apiKey: string
+}
+
+export const CONFIG_DEFAULTS: Config = {
   gcalSyncDays: 365,
   gcalSyncForce: false,
   apiKey: '',
 }
 
-export function loadConfig() {
+export function loadConfig(): Config {
   if (typeof window === 'undefined') return { ...CONFIG_DEFAULTS }
   try {
     return { ...CONFIG_DEFAULTS, ...JSON.parse(localStorage.getItem('calendarConfig') || '{}') }
@@ -18,29 +25,31 @@ export function loadConfig() {
 }
 
 export default function ConfigPage() {
-  const [form, setForm]       = useState(CONFIG_DEFAULTS)
-  const [gcalAuth, setGcalAuth] = useState(null)
-  const [saved, setSaved]     = useState(false)
-  const savedTimerRef         = useRef(null)
+  const [form, setForm]         = useState<Config>(CONFIG_DEFAULTS)
+  const [gcalAuth, setGcalAuth] = useState<boolean | null>(null)
+  const [saved, setSaved]       = useState(false)
+  const savedTimerRef           = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => { setForm(loadConfig()) }, [])
 
   useEffect(() => {
-    gcalAuthStatus().then(s => setGcalAuth(s.authenticated)).catch(() => setGcalAuth(false))
+    gcalAuthStatus().then((s: { authenticated: boolean }) => setGcalAuth(s.authenticated)).catch(() => setGcalAuth(false))
   }, [])
 
-  useEffect(() => () => clearTimeout(savedTimerRef.current), [])
+  useEffect(() => () => {
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+  }, [])
 
   const handleSave = () => {
     localStorage.setItem('calendarConfig', JSON.stringify(form))
     setSaved(true)
-    clearTimeout(savedTimerRef.current)
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
     savedTimerRef.current = setTimeout(() => setSaved(false), 2000)
   }
 
   const handleReset = () => { setForm(CONFIG_DEFAULTS) }
 
-  const fieldLabel = (label, description) => (
+  const fieldLabel = (label: string, description: string): ReactNode => (
     <div style={{ marginBottom: '.2rem' }}>
       <div style={{ fontWeight: 600, color: 'var(--color-text-muted)', fontSize: '.875rem' }}>{label}</div>
       <div style={{ fontSize: '.75rem', color: 'var(--color-text-dim)' }}>{description}</div>

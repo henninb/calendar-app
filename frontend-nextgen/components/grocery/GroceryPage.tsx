@@ -1,20 +1,23 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { fetchStores, fetchGroceryItems } from '@/lib/api'
+import type { Store, CatalogItem } from './helpers'
 import GroceryLists from './GroceryLists'
 import OnHandView from './OnHandView'
 import StoreManager from './StoreManager'
 
-const SUB_TABS = [
+type SubTab = 'lists' | 'onhand' | 'stores'
+
+const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: 'lists',   label: 'Shopping Lists' },
   { id: 'onhand',  label: 'On Hand' },
   { id: 'stores',  label: 'Stores' },
 ]
 
 export default function GroceryPage() {
-  const [subTab, setSubTab]           = useState('lists')
-  const [stores, setStores]           = useState([])
-  const [catalogItems, setCatalogItems] = useState([])
+  const [subTab, setSubTab]             = useState<SubTab>('lists')
+  const [stores, setStores]             = useState<Store[]>([])
+  const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
 
   const loadShared = useCallback(async () => {
     try {
@@ -47,23 +50,13 @@ export default function GroceryPage() {
       </div>
 
       {subTab === 'lists' && (
-        <GroceryLists
-          stores={stores}
-          catalogItems={catalogItems}
-        />
+        <GroceryLists stores={stores} catalogItems={catalogItems} />
       )}
       {subTab === 'onhand' && (
-        <OnHandView
-          catalogItems={catalogItems}
-          stores={stores}
-          onCatalogChange={loadShared}
-        />
+        <OnHandView catalogItems={catalogItems} stores={stores} onCatalogChange={loadShared} />
       )}
       {subTab === 'stores' && (
-        <StoreManager
-          stores={stores}
-          onStoresChange={loadShared}
-        />
+        <StoreManager stores={stores} onStoresChange={loadShared} />
       )}
     </div>
   )

@@ -1,6 +1,6 @@
 export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'cancelled'
 export type TaskPriority = 'high' | 'medium' | 'low'
-export type RecurrenceOption = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
+export type RecurrenceOption = 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'semiannual' | 'yearly'
 
 export interface Category {
   id: number
@@ -67,7 +67,7 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   done: 'Done',
   cancelled: 'Cancelled',
 }
-export const TASK_FETCH_LIMIT = 1000
+export const TASK_FETCH_LIMIT = 500
 
 export interface SectionDef {
   key: string

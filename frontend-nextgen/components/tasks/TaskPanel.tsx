@@ -1,8 +1,9 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { STATUS_OPTIONS, STATUS_LABELS, localDate } from './helpers'
+import type { Task, Person, Category, Subtask, TaskStatus, TaskPriority, RecurrenceOption } from './helpers'
 
-const RECURRENCE_OPTIONS = [
+const RECURRENCE_OPTIONS: { value: RecurrenceOption; label: string }[] = [
   { value: 'none',       label: 'One-time' },
   { value: 'daily',      label: 'Daily' },
   { value: 'weekly',     label: 'Weekly' },
@@ -13,9 +14,9 @@ const RECURRENCE_OPTIONS = [
   { value: 'yearly',     label: 'Yearly' },
 ]
 
-const PRIORITY_OPTIONS = ['low', 'medium', 'high']
+const PRIORITY_OPTIONS: TaskPriority[] = ['low', 'medium', 'high']
 
-const PRIORITY_BTN = {
+const PRIORITY_BTN: Record<TaskPriority, { active: string; dot: string }> = {
   low:    { active: 'bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-200', dot: 'bg-slate-400' },
   medium: { active: 'bg-amber-100 text-amber-700 dark:bg-amber-500/25 dark:text-amber-300', dot: 'bg-amber-500' },
   high:   { active: 'bg-red-100 text-red-700 dark:bg-red-500/25 dark:text-red-300', dot: 'bg-red-500' },
@@ -31,7 +32,37 @@ const fieldCls = `w-full px-3 py-2 text-sm rounded-lg
 
 const labelCls = 'block text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5'
 
-function SubtaskRow({ sub, taskId, onPatch, onDelete, onStartEdit, isEditing, editForm, onEditFormChange, onSaveEdit, onCancelEdit }) {
+interface TaskForm {
+  title: string
+  description: string
+  priority: TaskPriority
+  status: TaskStatus
+  due_date: string
+  estimated_minutes: number | string
+  assignee_id: number | string
+  category_id: number | string
+  recurrence: RecurrenceOption
+}
+
+interface SubtaskEditForm {
+  title: string
+  due_date: string
+}
+
+interface SubtaskRowProps {
+  sub: Subtask
+  taskId: number
+  onPatch: (taskId: number, subtaskId: number, data: Partial<Subtask>) => void
+  onDelete: (taskId: number, subtaskId: number) => void
+  onStartEdit: (sub: Subtask) => void
+  isEditing: boolean
+  editForm: SubtaskEditForm
+  onEditFormChange: (field: keyof SubtaskEditForm, val: string) => void
+  onSaveEdit: () => void
+  onCancelEdit: () => void
+}
+
+function SubtaskRow({ sub, taskId, onPatch, onDelete, onStartEdit, isEditing, editForm, onEditFormChange, onSaveEdit, onCancelEdit }: SubtaskRowProps) {
   if (isEditing) {
     return (
       <div className="flex items-center gap-2 flex-wrap p-2 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-blue-500/30">
@@ -87,46 +118,49 @@ function SubtaskRow({ sub, taskId, onPatch, onDelete, onStartEdit, isEditing, ed
   )
 }
 
+interface TaskPanelProps {
+  open: boolean
+  mode: 'create' | 'edit'
+  task: Task | null
+  onClose: () => void
+  onCreateTask: (payload: Partial<Task>) => Promise<void>
+  onUpdateTask: (id: number, payload: Partial<Task>) => Promise<void>
+  persons: Person[]
+  categories: Category[]
+  onPatchSubtask: (taskId: number, subtaskId: number, data: Partial<Subtask>) => void
+  onAddSubtask: (taskId: number, title: string) => Promise<void>
+  onDeleteSubtask: (taskId: number, subtaskId: number) => void
+}
+
 export default function TaskPanel({
-  open,
-  mode,
-  task,
-  onClose,
-  onCreateTask,
-  onUpdateTask,
-  persons,
-  categories,
-  onPatchSubtask,
-  onAddSubtask,
-  onDeleteSubtask,
-}) {
+  open, mode, task, onClose,
+  onCreateTask, onUpdateTask,
+  persons, categories,
+  onPatchSubtask, onAddSubtask, onDeleteSubtask,
+}: TaskPanelProps) {
   const isCreate = mode === 'create'
-  const [form, setForm] = useState({})
+  const [form, setForm]                 = useState<TaskForm>({ title: '', description: '', priority: 'medium', status: 'todo', due_date: '', estimated_minutes: '', assignee_id: '', category_id: '', recurrence: 'none' })
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
-  const [editingSubtask, setEditingSubtask] = useState(null)
-  const [editSubForm, setEditSubForm] = useState({})
-  const [saving, setSaving] = useState(false)
-  const titleRef = useRef(null)
+  const [editingSubtask, setEditingSubtask]   = useState<number | null>(null)
+  const [editSubForm, setEditSubForm]         = useState<SubtaskEditForm>({ title: '', due_date: '' })
+  const [saving, setSaving]             = useState(false)
+  const titleRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!open) return
     if (isCreate) {
-      setForm({
-        title: '', description: '', priority: 'medium', status: 'todo',
-        due_date: localDate(), estimated_minutes: '',
-        assignee_id: '', category_id: '', recurrence: 'none',
-      })
+      setForm({ title: '', description: '', priority: 'medium', status: 'todo', due_date: localDate(), estimated_minutes: '', assignee_id: '', category_id: '', recurrence: 'none' })
     } else if (task) {
       setForm({
-        title: task.title ?? '',
-        description: task.description ?? '',
-        priority: task.priority ?? 'medium',
-        status: task.status ?? 'todo',
-        due_date: task.due_date ?? '',
-        estimated_minutes: task.estimated_minutes ?? '',
-        assignee_id: task.assignee_id ?? '',
-        category_id: task.category_id ?? '',
-        recurrence: task.recurrence ?? 'none',
+        title:              task.title ?? '',
+        description:        task.description ?? '',
+        priority:           task.priority ?? 'medium',
+        status:             task.status ?? 'todo',
+        due_date:           task.due_date ?? '',
+        estimated_minutes:  task.estimated_minutes ?? '',
+        assignee_id:        task.assignee_id ?? '',
+        category_id:        task.category_id ?? '',
+        recurrence:         (task.recurrence as RecurrenceOption) ?? 'none',
       })
     }
     setNewSubtaskTitle('')
@@ -139,34 +173,34 @@ export default function TaskPanel({
 
   useEffect(() => {
     if (!open) return
-    function handle(e) { if (e.key === 'Escape') onClose() }
+    function handle(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handle)
     return () => document.removeEventListener('keydown', handle)
   }, [open, onClose])
 
-  function set(field, value) {
+  function set<K extends keyof TaskForm>(field: K, value: TaskForm[K]) {
     setForm(p => ({ ...p, [field]: value }))
   }
 
   async function handleSave() {
     if (!form.title.trim()) { titleRef.current?.focus(); return }
     setSaving(true)
-    const payload = {
-      title: form.title.trim(),
-      description: form.description || null,
-      priority: form.priority,
-      status: form.status,
-      due_date: form.due_date || null,
-      estimated_minutes: form.estimated_minutes ? parseInt(form.estimated_minutes, 10) : null,
-      assignee_id: form.assignee_id ? parseInt(form.assignee_id, 10) : null,
-      category_id: form.category_id ? parseInt(form.category_id, 10) : null,
-      recurrence: form.recurrence,
+    const payload: Partial<Task> = {
+      title:              form.title.trim(),
+      description:        form.description || null,
+      priority:           form.priority,
+      status:             form.status,
+      due_date:           form.due_date || null,
+      estimated_minutes:  form.estimated_minutes ? parseInt(String(form.estimated_minutes), 10) : null,
+      assignee_id:        form.assignee_id ? parseInt(String(form.assignee_id), 10) : null,
+      category_id:        form.category_id ? parseInt(String(form.category_id), 10) : null,
+      recurrence:         form.recurrence,
     }
     try {
       if (isCreate) {
         await onCreateTask(payload)
       } else {
-        await onUpdateTask(task.id, payload)
+        await onUpdateTask(task!.id, payload)
       }
     } finally {
       setSaving(false)
@@ -180,7 +214,7 @@ export default function TaskPanel({
     setNewSubtaskTitle('')
   }
 
-  function startEditSubtask(sub) {
+  function startEditSubtask(sub: Subtask) {
     setEditingSubtask(sub.id)
     setEditSubForm({ title: sub.title, due_date: sub.due_date ?? '' })
   }
@@ -188,7 +222,7 @@ export default function TaskPanel({
   async function saveEditSubtask() {
     if (!editingSubtask || !task?.id) return
     await onPatchSubtask(task.id, editingSubtask, {
-      title: editSubForm.title.trim(),
+      title:    editSubForm.title.trim(),
       due_date: editSubForm.due_date || null,
     })
     setEditingSubtask(null)
@@ -209,12 +243,11 @@ export default function TaskPanel({
         className={`fixed top-0 right-0 h-full w-[480px] max-w-full z-50
           bg-white dark:bg-slate-900
           border-l border-slate-200 dark:border-slate-700/60
-          shadow-2xl
-          flex flex-col
+          shadow-2xl flex flex-col
           transition-transform duration-300 ease-in-out
           ${open ? 'translate-x-0' : 'translate-x-full'}`}
-        onKeyDown={e => {
-          if (isCreate && e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') {
+        onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+          if (isCreate && e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'TEXTAREA' && (e.target as HTMLElement).tagName !== 'BUTTON') {
             handleSave()
           }
         }}
@@ -232,12 +265,11 @@ export default function TaskPanel({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-
           <div>
             <label className={labelCls}>Title <span className="text-red-500 normal-case tracking-normal">*</span></label>
             <input
               ref={titleRef}
-              value={form.title ?? ''}
+              value={form.title}
               onChange={e => set('title', e.target.value)}
               placeholder="Task title"
               className={fieldCls}
@@ -247,7 +279,7 @@ export default function TaskPanel({
           <div>
             <label className={labelCls}>Description</label>
             <textarea
-              value={form.description ?? ''}
+              value={form.description}
               onChange={e => set('description', e.target.value)}
               placeholder="Optional notes…"
               rows={3}
@@ -277,7 +309,7 @@ export default function TaskPanel({
 
           <div>
             <label className={labelCls}>Status</label>
-            <select value={form.status ?? 'todo'} onChange={e => set('status', e.target.value)} className={fieldCls}>
+            <select value={form.status} onChange={e => set('status', e.target.value as TaskStatus)} className={fieldCls}>
               {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
             </select>
           </div>
@@ -287,7 +319,7 @@ export default function TaskPanel({
               <label className={labelCls}>Due Date</label>
               <input
                 type="date"
-                value={form.due_date ?? ''}
+                value={form.due_date}
                 onChange={e => set('due_date', e.target.value)}
                 className={fieldCls}
               />
@@ -297,7 +329,7 @@ export default function TaskPanel({
               <input
                 type="number"
                 min="1"
-                value={form.estimated_minutes ?? ''}
+                value={form.estimated_minutes}
                 onChange={e => set('estimated_minutes', e.target.value)}
                 placeholder="—"
                 className={fieldCls}
@@ -308,14 +340,14 @@ export default function TaskPanel({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Assignee</label>
-              <select value={form.assignee_id ?? ''} onChange={e => set('assignee_id', e.target.value)} className={fieldCls}>
+              <select value={form.assignee_id} onChange={e => set('assignee_id', e.target.value)} className={fieldCls}>
                 <option value="">Unassigned</option>
                 {persons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
             <div>
               <label className={labelCls}>Recurrence</label>
-              <select value={form.recurrence ?? 'none'} onChange={e => set('recurrence', e.target.value)} className={fieldCls}>
+              <select value={form.recurrence} onChange={e => set('recurrence', e.target.value as RecurrenceOption)} className={fieldCls}>
                 {RECURRENCE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
@@ -323,11 +355,7 @@ export default function TaskPanel({
 
           <div>
             <label className={labelCls}>Category</label>
-            <select
-              value={form.category_id ?? ''}
-              onChange={e => set('category_id', e.target.value)}
-              className={fieldCls}
-            >
+            <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className={fieldCls}>
               <option value="">None</option>
               {categories.map(c => (
                 <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
@@ -389,7 +417,7 @@ export default function TaskPanel({
         <div className="flex items-center gap-3 px-5 py-4 border-t border-slate-200 dark:border-slate-700/60 flex-shrink-0">
           <button
             onClick={handleSave}
-            disabled={saving || !form.title?.trim()}
+            disabled={saving || !form.title.trim()}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold
               bg-blue-600 hover:bg-blue-500 text-white
               disabled:opacity-50 disabled:cursor-not-allowed

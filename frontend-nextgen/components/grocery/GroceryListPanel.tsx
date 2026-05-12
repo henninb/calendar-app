@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import type { GroceryList, ListStatus, Store } from './helpers'
 
 const fieldCls = `w-full px-3 py-2 text-sm rounded-lg
   bg-white dark:bg-slate-800
@@ -11,11 +12,34 @@ const fieldCls = `w-full px-3 py-2 text-sm rounded-lg
 
 const labelCls = 'block text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5'
 
-export default function GroceryListPanel({ open, mode, list, stores, onClose, onSave }) {
+interface ListPayload {
+  name: string
+  store_id: number | null
+  status: ListStatus
+  shopping_date: string | null
+}
+
+interface ListForm {
+  name: string
+  store_id: string
+  status: ListStatus
+  shopping_date: string
+}
+
+interface GroceryListPanelProps {
+  open: boolean
+  mode: 'create' | 'edit'
+  list: GroceryList | null
+  stores: Store[]
+  onClose: () => void
+  onSave: (payload: ListPayload) => Promise<void>
+}
+
+export default function GroceryListPanel({ open, mode, list, stores, onClose, onSave }: GroceryListPanelProps) {
   const isCreate = mode === 'create'
-  const [form, setForm]   = useState({})
+  const [form, setForm]     = useState<ListForm>({ name: '', store_id: '', status: 'draft', shopping_date: '' })
   const [saving, setSaving] = useState(false)
-  const nameRef = useRef(null)
+  const nameRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -37,17 +61,19 @@ export default function GroceryListPanel({ open, mode, list, stores, onClose, on
 
   useEffect(() => {
     if (!open) return
-    function handle(e) { if (e.key === 'Escape') onClose() }
+    function handle(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handle)
     return () => document.removeEventListener('keydown', handle)
   }, [open, onClose])
 
-  function set(field, value) { setForm(p => ({ ...p, [field]: value })) }
+  function set<K extends keyof ListForm>(field: K, value: ListForm[K]) {
+    setForm(p => ({ ...p, [field]: value }))
+  }
 
   async function handleSave() {
     if (!form.name.trim()) { nameRef.current?.focus(); return }
     setSaving(true)
-    const payload = {
+    const payload: ListPayload = {
       name:          form.name.trim(),
       store_id:      form.store_id ? parseInt(form.store_id, 10) : null,
       status:        form.status,
@@ -85,7 +111,7 @@ export default function GroceryListPanel({ open, mode, list, stores, onClose, on
             <label className={labelCls}>List Name <span className="text-red-500 normal-case tracking-normal">*</span></label>
             <input
               ref={nameRef}
-              value={form.name ?? ''}
+              value={form.name}
               onChange={e => set('name', e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSave()}
               placeholder="e.g. Weekly ALDI Run"
@@ -95,7 +121,7 @@ export default function GroceryListPanel({ open, mode, list, stores, onClose, on
 
           <div>
             <label className={labelCls}>Store</label>
-            <select value={form.store_id ?? ''} onChange={e => set('store_id', e.target.value)} className={fieldCls}>
+            <select value={form.store_id} onChange={e => set('store_id', e.target.value)} className={fieldCls}>
               <option value="">— Any store —</option>
               {stores.map(s => (
                 <option key={s.id} value={s.id}>
@@ -108,7 +134,7 @@ export default function GroceryListPanel({ open, mode, list, stores, onClose, on
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Status</label>
-              <select value={form.status ?? 'draft'} onChange={e => set('status', e.target.value)} className={fieldCls}>
+              <select value={form.status} onChange={e => set('status', e.target.value as ListStatus)} className={fieldCls}>
                 <option value="draft">Draft</option>
                 <option value="active">Active</option>
                 <option value="completed">Completed</option>
@@ -118,7 +144,7 @@ export default function GroceryListPanel({ open, mode, list, stores, onClose, on
               <label className={labelCls}>Shopping Date</label>
               <input
                 type="date"
-                value={form.shopping_date ?? ''}
+                value={form.shopping_date}
                 onChange={e => set('shopping_date', e.target.value)}
                 className={fieldCls}
               />
@@ -129,7 +155,7 @@ export default function GroceryListPanel({ open, mode, list, stores, onClose, on
         <div className="flex items-center gap-3 px-5 py-4 border-t border-slate-200 dark:border-slate-700/60 flex-shrink-0">
           <button
             onClick={handleSave}
-            disabled={saving || !form.name?.trim()}
+            disabled={saving || !form.name.trim()}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold
               bg-blue-600 hover:bg-blue-500 text-white
               disabled:opacity-50 disabled:cursor-not-allowed

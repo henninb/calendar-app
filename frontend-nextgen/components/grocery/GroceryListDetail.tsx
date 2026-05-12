@@ -6,8 +6,9 @@ import {
 } from '@/lib/api'
 import {
   GROCERY_UNITS, LIST_STATUS_CLS, LIST_STATUS_LABEL,
-  NEXT_STATUS, NEXT_STATUS_LABEL, fmtQty, fmtPrice, listSummary,
+  NEXT_STATUS, NEXT_STATUS_LABEL, fmtPrice, listSummary,
 } from './helpers'
+import type { GroceryList, ListItem, GroceryUnit, CatalogItem } from './helpers'
 
 const fieldCls = `px-2.5 py-1.5 text-sm rounded-lg
   bg-white dark:bg-slate-800
@@ -16,64 +17,92 @@ const fieldCls = `px-2.5 py-1.5 text-sm rounded-lg
   focus:outline-none focus:ring-2 focus:ring-blue-500/50
   transition-shadow`
 
-const EMPTY_ADD = { item_id: '', quantity: '1', unit: 'each', price: '' }
+interface AddForm {
+  item_id: string
+  quantity: string
+  unit: GroceryUnit
+  price: string
+}
 
-const ItemCombobox = React.forwardRef(function ItemCombobox({ value, onChange, catalogItems }, ref) {
-  const id = useId()
-  const toText = useCallback(v => {
-    const c = catalogItems.find(c => String(c.id) === String(v))
-    return c ? c.name : ''
-  }, [catalogItems])
-  const [text, setText] = useState(() => toText(value))
+interface ItemRowForm {
+  quantity: string
+  unit: string
+  price: string
+}
 
-  function handleChange(e) {
-    const t = e.target.value
-    setText(t)
-    const match = catalogItems.find(c => c.name === t)
-    if (match) onChange(String(match.id), match.default_unit)
-    else if (!t) onChange('', 'each')
+const EMPTY_ADD: AddForm = { item_id: '', quantity: '1', unit: 'each', price: '' }
+
+interface ItemComboboxProps {
+  value: string
+  onChange: (itemId: string, defaultUnit: GroceryUnit) => void
+  catalogItems: CatalogItem[]
+}
+
+const ItemCombobox = React.forwardRef<HTMLInputElement, ItemComboboxProps>(
+  function ItemCombobox({ value, onChange, catalogItems }, ref) {
+    const id = useId()
+    const toText = useCallback((v: string) => {
+      const c = catalogItems.find(c => String(c.id) === String(v))
+      return c ? c.name : ''
+    }, [catalogItems])
+    const [text, setText] = useState(() => toText(value))
+
+    function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+      const t = e.target.value
+      setText(t)
+      const match = catalogItems.find(c => c.name === t)
+      if (match) onChange(String(match.id), match.default_unit)
+      else if (!t) onChange('', 'each')
+    }
+
+    return (
+      <>
+        <input
+          ref={ref}
+          list={id}
+          value={text}
+          onChange={handleChange}
+          onBlur={() => setText(toText(value))}
+          placeholder="Search catalog…"
+          autoComplete="off"
+          className={`${fieldCls} w-full`}
+        />
+        <datalist id={id}>
+          {catalogItems.map(c => <option key={c.id} value={c.name} />)}
+        </datalist>
+      </>
+    )
   }
+)
 
-  return (
-    <>
-      <input
-        ref={ref}
-        list={id}
-        value={text}
-        onChange={handleChange}
-        onBlur={() => setText(toText(value))}
-        placeholder="Search catalog…"
-        autoComplete="off"
-        className={`${fieldCls} w-full`}
-      />
-      <datalist id={id}>
-        {catalogItems.map(c => <option key={c.id} value={c.name} />)}
-      </datalist>
-    </>
-  )
-})
+interface GroceryListDetailProps {
+  list: GroceryList
+  catalogItems: CatalogItem[]
+  onBack: () => void
+  onListChanged?: (list: GroceryList) => void
+}
 
-export default function GroceryListDetail({ list: initialList, catalogItems, onBack, onListChanged }) {
-  const [list, setList]         = useState(initialList)
-  const [addForm, setAddForm]   = useState(EMPTY_ADD)
-  const [adding, setAdding]     = useState(false)
+export default function GroceryListDetail({ list: initialList, catalogItems, onBack, onListChanged }: GroceryListDetailProps) {
+  const [list, setList]           = useState<GroceryList>(initialList)
+  const [addForm, setAddForm]     = useState<AddForm>(EMPTY_ADD)
+  const [adding, setAdding]       = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
   const [advancing, setAdvancing] = useState(false)
-  const [error, setError]       = useState(null)
+  const [error, setError]         = useState<string | null>(null)
 
   React.useEffect(() => { setList(initialList) }, [initialList])
 
   async function reload() {
     try {
-      const fresh = await fetchGroceryList(list.id)
+      const fresh: GroceryList = await fetchGroceryList(list.id)
       setList(fresh)
       onListChanged?.(fresh)
     } catch (err) {
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
     }
   }
 
-  async function togglePurchased(listItem) {
+  async function togglePurchased(listItem: ListItem) {
     const next = listItem.status === 'purchased' ? 'needed' : 'purchased'
     setList(prev => ({
       ...prev,
@@ -82,17 +111,17 @@ export default function GroceryListDetail({ list: initialList, catalogItems, onB
     try {
       await updateGroceryListItem(list.id, listItem.item_id, { status: next })
     } catch (err) {
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
       reload()
     }
   }
 
-  async function removeItem(listItem) {
+  async function removeItem(listItem: ListItem) {
     setList(prev => ({ ...prev, items: prev.items.filter(i => i.id !== listItem.id) }))
     try {
       await removeGroceryListItem(list.id, listItem.item_id)
     } catch (err) {
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
       reload()
     }
   }
@@ -111,7 +140,7 @@ export default function GroceryListDetail({ list: initialList, catalogItems, onB
       setPanelOpen(false)
       await reload()
     } catch (err) {
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setAdding(false)
     }
@@ -122,21 +151,23 @@ export default function GroceryListDetail({ list: initialList, catalogItems, onB
     if (!next) return
     setAdvancing(true)
     try {
-      const payload = { status: next }
+      const payload: Record<string, unknown> = { status: next }
       if (next === 'completed') payload.shopping_date = new Date().toISOString().slice(0, 10)
       const updated = await updateGroceryList(list.id, payload)
       setList(prev => ({ ...prev, ...updated }))
       onListChanged?.({ ...list, ...updated })
     } catch (err) {
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setAdvancing(false)
     }
   }
 
-  function setAdd(field, value) { setAddForm(p => ({ ...p, [field]: value })) }
+  function setAdd<K extends keyof AddForm>(field: K, value: AddForm[K]) {
+    setAddForm(p => ({ ...p, [field]: value }))
+  }
 
-  function handleItemSelected(id, defaultUnit) {
+  function handleItemSelected(id: string, defaultUnit: GroceryUnit) {
     setAdd('item_id', id)
     if (defaultUnit) setAdd('unit', defaultUnit)
   }
@@ -147,7 +178,7 @@ export default function GroceryListDetail({ list: initialList, catalogItems, onB
   const nextStatus = NEXT_STATUS[list.status]
 
   const totalCost = list.items.reduce((sum, i) => {
-    return i.price != null ? sum + parseFloat(i.price) * parseFloat(i.quantity) : sum
+    return i.price != null ? sum + parseFloat(String(i.price)) * parseFloat(String(i.quantity)) : sum
   }, 0)
 
   return (
@@ -278,8 +309,19 @@ export default function GroceryListDetail({ list: initialList, catalogItems, onB
 
 const labelCls = 'block text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5'
 
-function AddItemPanel({ open, onClose, addForm, setAdd, handleItemSelected, handleAdd, adding, catalogItems }) {
-  const firstRef = useRef(null)
+interface AddItemPanelProps {
+  open: boolean
+  onClose: () => void
+  addForm: AddForm
+  setAdd: <K extends keyof AddForm>(field: K, value: AddForm[K]) => void
+  handleItemSelected: (id: string, defaultUnit: GroceryUnit) => void
+  handleAdd: () => void
+  adding: boolean
+  catalogItems: CatalogItem[]
+}
+
+function AddItemPanel({ open, onClose, addForm, setAdd, handleItemSelected, handleAdd, adding, catalogItems }: AddItemPanelProps) {
+  const firstRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (open) setTimeout(() => firstRef.current?.focus(), 50)
@@ -287,7 +329,7 @@ function AddItemPanel({ open, onClose, addForm, setAdd, handleItemSelected, hand
 
   useEffect(() => {
     if (!open) return
-    function handle(e) { if (e.key === 'Escape') onClose() }
+    function handle(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handle)
     return () => document.removeEventListener('keydown', handle)
   }, [open, onClose])
@@ -347,7 +389,7 @@ function AddItemPanel({ open, onClose, addForm, setAdd, handleItemSelected, hand
                   <label className={labelCls}>Unit</label>
                   <select
                     value={addForm.unit}
-                    onChange={e => setAdd('unit', e.target.value)}
+                    onChange={e => setAdd('unit', e.target.value as GroceryUnit)}
                     className={`${fieldCls} w-full`}
                   >
                     {GROCERY_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
@@ -399,17 +441,26 @@ function AddItemPanel({ open, onClose, addForm, setAdd, handleItemSelected, hand
   )
 }
 
-function ItemRow({ li, listId, onToggle, onRemove, onUpdated, purchased = false }) {
-  const [editing, setEditing]   = useState(false)
-  const [form, setForm]         = useState({})
-  const [saving, setSaving]     = useState(false)
+interface ItemRowProps {
+  li: ListItem
+  listId: number
+  onToggle: (li: ListItem) => void
+  onRemove: (li: ListItem) => void
+  onUpdated: () => Promise<void>
+  purchased?: boolean
+}
 
-  function startEdit(e) {
+function ItemRow({ li, listId, onToggle, onRemove, onUpdated, purchased = false }: ItemRowProps) {
+  const [editing, setEditing] = useState(false)
+  const [form, setForm]       = useState<ItemRowForm>({ quantity: '', unit: '', price: '' })
+  const [saving, setSaving]   = useState(false)
+
+  function startEdit(e: React.MouseEvent) {
     e.stopPropagation()
     setForm({
-      quantity: String(parseFloat(li.quantity)),
+      quantity: String(parseFloat(String(li.quantity))),
       unit:     li.unit,
-      price:    li.price != null ? String(parseFloat(li.price)) : '',
+      price:    li.price != null ? String(parseFloat(String(li.price))) : '',
     })
     setEditing(true)
   }
@@ -424,7 +475,7 @@ function ItemRow({ li, listId, onToggle, onRemove, onUpdated, purchased = false 
       })
       await onUpdated()
       setEditing(false)
-    } catch (err) {
+    } catch {
       // bubble up — parent shows error banner
     } finally {
       setSaving(false)
@@ -432,8 +483,9 @@ function ItemRow({ li, listId, onToggle, onRemove, onUpdated, purchased = false 
   }
 
   function cancelEdit() { setEditing(false) }
-
-  function set(field, value) { setForm(p => ({ ...p, [field]: value })) }
+  function set<K extends keyof ItemRowForm>(field: K, value: ItemRowForm[K]) {
+    setForm(p => ({ ...p, [field]: value }))
+  }
 
   const inputCls = 'px-2 py-1 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500'
 
@@ -509,26 +561,14 @@ function ItemRow({ li, listId, onToggle, onRemove, onUpdated, purchased = false 
       <td className={`font-medium ${purchased ? 'line-through text-slate-400 dark:text-slate-500' : ''}`}>
         {li.item.name}
       </td>
-      <td
-        onClick={startEdit}
-        title="Click to edit"
-        className="editable-cell text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap cursor-pointer"
-      >
-        {parseFloat(li.quantity) % 1 === 0 ? parseFloat(li.quantity) : parseFloat(li.quantity)}
+      <td onClick={startEdit} title="Click to edit" className="editable-cell text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap cursor-pointer">
+        {parseFloat(String(li.quantity)) % 1 === 0 ? parseFloat(String(li.quantity)) : parseFloat(String(li.quantity))}
       </td>
-      <td
-        onClick={startEdit}
-        title="Click to edit"
-        className="editable-cell text-slate-500 dark:text-slate-400 text-sm cursor-pointer"
-      >
+      <td onClick={startEdit} title="Click to edit" className="editable-cell text-slate-500 dark:text-slate-400 text-sm cursor-pointer">
         {li.unit}
       </td>
-      <td
-        onClick={startEdit}
-        title="Click to edit"
-        className="editable-cell text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap cursor-pointer"
-      >
-        {fmtPrice(li.price)}
+      <td onClick={startEdit} title="Click to edit" className="editable-cell text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap cursor-pointer">
+        {fmtPrice(li.price != null ? parseFloat(String(li.price)) : null)}
       </td>
       <td className="print:hidden">
         <button

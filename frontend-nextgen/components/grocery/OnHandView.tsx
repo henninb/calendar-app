@@ -5,6 +5,7 @@ import {
   createGroceryItem, updateGroceryItem, deleteGroceryItem,
 } from '@/lib/api'
 import { GROCERY_UNITS } from './helpers'
+import type { GroceryUnit, Store, CatalogItem, OnHandRecord } from './helpers'
 
 const fieldCls = `px-2.5 py-1.5 text-sm rounded-lg
   bg-white dark:bg-slate-800
@@ -15,18 +16,64 @@ const fieldCls = `px-2.5 py-1.5 text-sm rounded-lg
 
 const labelCls = 'block text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1'
 
-const EMPTY_NEW_ITEM = { name: '', default_unit: 'each', default_store_id: '' }
+interface EditForm {
+  name: string
+  default_store_id: string
+  quantity: string
+  unit: string
+}
 
-export default function OnHandView({ catalogItems, stores, onCatalogChange }) {
-  const [onHand, setOnHand]           = useState([])
-  const [search, setSearch]           = useState('')
-  const [loading, setLoading]         = useState(true)
-  const [error, setError]             = useState(null)
-  const [editingId, setEditingId]     = useState(null)
-  const [editForm, setEditForm]       = useState({})
-  const [panelOpen, setPanelOpen]     = useState(false)
-  const [newItem, setNewItem]         = useState(EMPTY_NEW_ITEM)
-  const [savingNew, setSavingNew]     = useState(false)
+interface NewCatalogItemForm {
+  name: string
+  default_unit: GroceryUnit
+  default_store_id: string
+}
+
+const EMPTY_NEW_ITEM: NewCatalogItemForm = { name: '', default_unit: 'each', default_store_id: '' }
+
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
+interface OnHandViewProps {
+  catalogItems: CatalogItem[]
+  stores: Store[]
+  onCatalogChange: () => void
+}
+
+interface AddItemPanelProps {
+  open: boolean
+  onClose: () => void
+  newItem: NewCatalogItemForm
+  setNewItem: React.Dispatch<React.SetStateAction<NewCatalogItemForm>>
+  onSave: () => void
+  saving: boolean
+  stores: Store[]
+}
+
+interface OnHandRowProps {
+  item: CatalogItem
+  record: OnHandRecord | null
+  stores: Store[]
+  isEditing: boolean
+  editForm: EditForm
+  onEditFormChange: (field: keyof EditForm, val: string) => void
+  onStartEdit: () => void
+  onSaveEdit: () => void
+  onCancelEdit: () => void
+  onDelete: () => void
+}
+
+export default function OnHandView({ catalogItems, stores, onCatalogChange }: OnHandViewProps) {
+  const [onHand, setOnHand]         = useState<OnHandRecord[]>([])
+  const [search, setSearch]         = useState('')
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState<string | null>(null)
+  const [editingId, setEditingId]   = useState<number | null>(null)
+  const [editForm, setEditForm]     = useState<EditForm>({ name: '', default_store_id: '', quantity: '', unit: '' })
+  const [panelOpen, setPanelOpen]   = useState(false)
+  const [newItem, setNewItem]       = useState<NewCatalogItemForm>(EMPTY_NEW_ITEM)
+  const [savingNew, setSavingNew]   = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -34,7 +81,7 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }) {
       const data = await fetchOnHand()
       setOnHand(data)
     } catch (err) {
-      setError(err.message)
+      setError(errMsg(err))
     } finally {
       setLoading(false)
     }
@@ -45,20 +92,20 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }) {
   const onHandMap = Object.fromEntries(onHand.map(r => [r.item_id, r]))
   const rows = catalogItems
     .filter(item => !search || item.name.toLowerCase().includes(search.toLowerCase()))
-    .map(item => ({ item, record: onHandMap[item.id] ?? null }))
+    .map(item => ({ item, record: (onHandMap[item.id] as OnHandRecord | undefined) ?? null }))
     .sort((a, b) => a.item.name.localeCompare(b.item.name))
 
-  function startEdit(item, record) {
+  function startEdit(item: CatalogItem, record: OnHandRecord | null) {
     setEditingId(item.id)
     setEditForm({
       name:             item.name,
       default_store_id: item.default_store_id != null ? String(item.default_store_id) : '',
-      quantity:         record ? String(parseFloat(record.quantity)) : '0',
+      quantity:         record ? String(parseFloat(String(record.quantity))) : '0',
       unit:             record ? record.unit : item.default_unit,
     })
   }
 
-  async function saveEdit(itemId) {
+  async function saveEdit(itemId: number) {
     try {
       await Promise.all([
         updateGroceryItem(itemId, {
@@ -72,20 +119,20 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }) {
       ])
       await Promise.all([onCatalogChange(), load()])
     } catch (err) {
-      setError(err.message)
+      setError(errMsg(err))
     } finally {
       setEditingId(null)
     }
   }
 
-  async function handleDelete(item) {
+  async function handleDelete(item: CatalogItem) {
     if (!window.confirm(`Remove "${item.name}" from the catalog? This will also delete it from all shopping lists.`)) return
     try {
       await deleteGroceryItem(item.id)
       onCatalogChange()
       load()
     } catch (err) {
-      setError(err.message)
+      setError(errMsg(err))
     }
   }
 
@@ -102,7 +149,7 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }) {
       setPanelOpen(false)
       onCatalogChange()
     } catch (err) {
-      setError(err.message)
+      setError(errMsg(err))
     } finally {
       setSavingNew(false)
     }
@@ -205,8 +252,8 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }) {
   )
 }
 
-function AddItemPanel({ open, onClose, newItem, setNewItem, onSave, saving, stores }) {
-  const nameRef = useRef(null)
+function AddItemPanel({ open, onClose, newItem, setNewItem, onSave, saving, stores }: AddItemPanelProps) {
+  const nameRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (open) setTimeout(() => nameRef.current?.focus(), 50)
@@ -214,7 +261,7 @@ function AddItemPanel({ open, onClose, newItem, setNewItem, onSave, saving, stor
 
   useEffect(() => {
     if (!open) return
-    function handle(e) { if (e.key === 'Escape') onClose() }
+    function handle(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handle)
     return () => document.removeEventListener('keydown', handle)
   }, [open, onClose])
@@ -257,7 +304,7 @@ function AddItemPanel({ open, onClose, newItem, setNewItem, onSave, saving, stor
             <label className={labelCls}>Default Unit</label>
             <select
               value={newItem.default_unit}
-              onChange={e => setNewItem(p => ({ ...p, default_unit: e.target.value }))}
+              onChange={e => setNewItem(p => ({ ...p, default_unit: e.target.value as GroceryUnit }))}
               className={`${fieldCls} w-full`}
             >
               {GROCERY_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
@@ -304,8 +351,8 @@ function AddItemPanel({ open, onClose, newItem, setNewItem, onSave, saving, stor
   )
 }
 
-function OnHandRow({ item, record, stores, isEditing, editForm, onEditFormChange, onStartEdit, onSaveEdit, onCancelEdit, onDelete }) {
-  const qty   = record ? parseFloat(record.quantity) : 0
+function OnHandRow({ item, record, stores, isEditing, editForm, onEditFormChange, onStartEdit, onSaveEdit, onCancelEdit, onDelete }: OnHandRowProps) {
+  const qty   = record ? parseFloat(String(record.quantity)) : 0
   const unit  = record ? record.unit : item.default_unit
   const isLow = qty === 0
 
@@ -315,7 +362,7 @@ function OnHandRow({ item, record, stores, isEditing, editForm, onEditFormChange
         <td>
           <input
             autoFocus
-            value={editForm.name ?? ''}
+            value={editForm.name}
             onChange={e => onEditFormChange('name', e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') onSaveEdit(); if (e.key === 'Escape') onCancelEdit() }}
             className="px-2 py-1 text-sm rounded-lg border border-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none w-full min-w-[120px]"
@@ -323,7 +370,7 @@ function OnHandRow({ item, record, stores, isEditing, editForm, onEditFormChange
         </td>
         <td>
           <select
-            value={editForm.default_store_id ?? ''}
+            value={editForm.default_store_id}
             onChange={e => onEditFormChange('default_store_id', e.target.value)}
             className="px-2 py-1 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none w-full"
           >
@@ -336,7 +383,7 @@ function OnHandRow({ item, record, stores, isEditing, editForm, onEditFormChange
             type="number"
             min="0"
             step="0.001"
-            value={editForm.quantity ?? ''}
+            value={editForm.quantity}
             onChange={e => onEditFormChange('quantity', e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') onSaveEdit(); if (e.key === 'Escape') onCancelEdit() }}
             className="px-2 py-1 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none w-24"
@@ -344,7 +391,7 @@ function OnHandRow({ item, record, stores, isEditing, editForm, onEditFormChange
         </td>
         <td>
           <select
-            value={editForm.unit ?? ''}
+            value={editForm.unit}
             onChange={e => onEditFormChange('unit', e.target.value)}
             className="px-2 py-1 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none"
           >
