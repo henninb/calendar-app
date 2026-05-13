@@ -47,10 +47,10 @@ function daysUntil(dateStr: string): string {
   return `in ${diff}d`
 }
 
-const PRIORITY_COLOR: Record<string, string> = {
-  high:   'color: #dc2626',
-  medium: 'color: #d97706',
-  low:    'color: var(--color-text-dim)',
+const PRIORITY_CLASS: Record<string, string> = {
+  high:   'priority-high',
+  medium: 'priority-medium',
+  low:    'priority-low',
 }
 
 export default function OccurrenceList() {
@@ -137,7 +137,7 @@ export default function OccurrenceList() {
         <button className="btn btn-blue" onClick={load} title="Reload occurrences from the server">Refresh</button>
 
         {!loading && occs.length > 0 && (
-          <span style={{ marginLeft: 'auto', fontSize: '.8rem', color: 'var(--color-text-dim)', display: 'flex', gap: '.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <span className="ml-auto text-[.8rem] text-[var(--color-text-dim)] flex gap-2 flex-wrap items-center">
             {Object.entries(statusCounts).map(([s, n]) => (
               <span key={s} className={`status ${s}`}>{n} {s}</span>
             ))}
@@ -152,7 +152,7 @@ export default function OccurrenceList() {
       ) : (
         <div className="tbl-wrap">
           <table>
-            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+            <thead className="sticky top-0 z-10">
               <tr>
                 <th>Date</th>
                 <th>When</th>
@@ -166,8 +166,8 @@ export default function OccurrenceList() {
             <tbody>
               {occs.map(occ => (
                 <tr key={occ.id}>
-                  <td style={{ whiteSpace: 'nowrap' }}>{fmt(occ.occurrence_date)}</td>
-                  <td style={{ whiteSpace: 'nowrap', color: 'var(--color-text-dim)' }}>{daysUntil(occ.occurrence_date)}</td>
+                  <td className="whitespace-nowrap">{fmt(occ.occurrence_date)}</td>
+                  <td className="whitespace-nowrap text-[var(--color-text-dim)]">{daysUntil(occ.occurrence_date)}</td>
                   <td>{occ.event?.title}</td>
                   <td>
                     <span
@@ -177,14 +177,14 @@ export default function OccurrenceList() {
                       {occ.event?.category?.name?.replace(/_/g, ' ')}
                     </span>
                   </td>
-                  <td style={{ textTransform: 'capitalize' }}>
-                    <span style={{ fontSize: '.8rem', fontWeight: 600, ...(occ.event?.priority ? { color: occ.event.priority === 'high' ? '#dc2626' : occ.event.priority === 'medium' ? '#d97706' : 'var(--color-text-dim)' } : {}) }}>
+                  <td className="capitalize">
+                    <span className={`text-[.8rem] font-semibold ${PRIORITY_CLASS[occ.event?.priority ?? ''] ?? ''}`}>
                       {occ.event?.priority ?? '—'}
                     </span>
                   </td>
                   <td><span className={`status ${occ.status}`}>{occ.status}</span></td>
                   <td>
-                    <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'nowrap' }}>
+                    <div className="flex gap-1.5 flex-nowrap">
                       {occ.status !== 'completed' && (
                         <button
                           className="btn btn-green"
@@ -214,11 +214,10 @@ export default function OccurrenceList() {
                       )}
                       {(occ.status === 'upcoming' || occ.status === 'overdue') && (
                         taskedIds.has(occ.id)
-                          ? <span style={{ fontSize: '.75rem', color: '#86efac', padding: '.3rem .5rem' }}>✓ Task created</span>
+                          ? <span className="text-xs text-emerald-400 px-2 py-1.5">✓ Task created</span>
                           : (
                             <button
-                              className="btn btn-blue"
-                              style={{ background: '#7c3aed' }}
+                              className="btn btn-purple"
                               title="Create a task from this occurrence"
                               onClick={() => makeTask(occ)}
                             >

@@ -44,7 +44,7 @@ export default function AppHeader() {
         <button
           onClick={() => setDarkMode(d => !d)}
           title="Toggle dark/light mode"
-          style={{ marginLeft: '.5rem' }}
+          className="ml-2"
         >
           {darkMode ? '☀️ Light' : '🌙 Dark'}
         </button>

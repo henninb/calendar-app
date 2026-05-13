@@ -77,8 +77,7 @@ function SubtaskRow({ sub, taskId, onPatch, onDelete, onStartEdit, isEditing, ed
           type="date"
           value={editForm.due_date}
           onChange={e => onEditFormChange('due_date', e.target.value)}
-          className={fieldCls}
-          style={{ width: 'auto' }}
+          className={`${fieldCls} w-auto`}
         />
         <button onClick={onSaveEdit} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-400 transition-colors">Save</button>
         <button onClick={onCancelEdit} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Cancel</button>

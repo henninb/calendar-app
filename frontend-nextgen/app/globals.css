@@ -178,7 +178,6 @@ th {
 td { padding: .55rem .75rem; border-bottom: 1px solid var(--color-border-subtle); vertical-align: middle; }
 tr:last-child td { border-bottom: none; }
 tr:hover td { background: var(--color-row-hover); }
-tr:hover td[style*='sticky'] { background: var(--color-row-hover); }
 
 /* ── Buttons ── */
 .btn {
@@ -195,6 +194,7 @@ tr:hover td[style*='sticky'] { background: var(--color-row-hover); }
 .btn-gray   { background: var(--color-btn-gray-bg); color: var(--color-btn-gray-text); }
 .btn-blue   { background: #3b82f6; color: #fff; }
 .btn-red    { background: #ef4444; color: #fff; }
+.btn-purple { background: #7c3aed; color: #fff; }
 
 /* ── Toolbar row ── */
 .toolbar {
@@ -268,6 +268,30 @@ html[data-theme='dark'] .fc .fc-list-day-side-text { color: var(--color-text); }
 /* ── Subtask rows ── */
 .subtask-row { border-radius: 4px; transition: background .1s; }
 .subtask-row:hover { background: var(--color-subtask-hover); }
+
+/* ── Form labels ── */
+.form-label {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  font-size: .85rem;
+  color: var(--color-text-muted);
+}
+
+/* ── Form inputs ── */
+.form-input {
+  border: 1px solid var(--color-input-border);
+  border-radius: 6px;
+  padding: .35rem .65rem;
+  font-size: .875rem;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+}
+
+/* ── Priority colors ── */
+.priority-high   { color: #dc2626; }
+.priority-medium { color: #d97706; }
+.priority-low    { color: var(--color-text-dim); }
 
 /* ── Loading / empty ── */
 .loading { text-align: center; color: var(--color-text-dim); padding: 3rem; }

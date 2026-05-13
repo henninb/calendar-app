@@ -120,11 +120,8 @@ export default function ConfigPage() {
                 ...f,
                 gcalSyncDays: Math.max(1, Math.min(730, parseInt(e.target.value) || 1)),
               }))}
-              style={{
-                border: '1px solid var(--color-input-border)', borderRadius: 6,
-                padding: '.35rem .65rem', fontSize: '.875rem',
-                background: 'var(--color-input-bg)', color: 'var(--color-text)', width: 100,
-              }}
+              className="form-input"
+              style={{ width: 100 }}
             />
           </label>
 
@@ -133,7 +130,7 @@ export default function ConfigPage() {
               type="checkbox"
               checked={form.gcalSyncForce}
               onChange={e => setForm(f => ({ ...f, gcalSyncForce: e.target.checked }))}
-              style={{ marginTop: '.2rem', accentColor: '#3b82f6', width: 15, height: 15, flexShrink: 0 }}
+              className="mt-[.2rem] w-[15px] h-[15px] flex-shrink-0 accent-blue-500"
             />
             {fieldLabel('Force Sync', 'Re-sync all occurrences, overwriting already-synced Google Calendar events. Uncheck to only push new events.')}
           </label>
@@ -156,11 +153,7 @@ export default function ConfigPage() {
             onChange={e => setForm(f => ({ ...f, apiKey: e.target.value }))}
             placeholder="(none)"
             autoComplete="off"
-            style={{
-              border: '1px solid var(--color-input-border)', borderRadius: 6,
-              padding: '.35rem .65rem', fontSize: '.875rem',
-              background: 'var(--color-input-bg)', color: 'var(--color-text)', width: '100%',
-            }}
+            className="form-input w-full"
           />
         </label>
       </div>

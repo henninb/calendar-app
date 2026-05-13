@@ -205,8 +205,8 @@ export default function TaskSection({
           ${accent.bg} ${accent.hover}
           border border-l-4 border-slate-200 dark:border-slate-700/50
           transition-colors select-none group
+          ${collapsed ? 'rounded-xl' : 'rounded-t-xl'}
         `}
-        style={{ borderRadius: collapsed ? '12px' : '12px 12px 0 0' }}
       >
         <span className="text-base leading-none">{icon}</span>
 
