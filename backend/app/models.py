@@ -26,6 +26,7 @@ class TaskStatus(str, enum.Enum):
     in_progress = "in_progress"
     done = "done"
     cancelled = "cancelled"
+    ontime = "ontime"
 
 
 class TaskRecurrence(str, enum.Enum):

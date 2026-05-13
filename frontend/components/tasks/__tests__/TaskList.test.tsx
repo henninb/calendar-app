@@ -296,43 +296,6 @@ describe('TaskList — keyboard Ctrl+Z / Cmd+Z triggers undo', () => {
   })
 })
 
-// ── Fetch-limit warning ───────────────────────────────────────────────────────
-
-describe('TaskList — fetch-limit warning', () => {
-  it('shows the fetch-limit banner when 500 tasks are loaded', async () => {
-    const manyTasks = Array.from({ length: 500 }, (_, i) => ({
-      ...baseTask,
-      id: i + 1,
-      created_at: `2099-01-01T${String(Math.floor(i / 3600)).padStart(2, '0')}:${String(Math.floor((i % 3600) / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}Z`,
-    }))
-    vi.mocked(api.fetchTasks).mockResolvedValue(manyTasks)
-    render(<TaskList />)
-    await waitFor(() =>
-      expect(screen.getByText(/Showing the first 500 tasks/)).toBeInTheDocument()
-    )
-  })
-
-  it('logs a warning when silentLoad returns 500 tasks', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const manyTasks = Array.from({ length: 500 }, (_, i) => ({
-      ...baseTask, id: i + 1,
-    }))
-    vi.mocked(api.updateTask).mockResolvedValue({ ...baseTask, status: 'cancelled' })
-    vi.mocked(api.fetchTasks)
-      .mockResolvedValueOnce([baseTask])
-      .mockResolvedValueOnce(manyTasks)
-
-    render(<TaskList />)
-    await waitFor(() => screen.getByText('Weekly chore'))
-
-    fireEvent.click(screen.getByTitle('More actions'))
-    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Cancel' }))
-
-    await waitFor(() => expect(api.fetchTasks).toHaveBeenCalledTimes(2))
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('hit fetch limit'))
-    warnSpy.mockRestore()
-  })
-})
 
 // ── silentLoad error path ─────────────────────────────────────────────────────
 

@@ -10,6 +10,7 @@ const STATUS_PILL_ACTIVE: Record<TaskStatus, string> = {
   in_progress: 'bg-amber-100 text-amber-700 ring-1 ring-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40',
   done:        'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:ring-emerald-500/40',
   cancelled:   'bg-slate-200 text-slate-600 ring-1 ring-slate-300 dark:bg-slate-600/40 dark:text-slate-300 dark:ring-slate-500/40',
+  ontime:      'bg-teal-100 text-teal-700 ring-1 ring-teal-300 dark:bg-teal-500/20 dark:text-teal-300 dark:ring-teal-500/40',
 }
 
 type LogLevel = 'info' | 'ok' | 'warn' | 'error'

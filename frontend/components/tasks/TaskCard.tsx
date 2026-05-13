@@ -16,7 +16,6 @@ import {
 import type { Task, Subtask, Person, Category, TaskStatus, TaskPriority } from './helpers'
 
 const FIELDS = {
-  STATUS:            'status',
   DUE_DATE:          'due_date',
   ASSIGNEE_ID:       'assignee_id',
   ESTIMATED_MINUTES: 'estimated_minutes',
@@ -43,6 +42,7 @@ const STATUS_PILL: Record<TaskStatus, string> = {
   in_progress: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/25',
   done:        'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/25',
   cancelled:   'bg-slate-100 text-slate-500 ring-1 ring-slate-200 dark:bg-slate-500/10 dark:text-slate-400 dark:ring-slate-500/25',
+  ontime:      'bg-teal-50 text-teal-700 ring-1 ring-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:ring-teal-500/25',
 }
 
 const STATUS_ICON: Record<TaskStatus, string> = {
@@ -50,6 +50,7 @@ const STATUS_ICON: Record<TaskStatus, string> = {
   in_progress: '◑',
   done:        '✓',
   cancelled:   '✕',
+  ontime:      '⊙',
 }
 
 const subtaskInputCls = `flex-1 text-sm px-2.5 py-1.5 rounded-lg
@@ -100,6 +101,81 @@ function InlineMetaField({ icon, label, title, editing, onStartEdit, extra, chil
       </span>
       {extra}
     </button>
+  )
+}
+
+interface StatusPopoverProps {
+  status: TaskStatus
+  onSelect: (s: TaskStatus) => void
+}
+
+function StatusPopover({ status, onSelect }: StatusPopoverProps) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handle(e: MouseEvent) {
+      if (
+        btnRef.current && !btnRef.current.contains(e.target as Node) &&
+        menuRef.current && !menuRef.current.contains(e.target as Node)
+      ) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [open])
+
+  function handleOpen(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!open) {
+      const rect = btnRef.current!.getBoundingClientRect()
+      setPos({ top: rect.bottom + window.scrollY + 4, left: rect.left })
+    }
+    setOpen(o => !o)
+  }
+
+  return (
+    <div className="relative flex-shrink-0">
+      <button
+        ref={btnRef}
+        onClick={handleOpen}
+        title="Change status"
+        className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-opacity hover:opacity-75 ${STATUS_PILL[status] ?? STATUS_PILL.todo}`}
+      >
+        <span>{STATUS_ICON[status]}</span>
+        {STATUS_LABELS[status]}
+        <span className="opacity-50 ml-0.5 text-[10px]">▾</span>
+      </button>
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{ position: 'absolute', top: pos.top, left: pos.left, zIndex: 9999 }}
+          className="w-44 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden py-1"
+        >
+          {STATUS_OPTIONS.map(s => (
+            <button
+              key={s}
+              role="menuitem"
+              onClick={e => { e.stopPropagation(); onSelect(s); setOpen(false) }}
+              className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm transition-colors
+                ${s === status
+                  ? 'bg-slate-50 dark:bg-slate-700/50'
+                  : 'hover:bg-slate-50 dark:hover:bg-slate-700'
+                }`}
+            >
+              <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_PILL[s]}`}>
+                <span>{STATUS_ICON[s]}</span>
+                {STATUS_LABELS[s]}
+              </span>
+            </button>
+          ))}
+        </div>,
+        document.body
+      )}
+    </div>
   )
 }
 
@@ -431,7 +507,7 @@ export default function TaskCard({
   }, [pendingDelete])
 
   const overdue = isOverdue(task)
-  const isDimmed = task.status === 'done' || task.status === 'cancelled'
+  const isDimmed = task.status === 'done' || task.status === 'cancelled' || task.status === 'ontime'
 
   const subtaskCount = useMemo(() => task.subtasks?.length ?? 0, [task.subtasks])
   const doneSubtasks = useMemo(
@@ -476,12 +552,6 @@ export default function TaskCard({
     }
   }, [titleDraft, task.id, task.title, onPatchTask])
 
-  const handleAddSubtaskClick = useCallback(() => {
-    if (!expanded) {
-      pendingFocusAdd.current = true
-    }
-    onToggleExpand(task.id)
-  }, [expanded, onToggleExpand, task.id])
 
   const handleSaveNewSubtask = useCallback(async () => {
     const title = newSubtaskTitle.trim()
@@ -524,14 +594,10 @@ export default function TaskCard({
   const daysBadge = getDaysBadge(task)
 
   const menuItems: MenuItem[] = useMemo(() => [
-    { label: 'Edit',     icon: '✎', onClick: () => onEdit(task) },
-    { label: 'Copy',     icon: '⎘', onClick: () => navigator.clipboard.writeText(task.title) },
-    { label: 'Start',    icon: '▶', hidden: task.status !== 'todo', onClick: () => onPatchTask(task.id, { status: 'in_progress' }) },
-    { label: 'Complete', icon: '✓', hidden: task.status === 'done' || task.status === 'cancelled', onClick: handleDone },
-    { label: 'Reopen',   icon: '↩', hidden: task.status !== 'done' && task.status !== 'cancelled', onClick: () => onPatchTask(task.id, { status: 'todo' }) },
-    { label: 'Cancel',   icon: '⊘', hidden: task.status === 'cancelled' || task.status === 'done', onClick: () => onPatchTask(task.id, { status: 'cancelled' }) },
-    { label: 'Delete',   icon: '✕', danger: true, onClick: () => setPendingDelete(true) },
-  ], [task, onEdit, onPatchTask, handleDone])
+    { label: 'Edit',   icon: '✎', onClick: () => onEdit(task) },
+    { label: 'Copy',   icon: '⎘', onClick: () => navigator.clipboard.writeText(task.title) },
+    { label: 'Delete', icon: '✕', danger: true, onClick: () => setPendingDelete(true) },
+  ], [task, onEdit])
 
   const stripeClass = PRIORITY_STRIPE[task.priority] ?? PRIORITY_STRIPE.low
 
@@ -554,31 +620,6 @@ export default function TaskCard({
     >
       <div className="px-5 py-4">
         <div className="flex items-start gap-3.5">
-          <div className="mt-0.5 flex-shrink-0 flex items-center gap-1.5">
-            {task.status !== 'done' && task.status !== 'cancelled' ? (
-              <button
-                onClick={handleDone}
-                title="Mark as done"
-                className="w-5 h-5 flex items-center justify-center rounded-full border-2 border-slate-300 dark:border-slate-600 hover:border-emerald-500 dark:hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-slate-300 dark:text-slate-600 hover:text-emerald-500 dark:hover:text-emerald-400 text-[10px] transition-all"
-              >
-                ✓
-              </button>
-            ) : (
-              <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 border-2 border-emerald-400 dark:border-emerald-500/60 flex items-center justify-center">
-                <span className="text-emerald-600 dark:text-emerald-400 text-[10px] leading-none font-bold">✓</span>
-              </div>
-            )}
-            {task.status === 'todo' && (
-              <button
-                onClick={() => onPatchTask(task.id, { status: 'in_progress' })}
-                title="Start task"
-                className="w-5 h-5 flex items-center justify-center rounded-full border-2 border-slate-300 dark:border-slate-600 hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 text-[9px] transition-all"
-              >
-                ▶
-              </button>
-            )}
-          </div>
-
           {titleDraft !== null ? (
             <input
               autoFocus
@@ -617,34 +658,43 @@ export default function TaskCard({
             </>
           )}
 
-          {editingField === FIELDS.STATUS ? (
-            <select
-              autoFocus
-              defaultValue={task.status}
-              onChange={e => { onPatchTask(task.id, { status: e.target.value as TaskStatus }); setEditingField(null) }}
-              onBlur={() => setEditingField(null)}
-              onKeyDown={e => e.key === 'Escape' && setEditingField(null)}
-              className={`flex-shrink-0 ${inlineCls}`}
-            >
-              {STATUS_OPTIONS.map(s => (
-                <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-              ))}
-            </select>
-          ) : (
-            <button
-              onClick={() => setEditingField(FIELDS.STATUS)}
-              title="Click to edit status"
-              className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-opacity hover:opacity-75 ${STATUS_PILL[task.status] ?? STATUS_PILL.todo}`}
-            >
-              <span>{STATUS_ICON[task.status]}</span>
-              {STATUS_LABELS[task.status]}
-            </button>
-          )}
+          <div className="mt-0.5 flex-shrink-0 flex items-center gap-1.5">
+            {task.status !== 'done' && task.status !== 'cancelled' ? (
+              <button
+                onClick={handleDone}
+                title="Mark as done"
+                className="w-5 h-5 flex items-center justify-center rounded-full border-2 border-slate-300 dark:border-slate-600 hover:border-emerald-500 dark:hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-slate-300 dark:text-slate-600 hover:text-emerald-500 dark:hover:text-emerald-400 text-[10px] transition-all"
+              >
+                ✓
+              </button>
+            ) : (
+              <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 border-2 border-emerald-400 dark:border-emerald-500/60 flex items-center justify-center">
+                <span className="text-emerald-600 dark:text-emerald-400 text-[10px] leading-none font-bold">✓</span>
+              </div>
+            )}
+            {task.status === 'todo' && (
+              <button
+                onClick={() => onPatchTask(task.id, { status: 'in_progress' })}
+                title="Start task"
+                className="w-5 h-5 flex items-center justify-center rounded-full border-2 border-slate-300 dark:border-slate-600 hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 text-[9px] transition-all"
+              >
+                ▶
+              </button>
+            )}
+          </div>
+
+          <StatusPopover
+            status={task.status}
+            onSelect={s => {
+              if (s === 'done') handleDone()
+              else onPatchTask(task.id, { status: s })
+            }}
+          />
 
           <OverflowMenu items={menuItems} />
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5 ml-9 text-sm text-slate-500 dark:text-slate-400">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5 text-sm text-slate-500 dark:text-slate-400">
           <InlineMetaField
             icon="📅"
             label={task.due_date ? fmt(task.due_date) : '—'}
@@ -789,32 +839,28 @@ export default function TaskCard({
           )}
         </div>
 
-        {subtaskCount > 0 ? (
-          <button
-            onClick={() => onToggleExpand(task.id)}
-            className="w-full flex items-center gap-2.5 mt-3.5 pl-9 group/subtask-row cursor-pointer"
-          >
-            <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                style={{ width: `${(doneSubtasks / subtaskCount) * 100}%` }}
-              />
-            </div>
-            <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0 tabular-nums">
-              {doneSubtasks}/{subtaskCount}
-            </span>
-            <span className="text-xs text-slate-400 dark:text-slate-500 group-hover/subtask-row:text-slate-700 dark:group-hover/subtask-row:text-slate-300 transition-colors flex-shrink-0">
-              {expanded ? '▾ hide' : '▸ subtasks'}
-            </span>
-          </button>
-        ) : !isDimmed && (
-          <button
-            onClick={handleAddSubtaskClick}
-            className="mt-3 w-full pl-9 flex items-center gap-1 text-xs text-left text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 transition-colors opacity-40 group-hover:opacity-100"
-          >
-            <span>+</span> Add subtask
-          </button>
-        )}
+        <button
+          onClick={() => {
+            if (subtaskCount === 0 && !expanded && !isDimmed) {
+              pendingFocusAdd.current = true
+            }
+            onToggleExpand(task.id)
+          }}
+          className="w-full flex items-center gap-2.5 mt-3.5 pl-9 group/subtask-row cursor-pointer"
+        >
+          <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+              style={{ width: `${subtaskCount > 0 ? (doneSubtasks / subtaskCount) * 100 : 0}%` }}
+            />
+          </div>
+          <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0 tabular-nums">
+            {doneSubtasks}/{subtaskCount}
+          </span>
+          <span className="text-xs text-slate-400 dark:text-slate-500 group-hover/subtask-row:text-slate-700 dark:group-hover/subtask-row:text-slate-300 transition-colors flex-shrink-0">
+            {expanded ? '▾ hide' : '▸ subtasks'}
+          </span>
+        </button>
       </div>
 
       {showSubtaskConfirm && (

@@ -1,4 +1,4 @@
-export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'cancelled'
+export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'cancelled' | 'ontime'
 export type TaskPriority = 'high' | 'medium' | 'low'
 export type RecurrenceOption = 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'semiannual' | 'yearly'
 
@@ -89,12 +89,13 @@ export function formatMinutes(mins: number | null | undefined): string | null {
   return `${m}m`
 }
 
-export const STATUS_OPTIONS: TaskStatus[] = ['todo', 'in_progress', 'done', 'cancelled']
+export const STATUS_OPTIONS: TaskStatus[] = ['todo', 'in_progress', 'done', 'cancelled', 'ontime']
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: 'To Do',
   in_progress: 'In Progress',
   done: 'Done',
   cancelled: 'Cancelled',
+  ontime: 'On Time',
 }
 export const TASK_FETCH_LIMIT = 500
 

@@ -255,8 +255,18 @@ describe('TaskCard — subtasks', () => {
     expect(screen.getByText('1/2')).toBeInTheDocument()
   })
 
+  it('shows 0/0 counter when there are no subtasks', () => {
+    renderCard({ subtasks: [] })
+    expect(screen.getByText('0/0')).toBeInTheDocument()
+  })
+
   it('shows the expand toggle when subtasks exist', () => {
     renderCard({ subtasks })
+    expect(screen.getByText('▸ subtasks')).toBeInTheDocument()
+  })
+
+  it('shows "▸ subtasks" toggle even when there are no subtasks', () => {
+    renderCard({ subtasks: [] })
     expect(screen.getByText('▸ subtasks')).toBeInTheDocument()
   })
 
@@ -306,9 +316,9 @@ describe('TaskCard — subtasks', () => {
     expect(screen.getByText('From the corner store')).toBeInTheDocument()
   })
 
-  it('clicking "+ Add subtask" when already expanded calls onToggleExpand to collapse', () => {
+  it('clicking "▾ hide" when already expanded with 0 subtasks calls onToggleExpand to collapse', () => {
     const { cbs } = renderCard({ subtasks: [] }, { expanded: true })
-    fireEvent.click(screen.getByText('Add subtask'))
+    fireEvent.click(screen.getByText('▾ hide'))
     expect(cbs.onToggleExpand).toHaveBeenCalledWith(1)
   })
 
@@ -330,7 +340,7 @@ describe('TaskCard — subtasks', () => {
 
 // ── Start button position ─────────────────────────────────────────────────────
 
-describe('TaskCard — Start button (left-side icon)', () => {
+describe('TaskCard — Start button (right-side icon)', () => {
   it('Start button is rendered next to the done circle for todo tasks', () => {
     renderCard({ status: 'todo' })
     const startBtn = screen.getByTitle('Start task')
@@ -355,7 +365,12 @@ describe('TaskCard — Start button (left-side icon)', () => {
     expect(screen.queryByTitle('Start task')).not.toBeInTheDocument()
   })
 
-  it('clicking the left-side Start button calls onPatchTask with in_progress', () => {
+  it('Start button is not rendered for ontime tasks', () => {
+    renderCard({ status: 'ontime' })
+    expect(screen.queryByTitle('Start task')).not.toBeInTheDocument()
+  })
+
+  it('clicking the Start button calls onPatchTask with in_progress', () => {
     const { cbs } = renderCard({ status: 'todo' })
     fireEvent.click(screen.getByTitle('Start task'))
     expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'in_progress' })
@@ -389,44 +404,6 @@ describe('TaskCard — overflow menu', () => {
     fireEvent.click(screen.getByText('Delete'))
     expect(cbs.onDeleteTask).not.toHaveBeenCalled()
     expect(screen.getByText('Delete this task?')).toBeInTheDocument()
-  })
-
-  it('"Cancel" menu item appears for todo tasks', () => {
-    renderCard({ status: 'todo' })
-    fireEvent.click(screen.getByTitle('More actions'))
-    expect(screen.getByText('Cancel')).toBeInTheDocument()
-  })
-
-  it('"Cancel" menu item appears for in_progress tasks', () => {
-    renderCard({ status: 'in_progress' })
-    fireEvent.click(screen.getByTitle('More actions'))
-    expect(screen.getByText('Cancel')).toBeInTheDocument()
-  })
-
-  it('"Cancel" menu item calls onPatchTask with cancelled status', () => {
-    const { cbs } = renderCard({ status: 'todo' })
-    fireEvent.click(screen.getByTitle('More actions'))
-    fireEvent.click(screen.getByText('Cancel'))
-    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'cancelled' })
-  })
-
-  it('"Cancel" menu item is hidden for already-cancelled tasks', () => {
-    renderCard({ status: 'cancelled' })
-    fireEvent.click(screen.getByTitle('More actions'))
-    expect(screen.queryByText('Cancel')).not.toBeInTheDocument()
-  })
-
-  it('"Reopen" menu item appears for done tasks', () => {
-    renderCard({ status: 'done' })
-    fireEvent.click(screen.getByTitle('More actions'))
-    expect(screen.getByText('Reopen')).toBeInTheDocument()
-  })
-
-  it('"Reopen" menu item calls onPatchTask with todo status', () => {
-    const { cbs } = renderCard({ status: 'done' })
-    fireEvent.click(screen.getByTitle('More actions'))
-    fireEvent.click(screen.getByText('Reopen'))
-    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'todo' })
   })
 
   it('"Copy" menu item writes the task title to the clipboard', async () => {
@@ -475,45 +452,71 @@ describe('TaskCard — overflow menu', () => {
     expect(screen.queryByText('Edit')).not.toBeInTheDocument()
   })
 
-  it('"Complete" menu item appears for todo tasks', () => {
-    renderCard({ status: 'todo' })
-    fireEvent.click(screen.getByTitle('More actions'))
-    expect(screen.getByText('Complete')).toBeInTheDocument()
-  })
+})
 
-  it('"Complete" menu item appears for in_progress tasks', () => {
+// ── Status popover ────────────────────────────────────────────────────────────
+
+describe('TaskCard — status popover', () => {
+  it('status pill is visible and shows the current status label', () => {
     renderCard({ status: 'in_progress' })
-    fireEvent.click(screen.getByTitle('More actions'))
-    expect(screen.getByText('Complete')).toBeInTheDocument()
+    expect(screen.getByText('In Progress')).toBeInTheDocument()
   })
 
-  it('"Complete" menu item is hidden for done tasks', () => {
-    renderCard({ status: 'done' })
-    fireEvent.click(screen.getByTitle('More actions'))
-    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
+  it('clicking the status pill opens a popover with all 5 options', () => {
+    renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('Change status'))
+    const menu = screen.getByRole('menu')
+    expect(within(menu).getByText('To Do')).toBeInTheDocument()
+    expect(within(menu).getByText('In Progress')).toBeInTheDocument()
+    expect(within(menu).getByText('Done')).toBeInTheDocument()
+    expect(within(menu).getByText('Cancelled')).toBeInTheDocument()
+    expect(within(menu).getByText('On Time')).toBeInTheDocument()
   })
 
-  it('"Complete" menu item is hidden for cancelled tasks', () => {
-    renderCard({ status: 'cancelled' })
-    fireEvent.click(screen.getByTitle('More actions'))
-    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
+  it('selecting "Cancelled" calls onPatchTask with cancelled status', () => {
+    const { cbs } = renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('Change status'))
+    fireEvent.click(within(screen.getByRole('menu')).getByText('Cancelled'))
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'cancelled' })
   })
 
-  it('"Complete" menu item calls onPatchTask with done for a task with no incomplete subtasks', () => {
+  it('selecting "To Do" from a done task calls onPatchTask with todo (reopen)', () => {
+    const { cbs } = renderCard({ status: 'done' })
+    fireEvent.click(screen.getByTitle('Change status'))
+    fireEvent.click(within(screen.getByRole('menu')).getByText('To Do'))
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'todo' })
+  })
+
+  it('selecting "Done" with no incomplete subtasks calls onPatchTask with done', () => {
     const { cbs } = renderCard({ status: 'todo', subtasks: [] })
-    fireEvent.click(screen.getByTitle('More actions'))
-    fireEvent.click(screen.getByText('Complete'))
+    fireEvent.click(screen.getByTitle('Change status'))
+    fireEvent.click(within(screen.getByRole('menu')).getByText('Done'))
     expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'done' })
   })
 
-  it('"Complete" menu item opens SubtaskConfirmModal when incomplete subtasks exist', () => {
+  it('selecting "On Time" calls onPatchTask with ontime status', () => {
+    const { cbs } = renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('Change status'))
+    fireEvent.click(within(screen.getByRole('menu')).getByText('On Time'))
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'ontime' })
+  })
+
+  it('selecting "Done" with incomplete subtasks opens SubtaskConfirmModal', () => {
     renderCard({
       status: 'todo',
       subtasks: [{ id: 10, title: 'Step A', status: 'todo', order: 0, due_date: null }],
     })
-    fireEvent.click(screen.getByTitle('More actions'))
-    fireEvent.click(screen.getByText('Complete'))
+    fireEvent.click(screen.getByTitle('Change status'))
+    fireEvent.click(within(screen.getByRole('menu')).getByText('Done'))
     expect(screen.getByText('Incomplete subtasks')).toBeInTheDocument()
+  })
+
+  it('clicking outside the status popover closes it', () => {
+    renderCard({ status: 'todo' })
+    fireEvent.click(screen.getByTitle('Change status'))
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+    fireEvent.mouseDown(document.body)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 })
 
@@ -688,38 +691,6 @@ describe('TaskCard — complete all subtasks and mark done', () => {
   })
 })
 
-// ── Inline status editing ─────────────────────────────────────────────────────
-
-describe('TaskCard — inline status editing', () => {
-  it('clicking the status pill opens a status select', () => {
-    renderCard({ status: 'todo' })
-    fireEvent.click(screen.getByTitle('Click to edit status'))
-    expect(screen.getByRole('combobox')).toBeInTheDocument()
-  })
-
-  it('selecting a new status calls onPatchTask and closes the select', () => {
-    const { cbs } = renderCard({ status: 'todo' })
-    fireEvent.click(screen.getByTitle('Click to edit status'))
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'in_progress' } })
-    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'in_progress' })
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
-  })
-
-  it('pressing Escape on the status select closes it without patching', () => {
-    const { cbs } = renderCard({ status: 'todo' })
-    fireEvent.click(screen.getByTitle('Click to edit status'))
-    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' })
-    expect(cbs.onPatchTask).not.toHaveBeenCalled()
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
-  })
-
-  it('blurring the status select closes it', () => {
-    renderCard({ status: 'todo' })
-    fireEvent.click(screen.getByTitle('Click to edit status'))
-    fireEvent.blur(screen.getByRole('combobox'))
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
-  })
-})
 
 // ── Inline due date editing ───────────────────────────────────────────────────
 
@@ -891,29 +862,13 @@ describe('TaskCard — subtask row inline editing', () => {
   })
 })
 
-// ── Add subtask when card is collapsed ───────────────────────────────────────
+// ── Subtask row — zero subtask state ─────────────────────────────────────────
 
-describe('TaskCard — add subtask from collapsed state', () => {
-  it('clicking "+ Add subtask" on a collapsed card calls onToggleExpand', () => {
+describe('TaskCard — subtask row with 0 subtasks', () => {
+  it('clicking "▸ subtasks" on a collapsed card calls onToggleExpand', () => {
     const { cbs } = renderCard({ subtasks: [] }, { expanded: false })
-    fireEvent.click(screen.getByText('Add subtask'))
+    fireEvent.click(screen.getByText('▸ subtasks'))
     expect(cbs.onToggleExpand).toHaveBeenCalledWith(1)
   })
 })
 
-// ── Overflow menu — Start item ────────────────────────────────────────────────
-
-describe('TaskCard — overflow menu Start item', () => {
-  it('"Start" menu item calls onPatchTask with in_progress', () => {
-    const { cbs } = renderCard({ status: 'todo' })
-    fireEvent.click(screen.getByTitle('More actions'))
-    fireEvent.click(within(screen.getByRole('menu')).getByText('Start'))
-    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { status: 'in_progress' })
-  })
-
-  it('"Start" menu item is hidden for in_progress tasks', () => {
-    renderCard({ status: 'in_progress' })
-    fireEvent.click(screen.getByTitle('More actions'))
-    expect(screen.queryByText('Start')).not.toBeInTheDocument()
-  })
-})

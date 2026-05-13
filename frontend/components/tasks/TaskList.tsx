@@ -161,7 +161,7 @@ export default function TaskList() {
       this_week: [], next_week: [], later: [], no_date: [],
     }
     for (const task of visible) {
-      if (task.status === 'done') {
+      if (task.status === 'done' || task.status === 'ontime') {
         result.done.push(task)
       } else if (!task.due_date) {
         result.no_date.push(task)
@@ -482,15 +482,6 @@ export default function TaskList() {
             aria-label="Dismiss error"
             className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors flex-shrink-0"
           >✕</button>
-        </div>
-      )}
-
-      {!loading && tasks.length >= TASK_FETCH_LIMIT && (
-        <div className="px-4 py-3 mb-4 rounded-xl
-          bg-amber-50 dark:bg-amber-950/20
-          border border-amber-200 dark:border-amber-900/50
-          text-amber-700 dark:text-amber-400 text-sm">
-          Showing the first {TASK_FETCH_LIMIT} tasks — some may not be visible.
         </div>
       )}
 
