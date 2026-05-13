@@ -3,11 +3,11 @@ from __future__ import annotations
 import logging
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy.orm import Session, joinedload
+from fastapi import APIRouter, Depends, Query, Request, status
+from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..crud import apply_patch, get_or_404
+from ..crud import apply_patch, get_or_404, load_occurrence, load_task, OCCURRENCE_LOAD_OPTIONS
 from ..database import get_db
 from ..limiter import limiter
 from ..models import Event, Occurrence, OccurrenceStatus, Task
@@ -18,18 +18,6 @@ from ..services.task_generation import cancel_tasks_for_occurrence
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/occurrences", tags=["occurrences"])
-
-
-def _load_occurrence(db: Session, occurrence_id: int) -> Occurrence:
-    occ = (
-        db.query(Occurrence)
-        .options(joinedload(Occurrence.event).joinedload(Event.category))
-        .filter(Occurrence.id == occurrence_id)
-        .first()
-    )
-    if not occ:
-        raise HTTPException(status_code=404, detail="Occurrence not found")
-    return occ
 
 
 @router.get("", response_model=list[OccurrenceOut])
@@ -45,7 +33,7 @@ def list_occurrences(
 ) -> list[Occurrence]:
     q = (
         db.query(Occurrence)
-        .options(joinedload(Occurrence.event).joinedload(Event.category))
+        .options(*OCCURRENCE_LOAD_OPTIONS)
         .order_by(Occurrence.occurrence_date)
     )
     if start_date:
@@ -63,7 +51,7 @@ def list_occurrences(
 
 @router.get("/{occurrence_id}", response_model=OccurrenceOut)
 def get_occurrence(occurrence_id: int, db: Session = Depends(get_db)) -> Occurrence:
-    return _load_occurrence(db, occurrence_id)
+    return load_occurrence(db, occurrence_id)
 
 
 @router.patch("/{occurrence_id}", response_model=OccurrenceOut)
@@ -80,7 +68,7 @@ def update_occurrence(
     # Reload with eager joins — db.commit() expires all attributes and the
     # OccurrenceOut schema accesses occ.event.category, causing N+1 lazy loads
     # without an explicit joinedload here.
-    occ = _load_occurrence(db, occurrence_id)
+    occ = load_occurrence(db, occurrence_id)
     log.info("Updated occurrence %d → status=%s", occurrence_id, occ.status)
     return occ
 
@@ -88,20 +76,15 @@ def update_occurrence(
 @router.post("/{occurrence_id}/task", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
 def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db)) -> Task:
     """Create a task linked to this occurrence, or return the existing one if already created."""
-    occ = _load_occurrence(db, occurrence_id)
-    existing = (
-        db.query(Task)
-        .options(joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks))
-        .filter(Task.occurrence_id == occurrence_id)
-        .first()
-    )
+    occ = load_occurrence(db, occurrence_id)
+    existing = db.query(Task).filter(Task.occurrence_id == occurrence_id).first()
     if existing:
         log.info(
             "Task %d already exists for occurrence %d — returning existing",
             existing.id,
             occurrence_id,
         )
-        return existing
+        return load_task(db, existing.id)
     task = Task(
         occurrence_id=occ.id,
         title=occ.event.title,
@@ -114,12 +97,7 @@ def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db
     db.flush()
     task_id = task.id
     db.commit()
-    task = (
-        db.query(Task)
-        .options(joinedload(Task.assignee), joinedload(Task.category), joinedload(Task.subtasks))
-        .filter(Task.id == task_id)
-        .first()
-    )
+    task = load_task(db, task_id)
     log.info(
         "Created task %d (%s) from occurrence %d (event %d, date %s)",
         task.id,

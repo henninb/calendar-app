@@ -18,6 +18,7 @@ from ..schemas import (
     GenerateResult,
 )
 from ..services.credit_card import (
+    CREDIT_CARD_CATEGORY,
     ensure_card_events,
     generate_credit_card_occurrences,
     tracker_row,
@@ -29,7 +30,7 @@ router = APIRouter(prefix="/credit-cards", tags=["credit-cards"])
 
 
 def _cc_category_id(db: Session) -> int:
-    cat = db.query(Category).filter(Category.name == "credit_card").first()
+    cat = db.query(Category).filter(Category.name == CREDIT_CARD_CATEGORY).first()
     if not cat:
         raise HTTPException(
             status_code=500,

@@ -1,11 +1,15 @@
 from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Annotated
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from .models import (
     Priority, OccurrenceStatus, TaskRecurrence, TaskStatus, WeekendShift,
     GroceryUnit, GroceryListStatus, GroceryListItemStatus,
 )
+
+# Shared type aliases
+ColorStr = Annotated[str, Field(pattern=r'^#[0-9a-fA-F]{6}$')]
 
 
 def _normalize_rrule(v: str | None) -> str | None:
@@ -17,18 +21,11 @@ def _normalize_rrule(v: str | None) -> str | None:
     return v
 
 
-class _RruleNormalizeMixin(BaseModel):
-    @field_validator("rrule", check_fields=False)
-    @classmethod
-    def normalize_rrule(cls, v: str | None) -> str | None:
-        return _normalize_rrule(v)
-
-
 # ── Category ────────────────────────────────────────────────────────────────
 
 class CategoryBase(BaseModel):
     name: str = Field(..., max_length=50)
-    color: str = Field("#3b82f6", pattern=r'^#[0-9a-fA-F]{6}$')
+    color: ColorStr = "#3b82f6"
     icon: str = Field("📅", max_length=10)
     description: str | None = Field(None, max_length=1000)
 
@@ -39,7 +36,7 @@ class CategoryCreate(CategoryBase):
 
 class CategoryUpdate(BaseModel):
     name: str | None = Field(None, max_length=50)
-    color: str | None = Field(None, pattern=r'^#[0-9a-fA-F]{6}$')
+    color: ColorStr | None = None
     icon: str | None = Field(None, max_length=10)
     description: str | None = Field(None, max_length=1000)
 
@@ -52,7 +49,7 @@ class CategoryOut(CategoryBase):
 
 # ── Event ───────────────────────────────────────────────────────────────────
 
-class EventBase(_RruleNormalizeMixin):
+class EventBase(BaseModel):
     title: str = Field(..., max_length=255)
     category_id: int
     rrule: str | None = Field(None, max_length=500)   # None → one-time
@@ -68,12 +65,17 @@ class EventBase(_RruleNormalizeMixin):
     generates_tasks: bool = False
     gcal_calendar_id: str | None = Field(None, max_length=255)
 
+    @field_validator("rrule")
+    @classmethod
+    def normalize_rrule(cls, v: str | None) -> str | None:
+        return _normalize_rrule(v)
+
 
 class EventCreate(EventBase):
     pass
 
 
-class EventUpdate(_RruleNormalizeMixin):
+class EventUpdate(BaseModel):
     title: str | None = Field(None, max_length=255)
     category_id: int | None = None
     rrule: str | None = Field(None, max_length=500)
@@ -88,6 +90,11 @@ class EventUpdate(_RruleNormalizeMixin):
     is_active: bool | None = None
     generates_tasks: bool | None = None
     gcal_calendar_id: str | None = Field(None, max_length=255)
+
+    @field_validator("rrule")
+    @classmethod
+    def normalize_rrule(cls, v: str | None) -> str | None:
+        return _normalize_rrule(v)
 
 
 class EventOut(EventBase):

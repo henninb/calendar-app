@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session, joinedload
 
 from ..config import settings
-from ..crud import apply_patch, get_or_404
+from ..crud import apply_patch, assert_exists, get_or_404
 from ..database import get_db
 from ..models import Category, Event
 from ..schemas import EventCreate, EventOut, EventUpdate, EventWithOccurrences, GenerateResult
@@ -36,7 +36,7 @@ def list_events(
 
 @router.post("", response_model=EventOut, status_code=status.HTTP_201_CREATED)
 def create_event(body: EventCreate, db: Session = Depends(get_db)) -> Event:
-    _assert_category(db, body.category_id)
+    assert_exists(db, Category, body.category_id, "Category not found")
     event = Event(**body.model_dump())
     db.add(event)
     db.commit()
@@ -57,7 +57,7 @@ def update_event(event_id: int, body: EventUpdate, db: Session = Depends(get_db)
     event = get_or_404(db, Event, event_id, "Event not found")
     changes = body.model_dump(exclude_unset=True)
     if "category_id" in changes:
-        _assert_category(db, changes["category_id"])
+        assert_exists(db, Category, changes["category_id"], "Category not found")
     apply_patch(event, changes)
     db.commit()
     db.refresh(event)
@@ -89,8 +89,3 @@ def generate_event_occurrences(
     return GenerateResult(events_processed=1, occurrences_created=created)
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
-
-def _assert_category(db: Session, category_id: int) -> None:
-    if not db.get(Category, category_id):
-        raise HTTPException(status_code=404, detail="Category not found")

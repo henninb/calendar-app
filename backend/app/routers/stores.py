@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..crud import apply_patch, get_or_404
@@ -22,11 +23,13 @@ def list_stores(db: Session = Depends(get_db)) -> list[Store]:
 
 @router.post("", response_model=StoreOut, status_code=status.HTTP_201_CREATED)
 def create_store(body: StoreCreate, db: Session = Depends(get_db)) -> Store:
-    if db.query(Store).filter(Store.name == body.name).first():
-        raise HTTPException(status_code=409, detail="Store with this name already exists")
     store = Store(**body.model_dump())
     db.add(store)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Store with this name already exists")
     db.refresh(store)
     log.info("Created store %d (%s)", store.id, store.name)
     return store

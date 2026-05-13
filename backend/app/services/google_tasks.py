@@ -8,7 +8,6 @@ they will need to re-authenticate via GET /api/sync/auth.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -71,7 +70,7 @@ def get_or_create_tasklist() -> tuple[object, str]:
     return svc, _get_or_create_tasklist(svc)
 
 
-def sync_task(db: Session, task: Task, svc=None, tasklist_id: Optional[str] = None) -> str:
+def sync_task(db: Session, task: Task, svc=None, tasklist_id: str | None = None) -> str:
     """Push a single task (and its subtasks) to Google Tasks. Returns 'inserted' or 'updated'."""
     if svc is None:
         svc = _service()
@@ -87,22 +86,19 @@ def sync_task(db: Session, task: Task, svc=None, tasklist_id: Optional[str] = No
         body["due"] = f"{task.due_date.isoformat()}T00:00:00.000Z"
 
     try:
+        action = "updated"
         if task.gtask_id:
             try:
                 _execute(svc.tasks().update(
                     tasklist=tasklist_id, task=task.gtask_id, body={**body, "id": task.gtask_id}
                 ))
                 task.synced_at = datetime.now(timezone.utc)
-                action = "updated"
             except HttpError as e:
                 if e.resp.status != 404:
                     raise
-                task.gtask_id = None
-                action = None
-        else:
-            action = None
+                task.gtask_id = None  # deleted from GTasks — fall through to insert
 
-        if action is None:
+        if task.gtask_id is None:
             result = _execute(svc.tasks().insert(tasklist=tasklist_id, body=body))
             task.gtask_id = result["id"]
             task.synced_at = datetime.now(timezone.utc)

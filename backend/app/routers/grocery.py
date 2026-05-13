@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from ..crud import apply_patch, get_or_404
@@ -26,6 +27,13 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/grocery", tags=["grocery"])
 
+_GROCERY_LIST_LOAD_OPTIONS = [
+    joinedload(GroceryList.store),
+    joinedload(GroceryList.items)
+    .joinedload(GroceryListItem.item)
+    .joinedload(GroceryItem.default_store),
+]
+
 
 # ── Items ─────────────────────────────────────────────────────────────────────
 
@@ -42,19 +50,20 @@ def list_grocery_items(
 
 @router.post("/items", response_model=GroceryItemOut, status_code=status.HTTP_201_CREATED)
 def create_grocery_item(body: GroceryItemCreate, db: Session = Depends(get_db)) -> GroceryItem:
-    if db.query(GroceryItem).filter(GroceryItem.name == body.name).first():
-        raise HTTPException(status_code=409, detail="Item with this name already exists")
     if body.default_store_id:
         get_or_404(db, Store, body.default_store_id, "Store not found")
     item = GroceryItem(**body.model_dump())
     db.add(item)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Item with this name already exists")
     db.refresh(item)
     return item
 
 
-@router.get("/items/{item_id}", response_model=GroceryItemOut)
-def get_grocery_item(item_id: int, db: Session = Depends(get_db)) -> GroceryItem:
+def _load_grocery_item(db: Session, item_id: int) -> GroceryItem:
     item = (
         db.query(GroceryItem)
         .options(joinedload(GroceryItem.default_store))
@@ -64,6 +73,11 @@ def get_grocery_item(item_id: int, db: Session = Depends(get_db)) -> GroceryItem
     if not item:
         raise HTTPException(status_code=404, detail="Grocery item not found")
     return item
+
+
+@router.get("/items/{item_id}", response_model=GroceryItemOut)
+def get_grocery_item(item_id: int, db: Session = Depends(get_db)) -> GroceryItem:
+    return _load_grocery_item(db, item_id)
 
 
 @router.patch("/items/{item_id}", response_model=GroceryItemOut)
@@ -130,12 +144,7 @@ def delete_on_hand(item_id: int, db: Session = Depends(get_db)) -> None:
 def _load_list(list_id: int, db: Session) -> GroceryList:
     lst = (
         db.query(GroceryList)
-        .options(
-            joinedload(GroceryList.store),
-            joinedload(GroceryList.items)
-            .joinedload(GroceryListItem.item)
-            .joinedload(GroceryItem.default_store),
-        )
+        .options(*_GROCERY_LIST_LOAD_OPTIONS)
         .filter(GroceryList.id == list_id)
         .first()
     )
@@ -161,15 +170,7 @@ def list_grocery_lists(
     status: GroceryListStatus | None = Query(None),
     db: Session = Depends(get_db),
 ) -> list[GroceryList]:
-    q = (
-        db.query(GroceryList)
-        .options(
-            joinedload(GroceryList.store),
-            joinedload(GroceryList.items)
-            .joinedload(GroceryListItem.item)
-            .joinedload(GroceryItem.default_store),
-        )
-    )
+    q = db.query(GroceryList).options(*_GROCERY_LIST_LOAD_OPTIONS)
     if status:
         q = q.filter(GroceryList.status == status)
     return q.order_by(GroceryList.created_at.desc()).all()
@@ -225,17 +226,13 @@ def add_list_item(
 ) -> GroceryListItem:
     get_or_404(db, GroceryList, list_id, "Grocery list not found")
     get_or_404(db, GroceryItem, body.item_id, "Grocery item not found")
-    existing = (
-        db.query(GroceryListItem)
-        .filter(GroceryListItem.list_id == list_id, GroceryListItem.item_id == body.item_id)
-        .first()
-    )
-    if existing:
-        raise HTTPException(status_code=409, detail="Item already on this list")
     list_item = GroceryListItem(list_id=list_id, **body.model_dump())
     db.add(list_item)
-    db.commit()
-    db.refresh(list_item)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Item already on this list")
     return _load_list_item(db, list_item.id)
 
 

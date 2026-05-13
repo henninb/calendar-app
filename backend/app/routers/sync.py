@@ -24,6 +24,7 @@ from icalendar import Calendar, Event as ICalEvent
 from sqlalchemy.orm import Session, joinedload
 
 from ..config import settings
+from ..crud import load_occurrence
 from ..database import SessionLocal, get_db
 from ..limiter import limiter
 from ..models import Event, Occurrence, OccurrenceStatus, Task, TaskStatus
@@ -290,14 +291,7 @@ def wipe_all_gcal_events(
 @router.post("/gcal/{occurrence_id}", response_model=SyncResult)
 def sync_single(occurrence_id: int, db: Session = Depends(get_db)) -> SyncResult:
     """Force-sync a single occurrence to Google Calendar."""
-    occ = (
-        db.query(Occurrence)
-        .options(joinedload(Occurrence.event).joinedload(Event.category))
-        .filter(Occurrence.id == occurrence_id)
-        .first()
-    )
-    if not occ:
-        raise HTTPException(status_code=404, detail="Occurrence not found")
+    occ = load_occurrence(db, occurrence_id)
     try:
         gcal.sync_occurrence(db, occ)
         return SyncResult(synced=1, failed=0)

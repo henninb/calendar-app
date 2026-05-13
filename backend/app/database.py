@@ -1,6 +1,10 @@
+import logging
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from .config import settings
+
+log = logging.getLogger(__name__)
 
 engine = create_engine(
     settings.database_url,
@@ -18,6 +22,7 @@ def get_db():
     try:
         yield db
     except Exception:
+        log.exception("Session error — rolling back")
         db.rollback()
         raise
     finally:

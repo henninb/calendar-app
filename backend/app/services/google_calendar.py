@@ -14,7 +14,6 @@ import secrets
 import time
 from datetime import date, timedelta, datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -29,10 +28,12 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..models import Occurrence, OccurrenceStatus
 
+_GCAL_APP_ID_KEY = "calendarAppId"
+
 # Module-level flow kept alive between get_auth_url() and exchange_code()
 # so the PKCE code_verifier generated during authorization is available at
 # token exchange time.
-_pending_flow: Optional[Flow] = None
+_pending_flow: Flow | None = None
 
 # Persisted alongside the token file so the PKCE code_verifier survives
 # a server restart or multi-worker deployment between /auth and /auth/callback.
@@ -48,7 +49,7 @@ SCOPES = [
 # is_authenticated() makes 2 Google API calls; cache the result so repeated
 # page loads within _AUTH_CACHE_TTL seconds don't hit the network.
 
-_auth_cache: tuple[bool, Optional[str]] | None = None
+_auth_cache: tuple[bool, str | None] | None = None
 _auth_cache_time: float = 0.0
 _AUTH_CACHE_TTL = 60.0  # seconds
 
@@ -80,7 +81,7 @@ CATEGORY_COLOR_MAP = {
 }
 
 
-def get_auth_url(state: str = "", redirect_uri: Optional[str] = None) -> str:
+def get_auth_url(state: str = "", redirect_uri: str | None = None) -> str:
     """Return the Google OAuth consent URL."""
     global _pending_flow
     _pending_flow = _build_flow(redirect_uri=redirect_uri)
@@ -103,13 +104,13 @@ def get_auth_url(state: str = "", redirect_uri: Optional[str] = None) -> str:
     return auth_url
 
 
-def exchange_code(code: str, redirect_uri: Optional[str] = None) -> Credentials:
+def exchange_code(code: str, redirect_uri: str | None = None) -> Credentials:
     """Exchange an authorization code for credentials and persist the token."""
     global _pending_flow
 
     # Restore persisted state when the callback lands on a different process.
-    saved_cv: Optional[str] = None
-    saved_uri: Optional[str] = None
+    saved_cv: str | None = None
+    saved_uri: str | None = None
     cvf = _code_verifier_file()
     if cvf.exists():
         try:
@@ -160,7 +161,7 @@ def validate_state(state: str) -> bool:
         return False
 
 
-def get_credentials() -> Optional[Credentials]:
+def get_credentials() -> Credentials | None:
     """Load credentials from token file, refreshing if expired.
 
     Returns None if the token is missing, invalid, or covers a different
@@ -183,7 +184,7 @@ def get_credentials() -> Optional[Credentials]:
     return creds if creds.valid else None
 
 
-def is_authenticated() -> tuple[bool, Optional[str]]:
+def is_authenticated() -> tuple[bool, str | None]:
     """
     Returns (authenticated, email).
 
@@ -203,15 +204,12 @@ def is_authenticated() -> tuple[bool, Optional[str]]:
     if not creds:
         _invalidate_auth_cache()
         return False, None
+
     try:
         cal_svc = build("calendar", "v3", credentials=creds)
         tasks_svc = build("tasks", "v1", credentials=creds)
         cal_svc.calendarList().list(maxResults=1).execute()
         tasks_svc.tasklists().list(maxResults=1).execute()
-        result: tuple[bool, Optional[str]] = (True, None)
-        _auth_cache = result
-        _auth_cache_time = now
-        return result
     except HttpError as e:
         if e.resp.status == 401:
             log.warning("Google credentials rejected with 401 — clearing token and requiring re-auth")
@@ -222,16 +220,13 @@ def is_authenticated() -> tuple[bool, Optional[str]]:
             _invalidate_auth_cache()
             return False, None
         log.warning("Failed to verify Google credentials (HTTP %s)", e.resp.status)
-        result = (True, None)
-        _auth_cache = result
-        _auth_cache_time = now
-        return result
     except Exception:
         log.warning("Failed to verify Google credentials", exc_info=True)
-        result = (True, None)
-        _auth_cache = result
-        _auth_cache_time = now
-        return result
+
+    result: tuple[bool, str | None] = (True, None)
+    _auth_cache = result
+    _auth_cache_time = now
+    return result
 
 
 def sync_occurrence(db: Session, occurrence: Occurrence, creds: Credentials | None = None) -> str:
@@ -275,7 +270,7 @@ def sync_occurrence(db: Session, occurrence: Occurrence, creds: Credentials | No
         "reminders": {"useDefault": False, "overrides": reminder_overrides},
         "extendedProperties": {
             "private": {
-                "calendarAppId": str(occurrence.id),
+                _GCAL_APP_ID_KEY: str(occurrence.id),
                 "category": event.category.name,
             }
         },
@@ -438,7 +433,7 @@ def _resolve_gcal_id(service, occurrence: Occurrence, calendar_id: str, body: di
     return new_id, "inserted"
 
 
-def _build_flow(redirect_uri: Optional[str] = None) -> Flow:
+def _build_flow(redirect_uri: str | None = None) -> Flow:
     uri = redirect_uri or settings.google_redirect_uri
     client_config = {
         "web": {

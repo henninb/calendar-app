@@ -12,12 +12,13 @@ Occurrence rows to the database for close, due, and annual fee dates.
 """
 import calendar as cal_mod
 from datetime import date, timedelta, datetime
-from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..models import CreditCard, Event, Occurrence, OccurrenceStatus, Priority, WeekendShift
+
+CREDIT_CARD_CATEGORY = "credit_card"
 
 
 # ── Date calculation helpers (mirrors credit-card-tracker.py) ─────────────────
@@ -38,7 +39,7 @@ def adjust_weekend(d: date, shift: WeekendShift) -> date:
     return d
 
 
-def close_date_for_month(year: int, month: int, close_day: int, weekend_shift: Optional[WeekendShift]) -> date:
+def close_date_for_month(year: int, month: int, close_day: int, weekend_shift: WeekendShift | None) -> date:
     last_day = cal_mod.monthrange(year, month)[1]
     d = date(year, month, min(close_day, last_day))
     if weekend_shift:
@@ -46,7 +47,7 @@ def close_date_for_month(year: int, month: int, close_day: int, weekend_shift: O
     return d
 
 
-def rolling_close_for_month(year: int, month: int, card: CreditCard) -> Optional[date]:
+def rolling_close_for_month(year: int, month: int, card: CreditCard) -> date | None:
     ref = card.cycle_reference_date
     cycle = card.cycle_days
     target_start = date(year, month, 1)
@@ -76,7 +77,7 @@ def due_date_for_close(close: date, card: CreditCard) -> date:
     return close + timedelta(days=card.grace_period_days)
 
 
-def next_statement_close(card: CreditCard, ref_date: Optional[date] = None) -> date:
+def next_statement_close(card: CreditCard, ref_date: date | None = None) -> date:
     if ref_date is None:
         ref_date = date.today()
     if card.cycle_days:
@@ -103,7 +104,7 @@ def next_statement_close(card: CreditCard, ref_date: Optional[date] = None) -> d
     return d
 
 
-def previous_statement_close(card: CreditCard, ref_date: Optional[date] = None) -> date:
+def previous_statement_close(card: CreditCard, ref_date: date | None = None) -> date:
     if ref_date is None:
         ref_date = date.today()
     next_close = next_statement_close(card, ref_date)
@@ -116,7 +117,7 @@ def previous_statement_close(card: CreditCard, ref_date: Optional[date] = None) 
     return close_date_for_month(next_close.year, next_close.month - 1, close_day, ws)
 
 
-def next_annual_fee_date(card: CreditCard, ref_date: Optional[date] = None) -> Optional[date]:
+def next_annual_fee_date(card: CreditCard, ref_date: date | None = None) -> date | None:
     if not card.annual_fee_month:
         return None
     if ref_date is None:
@@ -132,7 +133,7 @@ def next_annual_fee_date(card: CreditCard, ref_date: Optional[date] = None) -> O
     return None
 
 
-def grace_str(card: CreditCard, today: Optional[date] = None) -> str:
+def grace_str(card: CreditCard, today: date | None = None) -> str:
     """Return the display string for the grace period column."""
     if card.due_day_same_month or card.due_day_next_month:
         if today is None:
@@ -145,7 +146,7 @@ def grace_str(card: CreditCard, today: Optional[date] = None) -> str:
 
 # ── Tracker view ──────────────────────────────────────────────────────────────
 
-def tracker_row(card: CreditCard, today: Optional[date] = None) -> dict:
+def tracker_row(card: CreditCard, today: date | None = None) -> dict:
     """Return a single tracker row as a dict (mirrors the script's table row)."""
     if today is None:
         today = date.today()
@@ -249,23 +250,31 @@ def ensure_card_events(db: Session, card: CreditCard, credit_card_category_id: i
     existing_titles = {e.title for e in db.query(Event.title).filter(Event.credit_card_id == card.id).all()}
     today = date.today()
 
-    def _make(title: str, description: str, reminder_days: list) -> None:
-        if title not in existing_titles:
-            db.add(Event(
-                title=title,
-                category_id=credit_card_category_id,
-                credit_card_id=card.id,
-                dtstart=today,
-                rrule=None,
-                description=description,
-                reminder_days=reminder_days,
-                priority=Priority.high,
-                is_active=True,
-            ))
+    def _event(title: str, description: str, reminder_days: list) -> Event | None:
+        if title in existing_titles:
+            return None
+        return Event(
+            title=title,
+            category_id=credit_card_category_id,
+            credit_card_id=card.id,
+            dtstart=today,
+            rrule=None,
+            description=description,
+            reminder_days=reminder_days,
+            priority=Priority.high,
+            is_active=True,
+        )
 
-    _make(f"{card.name} — Statement Close", f"Statement closing date for {card.name} ({card.issuer})", [1])
-    _make(f"{card.name} — Payment Due", f"Payment due for {card.name} ({card.issuer})", [7, 3, 1])
+    candidates = [
+        _event(f"{card.name} — Statement Close", f"Statement closing date for {card.name} ({card.issuer})", [1]),
+        _event(f"{card.name} — Payment Due", f"Payment due for {card.name} ({card.issuer})", [7, 3, 1]),
+    ]
     if card.annual_fee_month:
-        _make(f"{card.name} — Annual Fee", f"Annual fee posts for {card.name} ({card.issuer})", [30, 7])
+        candidates.append(
+            _event(f"{card.name} — Annual Fee", f"Annual fee posts for {card.name} ({card.issuer})", [30, 7])
+        )
 
+    new_events = [e for e in candidates if e is not None]
+    if new_events:
+        db.add_all(new_events)
     db.commit()

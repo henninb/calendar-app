@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..crud import apply_patch, get_or_404
@@ -21,11 +22,13 @@ def list_categories(db: Session = Depends(get_db)) -> list[Category]:
 
 @router.post("", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
 def create_category(body: CategoryCreate, db: Session = Depends(get_db)) -> Category:
-    if db.query(Category).filter(Category.name == body.name).first():
-        raise HTTPException(status_code=409, detail="Category name already exists")
     cat = Category(**body.model_dump())
     db.add(cat)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Category name already exists")
     db.refresh(cat)
     log.info("Created category %d (%s)", cat.id, cat.name)
     return cat

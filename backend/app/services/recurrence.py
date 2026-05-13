@@ -54,6 +54,8 @@ _EASTER_RE = re.compile(r'^EASTER([+-]\d+)?$', re.IGNORECASE)
 _MOON_PHASE_RE = re.compile(
     r'^MOON_(NEW|FULL|FIRST_QUARTER|LAST_QUARTER)$', re.IGNORECASE
 )
+_PHASE_SEARCH_ITERATIONS = 600  # ~50 years of monthly moon phases
+
 _MOON_PHASE_OFFSETS = {
     'new': 0.0,
     'first_quarter': 0.25,
@@ -194,7 +196,7 @@ def _expand_eclipses(dtstart: date, until: date, solar: bool) -> list[date]:
     k = math.floor((year_frac - 2000.0) * 12.3685) + phase_offset - 1.0
 
     results: list[date] = []
-    for _ in range(600):
+    for _ in range(_PHASE_SEARCH_ITERATIONS):
         d = _jde_to_date(_moon_phase_jde(k))
         if d > until:
             break
@@ -219,7 +221,7 @@ def _expand_moon_phase(dtstart: date, until: date, phase_offset: float) -> list[
     k = math.floor((year_frac - 2000.0) * 12.3685) + phase_offset - 1.0
 
     results: list[date] = []
-    for _ in range(600):  # ~50 years of phases
+    for _ in range(_PHASE_SEARCH_ITERATIONS):
         d = _jde_to_date(_moon_phase_jde(k))
         if d > until:
             break

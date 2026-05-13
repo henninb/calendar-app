@@ -181,26 +181,24 @@ def generate_pending_tasks(db: Session) -> int:
 
 
 def archive_old_tasks(db: Session, days: int = 7) -> int:
-    """Archive done/cancelled tasks whose due_date (or completed_at) is older than `days` days.
+    """Archive done/cancelled tasks whose due_date is older than `days` days.
 
     Returns the count of tasks archived.
     """
     cutoff = date.today() - timedelta(days=days)
-    tasks = (
+    count = (
         db.query(Task)
         .filter(
             Task.is_archived.is_(False),
             Task.status.in_([TaskStatus.done, TaskStatus.cancelled]),
             Task.due_date <= cutoff,
         )
-        .all()
+        .update({"is_archived": True}, synchronize_session=False)
     )
-    for task in tasks:
-        task.is_archived = True
-    if tasks:
+    if count:
         db.commit()
-    log.info("Archived %d completed/cancelled tasks (due <= %s)", len(tasks), cutoff)
-    return len(tasks)
+    log.info("Archived %d completed/cancelled tasks (due <= %s)", count, cutoff)
+    return count
 
 
 def cancel_tasks_for_occurrence(db: Session, occurrence: Occurrence) -> int:
@@ -208,16 +206,14 @@ def cancel_tasks_for_occurrence(db: Session, occurrence: Occurrence) -> int:
 
     Returns count cancelled.
     """
-    tasks = (
+    count = (
         db.query(Task)
         .filter(
             Task.occurrence_id == occurrence.id,
             Task.status.notin_([TaskStatus.done, TaskStatus.cancelled]),
         )
-        .all()
+        .update({"status": TaskStatus.cancelled}, synchronize_session=False)
     )
-    for task in tasks:
-        task.status = TaskStatus.cancelled
-    if tasks:
+    if count:
         db.commit()
-    return len(tasks)
+    return count
