@@ -628,7 +628,7 @@ describe('TaskCard — pencil title edit button', () => {
 
 // ── Always-visible metadata fields ───────────────────────────────────────────
 
-describe('TaskCard — metadata fields always visible for active tasks', () => {
+describe('TaskCard — metadata fields always visible', () => {
   const emptyTask = {
     due_date: null,
     estimated_minutes: null,
@@ -636,35 +636,35 @@ describe('TaskCard — metadata fields always visible for active tasks', () => {
     assignee: null,
   }
 
-  it('shows "Add date" ghost when task has no due date', () => {
+  it('shows a clickable due date button for active tasks with no due date', () => {
     renderCard(emptyTask)
-    expect(screen.getByText('Add date')).toBeInTheDocument()
+    expect(screen.getByTitle('Click to set due date')).toBeInTheDocument()
   })
 
-  it('shows "Unassigned" when task has no assignee', () => {
+  it('shows a clickable assignee button for active tasks with no assignee', () => {
     renderCard(emptyTask)
-    expect(screen.getByText('Unassigned')).toBeInTheDocument()
+    expect(screen.getByTitle('Click to edit assignee')).toBeInTheDocument()
   })
 
-  it('shows "Add duration" ghost when task has no estimated minutes', () => {
+  it('shows a clickable duration button for active tasks with no estimated minutes', () => {
     renderCard(emptyTask)
-    expect(screen.getByText('Add duration')).toBeInTheDocument()
+    expect(screen.getByTitle('Click to edit duration')).toBeInTheDocument()
   })
 
-  it('clicking "Add date" opens the date input for active tasks', () => {
+  it('clicking the due date field opens the date input for active tasks', () => {
     renderCard(emptyTask)
-    fireEvent.click(screen.getByText('Add date'))
+    fireEvent.click(screen.getByTitle('Click to set due date'))
     expect(document.querySelector('input[type="date"]')).toBeInTheDocument()
   })
 
-  it('does NOT show "Add date" for done tasks with no due date', () => {
+  it('does NOT show a clickable due date button for done tasks (field is read-only)', () => {
     renderCard({ ...emptyTask, status: 'done' })
-    expect(screen.queryByText('Add date')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Click to set due date')).not.toBeInTheDocument()
   })
 
-  it('shows actual date text (not ghost) when due date is set', () => {
+  it('shows a clickable due date button when due date is set', () => {
     renderCard({ due_date: '2099-01-15' })
-    expect(screen.queryByText('Add date')).not.toBeInTheDocument()
+    expect(screen.getByTitle('Click to set due date')).toBeInTheDocument()
   })
 })
 

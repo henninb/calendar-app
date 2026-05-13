@@ -82,8 +82,8 @@ function InlineMetaField({ icon, label, title, editing, onStartEdit, extra, chil
   if (!onStartEdit) {
     return (
       <span className="flex items-center gap-1.5">
-        <span className="opacity-60">{icon}</span>
-        <span>{label}</span>
+        <span className={ghost ? 'opacity-30' : 'opacity-60'}>{icon}</span>
+        <span className={ghost ? 'text-slate-300 dark:text-slate-600 italic' : ''}>{label}</span>
         {extra}
       </span>
     )
@@ -644,142 +644,150 @@ export default function TaskCard({
           <OverflowMenu items={menuItems} />
         </div>
 
-        {(task.category || (task.recurrence && task.recurrence !== 'none')) && (
-          <div className="flex flex-wrap items-center gap-2 mt-2.5 ml-9">
-            {task.category && (
-              editingField === FIELDS.CATEGORY ? (
-                <select
-                  autoFocus
-                  defaultValue={task.category_id ?? ''}
-                  onChange={e => {
-                    onPatchTask(task.id, { category_id: e.target.value ? parseInt(e.target.value, 10) : null })
-                    setEditingField(null)
-                  }}
-                  onBlur={() => setEditingField(null)}
-                  onKeyDown={e => e.key === 'Escape' && setEditingField(null)}
-                  className={`text-xs ${inlineCls}`}
-                >
-                  <option value="">No category</option>
-                  {categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <span
-                  onDoubleClick={() => !isDimmed && setEditingField(FIELDS.CATEGORY)}
-                  title={isDimmed ? undefined : 'Double-click to change category'}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold cursor-default select-none"
-                  style={{
-                    background: withAlpha(task.category.color, 0.12),
-                    color: task.category.color,
-                    border: `1px solid ${withAlpha(task.category.color, 0.28)}`,
-                  }}
-                >
-                  {task.category.icon} {task.category.name}
-                </span>
-              )
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5 ml-9 text-sm text-slate-500 dark:text-slate-400">
+          <InlineMetaField
+            icon="📅"
+            label={task.due_date ? fmt(task.due_date) : '—'}
+            title="Click to set due date"
+            editing={editingField === FIELDS.DUE_DATE}
+            onStartEdit={!isDimmed ? () => setEditingField(FIELDS.DUE_DATE) : undefined}
+            ghost={!task.due_date}
+            extra={daysBadge && (
+              <span className={daysBadge.cls}>· {daysBadge.text}</span>
             )}
-            {task.recurrence && task.recurrence !== 'none' && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20">
-                ↻ {task.recurrence}
-              </span>
-            )}
-          </div>
-        )}
+          >
+            <input
+              type="date"
+              autoFocus
+              defaultValue={task.due_date ?? undefined}
+              onChange={e => {
+                if (e.target.value) {
+                  onPatchTask(task.id, { due_date: e.target.value })
+                  setEditingField(null)
+                }
+              }}
+              onBlur={e => {
+                onPatchTask(task.id, { due_date: e.target.value || null })
+                setEditingField(null)
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  onPatchTask(task.id, { due_date: (e.target as HTMLInputElement).value || null })
+                  setEditingField(null)
+                }
+                if (e.key === 'Escape') setEditingField(null)
+              }}
+              className={inlineCls}
+            />
+          </InlineMetaField>
 
-        {(!isDimmed || task.due_date || task.assignee || task.estimated_minutes) && (
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-2.5 ml-9 text-sm text-slate-500 dark:text-slate-400">
-            {(!isDimmed || task.due_date) && (
-              <InlineMetaField
-                icon="📅"
-                label={task.due_date ? fmt(task.due_date) : 'Add date'}
-                title="Click to set due date"
-                editing={editingField === FIELDS.DUE_DATE}
-                onStartEdit={!isDimmed ? () => setEditingField(FIELDS.DUE_DATE) : undefined}
-                ghost={!task.due_date}
-                extra={daysBadge && (
-                  <span className={daysBadge.cls}>· {daysBadge.text}</span>
-                )}
-              >
-                <input
-                  type="date"
-                  autoFocus
-                  defaultValue={task.due_date ?? undefined}
-                  onChange={e => {
-                    if (e.target.value) {
-                      onPatchTask(task.id, { due_date: e.target.value })
-                      setEditingField(null)
-                    }
-                  }}
-                  onBlur={e => {
-                    onPatchTask(task.id, { due_date: e.target.value || null })
-                    setEditingField(null)
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      onPatchTask(task.id, { due_date: (e.target as HTMLInputElement).value || null })
-                      setEditingField(null)
-                    }
-                    if (e.key === 'Escape') setEditingField(null)
-                  }}
-                  className={inlineCls}
-                />
-              </InlineMetaField>
-            )}
-
-            <InlineMetaField
-              icon="👤"
-              label={task.assignee?.name ?? 'Unassigned'}
-              title="Click to edit assignee"
-              editing={editingField === FIELDS.ASSIGNEE_ID}
-              onStartEdit={!isDimmed ? () => setEditingField(FIELDS.ASSIGNEE_ID) : undefined}
-              ghost={!task.assignee}
+          <InlineMetaField
+            icon="👤"
+            label={task.assignee?.name ?? '—'}
+            title="Click to edit assignee"
+            editing={editingField === FIELDS.ASSIGNEE_ID}
+            onStartEdit={!isDimmed ? () => setEditingField(FIELDS.ASSIGNEE_ID) : undefined}
+            ghost={!task.assignee}
+          >
+            <select
+              autoFocus
+              defaultValue={task.assignee_id ?? ''}
+              onChange={e => {
+                onPatchTask(task.id, { assignee_id: (e.target.value || null) as unknown as number | null })
+                setEditingField(null)
+              }}
+              onBlur={() => setEditingField(null)}
+              onKeyDown={e => e.key === 'Escape' && setEditingField(null)}
+              className={inlineCls}
             >
+              <option value="">Unassigned</option>
+              {persons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </InlineMetaField>
+
+          <InlineMetaField
+            icon="⏱"
+            label={formatMinutes(task.estimated_minutes) ?? '—'}
+            title="Click to edit duration"
+            editing={editingField === FIELDS.ESTIMATED_MINUTES}
+            onStartEdit={!isDimmed ? () => setEditingField(FIELDS.ESTIMATED_MINUTES) : undefined}
+            ghost={!task.estimated_minutes}
+          >
+            <input
+              type="text"
+              autoFocus
+              defaultValue={formatMinutes(task.estimated_minutes) ?? ''}
+              placeholder="e.g. 1h30m"
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  onPatchTask(task.id, { estimated_minutes: parseHumanMinutes((e.target as HTMLInputElement).value) })
+                  setEditingField(null)
+                }
+                if (e.key === 'Escape') setEditingField(null)
+              }}
+              onBlur={e => {
+                onPatchTask(task.id, { estimated_minutes: parseHumanMinutes(e.target.value) })
+                setEditingField(null)
+              }}
+              className={`w-24 ${inlineCls}`}
+            />
+          </InlineMetaField>
+
+          {editingField === FIELDS.CATEGORY ? (
+            <span className="flex items-center gap-1.5">
+              <span className="opacity-60">🏷</span>
               <select
                 autoFocus
-                defaultValue={task.assignee_id ?? ''}
+                defaultValue={task.category_id ?? ''}
                 onChange={e => {
-                  onPatchTask(task.id, { assignee_id: (e.target.value || null) as unknown as number | null })
+                  onPatchTask(task.id, { category_id: e.target.value ? parseInt(e.target.value, 10) : null })
                   setEditingField(null)
                 }}
                 onBlur={() => setEditingField(null)}
                 onKeyDown={e => e.key === 'Escape' && setEditingField(null)}
-                className={inlineCls}
+                className={`text-xs ${inlineCls}`}
               >
-                <option value="">Unassigned</option>
-                {persons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                <option value="">No category</option>
+                {categories.map(c => (
+                  <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                ))}
               </select>
-            </InlineMetaField>
-
-            <InlineMetaField
-              icon="⏱"
-              label={formatMinutes(task.estimated_minutes) ?? 'Add duration'}
-              title="Click to edit duration"
-              editing={editingField === FIELDS.ESTIMATED_MINUTES}
-              onStartEdit={!isDimmed ? () => setEditingField(FIELDS.ESTIMATED_MINUTES) : undefined}
-              ghost={!task.estimated_minutes}
+            </span>
+          ) : task.category ? (
+            <span
+              onDoubleClick={() => !isDimmed && setEditingField(FIELDS.CATEGORY)}
+              title={isDimmed ? undefined : 'Double-click to change category'}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold cursor-default select-none"
+              style={{
+                background: withAlpha(task.category.color, 0.12),
+                color: task.category.color,
+                border: `1px solid ${withAlpha(task.category.color, 0.28)}`,
+              }}
             >
-              <input
-                type="text"
-                autoFocus
-                defaultValue={formatMinutes(task.estimated_minutes) ?? ''}
-                placeholder="e.g. 1h30m"
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    onPatchTask(task.id, { estimated_minutes: parseHumanMinutes((e.target as HTMLInputElement).value) })
-                    setEditingField(null)
-                  }
-                  if (e.key === 'Escape') setEditingField(null)
-                }}
-                onBlur={e => {
-                  onPatchTask(task.id, { estimated_minutes: parseHumanMinutes(e.target.value) })
-                  setEditingField(null)
-                }}
-                className={`w-24 ${inlineCls}`}
-              />
-            </InlineMetaField>
-          </div>
-        )}
+              {task.category.icon} {task.category.name}
+            </span>
+          ) : !isDimmed ? (
+            <button
+              onClick={() => setEditingField(FIELDS.CATEGORY)}
+              title="Click to set category"
+              className="group flex items-center gap-1.5 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+            >
+              <span className="opacity-30">🏷</span>
+              <span className="text-slate-300 dark:text-slate-600 italic border-b border-dashed border-transparent group-hover:border-blue-400 transition-colors">—</span>
+            </button>
+          ) : (
+            <span className="flex items-center gap-1.5">
+              <span className="opacity-30">🏷</span>
+              <span className="text-slate-300 dark:text-slate-600 italic">—</span>
+            </span>
+          )}
+
+          {task.recurrence && task.recurrence !== 'none' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20">
+              ↻ {task.recurrence}
+            </span>
+          )}
+        </div>
 
         {subtaskCount > 0 ? (
           <button
