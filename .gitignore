@@ -38,4 +38,3 @@ Thumbs.db
 .claude/settings.local.json
 .coverage
 frontend/coverage/
-frontend-nextgen/coverage/

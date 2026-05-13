@@ -20,7 +20,7 @@ done
 echo "Backend ready."
 
 # Next.js server — exposed on FRONTEND_PORT, proxies /api → localhost:BACKEND_PORT
-cd "$ROOT/frontend-nextgen"
+cd "$ROOT/frontend"
 BACKEND_PORT="$BACKEND_PORT" npx next start --hostname "::" --port "$FRONTEND_PORT" &
 NEXT_PID=$!
 

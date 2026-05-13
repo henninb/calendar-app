@@ -7,6 +7,6 @@ pytest
 
 echo ""
 echo "=== Frontend Coverage ==="
-cd frontend-nextgen && npx vitest run --coverage 2>&1
+cd frontend && npx vitest run --coverage 2>&1
 
 exit 0
