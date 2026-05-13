@@ -596,8 +596,9 @@ export default function TaskCard({
   const menuItems: MenuItem[] = useMemo(() => [
     { label: 'Edit',   icon: '✎', onClick: () => onEdit(task) },
     { label: 'Copy',   icon: '⎘', onClick: () => navigator.clipboard.writeText(task.title) },
+    { label: 'Cancel', icon: '⊘', hidden: isDimmed, onClick: () => onPatchTask(task.id, { status: 'cancelled' }) },
     { label: 'Delete', icon: '✕', danger: true, onClick: () => setPendingDelete(true) },
-  ], [task, onEdit])
+  ], [task, onEdit, isDimmed, onPatchTask])
 
   const stripeClass = PRIORITY_STRIPE[task.priority] ?? PRIORITY_STRIPE.low
 

@@ -62,7 +62,7 @@ const baseTask = {
 }
 
 beforeEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()
   vi.mocked(api.fetchTasks).mockResolvedValue([baseTask])
   vi.mocked(api.fetchPersons).mockResolvedValue([])
   vi.mocked(api.fetchCategories).mockResolvedValue([])
