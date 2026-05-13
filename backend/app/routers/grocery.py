@@ -4,9 +4,19 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
-from ..crud import apply_patch, get_or_404
+from ..crud import (
+    apply_patch,
+    get_or_404,
+    GROCERY_ITEM_LOAD_OPTIONS,
+    GROCERY_LIST_LOAD_OPTIONS,
+    load_grocery_item,
+    load_grocery_list,
+    load_grocery_list_item,
+    load_on_hand,
+    ON_HAND_LOAD_OPTIONS,
+)
 from ..database import get_db
 from ..models import GroceryItem, GroceryList, GroceryListItem, GroceryListStatus, OnHand, Store
 from ..schemas import (
@@ -27,12 +37,16 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/grocery", tags=["grocery"])
 
-_GROCERY_LIST_LOAD_OPTIONS = [
-    joinedload(GroceryList.store),
-    joinedload(GroceryList.items)
-    .joinedload(GroceryListItem.item)
-    .joinedload(GroceryItem.default_store),
-]
+
+def _get_list_item_or_404(db: Session, list_id: int, item_id: int) -> GroceryListItem:
+    list_item = (
+        db.query(GroceryListItem)
+        .filter(GroceryListItem.list_id == list_id, GroceryListItem.item_id == item_id)
+        .first()
+    )
+    if not list_item:
+        raise HTTPException(status_code=404, detail="Item not on this list")
+    return list_item
 
 
 # ── Items ─────────────────────────────────────────────────────────────────────
@@ -42,7 +56,7 @@ def list_grocery_items(
     search: str | None = Query(None),
     db: Session = Depends(get_db),
 ) -> list[GroceryItem]:
-    q = db.query(GroceryItem).options(joinedload(GroceryItem.default_store))
+    q = db.query(GroceryItem).options(*GROCERY_ITEM_LOAD_OPTIONS)
     if search:
         q = q.filter(GroceryItem.name.ilike(f"%{search}%"))
     return q.order_by(GroceryItem.name).all()
@@ -59,25 +73,12 @@ def create_grocery_item(body: GroceryItemCreate, db: Session = Depends(get_db)) 
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Item with this name already exists")
-    db.refresh(item)
-    return item
-
-
-def _load_grocery_item(db: Session, item_id: int) -> GroceryItem:
-    item = (
-        db.query(GroceryItem)
-        .options(joinedload(GroceryItem.default_store))
-        .filter(GroceryItem.id == item_id)
-        .first()
-    )
-    if not item:
-        raise HTTPException(status_code=404, detail="Grocery item not found")
-    return item
+    return load_grocery_item(db, item.id)
 
 
 @router.get("/items/{item_id}", response_model=GroceryItemOut)
 def get_grocery_item(item_id: int, db: Session = Depends(get_db)) -> GroceryItem:
-    return _load_grocery_item(db, item_id)
+    return load_grocery_item(db, item_id)
 
 
 @router.patch("/items/{item_id}", response_model=GroceryItemOut)
@@ -90,8 +91,7 @@ def update_grocery_item(
         get_or_404(db, Store, data["default_store_id"], "Store not found")
     apply_patch(item, data)
     db.commit()
-    db.refresh(item)
-    return item
+    return load_grocery_item(db, item_id)
 
 
 @router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -107,7 +107,7 @@ def delete_grocery_item(item_id: int, db: Session = Depends(get_db)) -> None:
 def list_on_hand(db: Session = Depends(get_db)) -> list[OnHand]:
     return (
         db.query(OnHand)
-        .options(joinedload(OnHand.item).joinedload(GroceryItem.default_store))
+        .options(*ON_HAND_LOAD_OPTIONS)
         .join(GroceryItem)
         .order_by(GroceryItem.name)
         .all()
@@ -126,51 +126,24 @@ def upsert_on_hand(item_id: int, body: OnHandUpsert, db: Session = Depends(get_d
         record = OnHand(item_id=item_id, quantity=body.quantity, unit=body.unit)
         db.add(record)
     db.commit()
-    db.refresh(record)
-    return record
+    return load_on_hand(db, item_id)
 
 
 @router.delete("/on-hand/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_on_hand(item_id: int, db: Session = Depends(get_db)) -> None:
-    record = db.query(OnHand).filter(OnHand.item_id == item_id).first()
-    if not record:
-        raise HTTPException(status_code=404, detail="On-hand record not found")
+    record = load_on_hand(db, item_id)
     db.delete(record)
     db.commit()
 
 
 # ── Grocery Lists ─────────────────────────────────────────────────────────────
 
-def _load_list(list_id: int, db: Session) -> GroceryList:
-    lst = (
-        db.query(GroceryList)
-        .options(*_GROCERY_LIST_LOAD_OPTIONS)
-        .filter(GroceryList.id == list_id)
-        .first()
-    )
-    if not lst:
-        raise HTTPException(status_code=404, detail="Grocery list not found")
-    return lst
-
-
-def _load_list_item(db: Session, list_item_id: int) -> GroceryListItem:
-    item = (
-        db.query(GroceryListItem)
-        .options(joinedload(GroceryListItem.item).joinedload(GroceryItem.default_store))
-        .filter(GroceryListItem.id == list_item_id)
-        .first()
-    )
-    if not item:
-        raise HTTPException(status_code=404, detail="Grocery list item not found")
-    return item
-
-
 @router.get("/lists", response_model=list[GroceryListOut])
 def list_grocery_lists(
     status: GroceryListStatus | None = Query(None),
     db: Session = Depends(get_db),
 ) -> list[GroceryList]:
-    q = db.query(GroceryList).options(*_GROCERY_LIST_LOAD_OPTIONS)
+    q = db.query(GroceryList).options(*GROCERY_LIST_LOAD_OPTIONS)
     if status:
         q = q.filter(GroceryList.status == status)
     return q.order_by(GroceryList.created_at.desc()).all()
@@ -183,14 +156,13 @@ def create_grocery_list(body: GroceryListCreate, db: Session = Depends(get_db)) 
     lst = GroceryList(**body.model_dump())
     db.add(lst)
     db.commit()
-    db.refresh(lst)
     log.info("Created grocery list %d (%s)", lst.id, lst.name)
-    return _load_list(lst.id, db)
+    return load_grocery_list(db, lst.id)
 
 
 @router.get("/lists/{list_id}", response_model=GroceryListOut)
 def get_grocery_list(list_id: int, db: Session = Depends(get_db)) -> GroceryList:
-    return _load_list(list_id, db)
+    return load_grocery_list(db, list_id)
 
 
 @router.patch("/lists/{list_id}", response_model=GroceryListOut)
@@ -203,7 +175,7 @@ def update_grocery_list(
         get_or_404(db, Store, data["store_id"], "Store not found")
     apply_patch(lst, data)
     db.commit()
-    return _load_list(list_id, db)
+    return load_grocery_list(db, list_id)
 
 
 @router.delete("/lists/{list_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -233,7 +205,7 @@ def add_list_item(
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Item already on this list")
-    return _load_list_item(db, list_item.id)
+    return load_grocery_list_item(db, list_item.id)
 
 
 @router.patch("/lists/{list_id}/items/{item_id}", response_model=GroceryListItemOut)
@@ -243,26 +215,14 @@ def update_list_item(
     body: GroceryListItemUpdate,
     db: Session = Depends(get_db),
 ) -> GroceryListItem:
-    list_item = (
-        db.query(GroceryListItem)
-        .filter(GroceryListItem.list_id == list_id, GroceryListItem.item_id == item_id)
-        .first()
-    )
-    if not list_item:
-        raise HTTPException(status_code=404, detail="Item not on this list")
+    list_item = _get_list_item_or_404(db, list_id, item_id)
     apply_patch(list_item, body.model_dump(exclude_unset=True))
     db.commit()
-    return _load_list_item(db, list_item.id)
+    return load_grocery_list_item(db, list_item.id)
 
 
 @router.delete("/lists/{list_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_list_item(list_id: int, item_id: int, db: Session = Depends(get_db)) -> None:
-    list_item = (
-        db.query(GroceryListItem)
-        .filter(GroceryListItem.list_id == list_id, GroceryListItem.item_id == item_id)
-        .first()
-    )
-    if not list_item:
-        raise HTTPException(status_code=404, detail="Item not on this list")
+    list_item = _get_list_item_or_404(db, list_id, item_id)
     db.delete(list_item)
     db.commit()

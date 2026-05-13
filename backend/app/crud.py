@@ -5,7 +5,7 @@ from typing import Any, TypeVar
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 
-from .models import Event, Occurrence, Task
+from .models import Event, GroceryItem, GroceryList, GroceryListItem, Occurrence, OnHand, Task
 
 T = TypeVar("T")
 
@@ -65,3 +65,73 @@ def load_task(db: Session, task_id: int) -> Task:
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
+
+
+# ── Grocery eager-load options and loaders ───────────────────────────────────
+
+GROCERY_ITEM_LOAD_OPTIONS = [
+    joinedload(GroceryItem.default_store),
+]
+
+GROCERY_LIST_ITEM_LOAD_OPTIONS = [
+    joinedload(GroceryListItem.item).joinedload(GroceryItem.default_store),
+]
+
+GROCERY_LIST_LOAD_OPTIONS = [
+    joinedload(GroceryList.store),
+    joinedload(GroceryList.items)
+    .joinedload(GroceryListItem.item)
+    .joinedload(GroceryItem.default_store),
+]
+
+ON_HAND_LOAD_OPTIONS = [
+    joinedload(OnHand.item).joinedload(GroceryItem.default_store),
+]
+
+
+def load_grocery_item(db: Session, item_id: int) -> GroceryItem:
+    item = (
+        db.query(GroceryItem)
+        .options(*GROCERY_ITEM_LOAD_OPTIONS)
+        .filter(GroceryItem.id == item_id)
+        .first()
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Grocery item not found")
+    return item
+
+
+def load_grocery_list(db: Session, list_id: int) -> GroceryList:
+    lst = (
+        db.query(GroceryList)
+        .options(*GROCERY_LIST_LOAD_OPTIONS)
+        .filter(GroceryList.id == list_id)
+        .first()
+    )
+    if lst is None:
+        raise HTTPException(status_code=404, detail="Grocery list not found")
+    return lst
+
+
+def load_grocery_list_item(db: Session, list_item_id: int) -> GroceryListItem:
+    item = (
+        db.query(GroceryListItem)
+        .options(*GROCERY_LIST_ITEM_LOAD_OPTIONS)
+        .filter(GroceryListItem.id == list_item_id)
+        .first()
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Grocery list item not found")
+    return item
+
+
+def load_on_hand(db: Session, item_id: int) -> OnHand:
+    record = (
+        db.query(OnHand)
+        .options(*ON_HAND_LOAD_OPTIONS)
+        .filter(OnHand.item_id == item_id)
+        .first()
+    )
+    if record is None:
+        raise HTTPException(status_code=404, detail="On-hand record not found")
+    return record
