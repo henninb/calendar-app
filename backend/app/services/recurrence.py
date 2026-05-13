@@ -191,20 +191,7 @@ def _expand_eclipses(dtstart: date, until: date, solar: bool) -> list[date]:
     """Return all eclipse dates (solar or lunar) between dtstart and until."""
     phase_offset = 0.0 if solar else 0.5
     checker = _check_solar_eclipse if solar else _check_lunar_eclipse
-
-    year_frac = dtstart.year + (dtstart.timetuple().tm_yday / 365.25)
-    k = math.floor((year_frac - 2000.0) * 12.3685) + phase_offset - 1.0
-
-    results: list[date] = []
-    for _ in range(_PHASE_SEARCH_ITERATIONS):
-        d = _jde_to_date(_moon_phase_jde(k))
-        if d > until:
-            break
-        if checker(k) and d >= dtstart:
-            results.append(d)
-        k += 1.0
-
-    return sorted(set(results))
+    return _iter_phase_dates(dtstart, until, phase_offset, predicate=checker)
 
 
 def _parse_moon_rule(rrule: str) -> float | None:
@@ -215,21 +202,32 @@ def _parse_moon_rule(rrule: str) -> float | None:
     return _MOON_PHASE_OFFSETS[m.group(1).lower()]
 
 
-def _expand_moon_phase(dtstart: date, until: date, phase_offset: float) -> list[date]:
-    """Return all dates of a given moon phase between dtstart and until."""
+def _iter_phase_dates(
+    dtstart: date,
+    until: date,
+    phase_offset: float,
+    predicate=None,
+) -> list[date]:
+    """Iterate moon phase dates from dtstart to until.
+
+    predicate(k) — when given, only dates where predicate returns True are kept.
+    """
     year_frac = dtstart.year + (dtstart.timetuple().tm_yday / 365.25)
     k = math.floor((year_frac - 2000.0) * 12.3685) + phase_offset - 1.0
-
     results: list[date] = []
     for _ in range(_PHASE_SEARCH_ITERATIONS):
         d = _jde_to_date(_moon_phase_jde(k))
         if d > until:
             break
-        if d >= dtstart:
+        if d >= dtstart and (predicate is None or predicate(k)):
             results.append(d)
         k += 1.0
-
     return sorted(set(results))
+
+
+def _expand_moon_phase(dtstart: date, until: date, phase_offset: float) -> list[date]:
+    """Return all dates of a given moon phase between dtstart and until."""
+    return _iter_phase_dates(dtstart, until, phase_offset)
 
 
 def _parse_easter_rule(rrule: str) -> int | None:

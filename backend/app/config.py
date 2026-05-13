@@ -41,6 +41,10 @@ class Settings:
             self._init_from_gopass()
         self.__dict__['_ready'] = True
 
+    def _check_origins(self) -> None:
+        if "*" in self.allowed_origins:
+            raise ValueError("Wildcard '*' cannot be used in ALLOWED_ORIGINS — specify explicit origins.")
+
     def __getattr__(self, name: str):
         if name.startswith('_'):
             raise AttributeError(name)
@@ -78,8 +82,7 @@ class Settings:
         self.default_person_name       = os.environ.get("DEFAULT_PERSON_NAME", "")
         self.categories                = _load_yaml()["categories"]
         self.api_key                   = os.environ.get("API_KEY", "")
-        if "*" in self.allowed_origins:
-            raise ValueError("Wildcard '*' cannot be used in ALLOWED_ORIGINS — specify explicit origins.")
+        self._check_origins()
 
     def _init_from_gopass(self):
         _log.info("Config loaded from gopass + config.yml")
@@ -112,8 +115,7 @@ class Settings:
         api_key_cfg               = cfg.get("api_key", {})
         api_key_path              = api_key_cfg.get("gopass_path", "") if isinstance(api_key_cfg, dict) else ""
         self.api_key              = _gopass(api_key_path) if api_key_path else os.environ.get("API_KEY", "")
-        if "*" in self.allowed_origins:
-            raise ValueError("Wildcard '*' cannot be used in ALLOWED_ORIGINS — specify explicit origins.")
+        self._check_origins()
 
 
 settings = Settings()
