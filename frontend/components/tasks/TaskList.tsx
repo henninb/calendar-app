@@ -47,6 +47,11 @@ export default function TaskList() {
   const tasksRef = useRef<Task[]>(tasks)
   tasksRef.current = tasks
 
+  // Tracks whether the current filter includes terminal (done/cancelled) statuses.
+  // Stored in a ref so load/silentLoad callbacks can read it without being re-created.
+  const needsTerminalRef = useRef(false)
+  const prevNeedsTerminalRef = useRef(false)
+
   const { push: pushUndo, undo, canUndo, lastAction, dismissToast } = useUndoStack()
 
   useEffect(() => {
@@ -72,9 +77,12 @@ export default function TaskList() {
 
   const abortRef = useRef<AbortController | null>(null)
 
+  const terminalParams = (): Record<string, string> =>
+    needsTerminalRef.current ? { include_terminal: 'true' } : {}
+
   const silentLoad = useCallback(async () => {
     try {
-      const [t, p, c] = await Promise.all([fetchTasks({}), fetchPersons(), fetchCategories()])
+      const [t, p, c] = await Promise.all([fetchTasks(terminalParams()), fetchPersons(), fetchCategories()])
       if (t.length >= TASK_FETCH_LIMIT) {
         console.warn(`[TaskList] hit fetch limit (${TASK_FETCH_LIMIT})`)
       }
@@ -97,7 +105,7 @@ export default function TaskList() {
     setError(null)
     try {
       const [t, p, c] = await Promise.all([
-        fetchTasks({}, signal),
+        fetchTasks(terminalParams(), signal),
         fetchPersons(signal),
         fetchCategories(signal),
       ])
@@ -120,6 +128,15 @@ export default function TaskList() {
     load()
     return () => abortRef.current?.abort()
   }, [load])
+
+  // Re-fetch when the filter crosses the terminal boundary (e.g. user selects Done filter).
+  useEffect(() => {
+    const needsTerminal = filterStatus.some(s => s === 'done' || s === 'cancelled')
+    needsTerminalRef.current = needsTerminal
+    if (needsTerminal === prevNeedsTerminalRef.current) return
+    prevNeedsTerminalRef.current = needsTerminal
+    silentLoad()
+  }, [filterStatus, silentLoad])
 
   const today    = localDate(0)
   const tomorrow = localDate(1)

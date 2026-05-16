@@ -96,6 +96,11 @@ describe('TaskCard — basic rendering', () => {
     renderCard({ recurrence: 'weekly' })
     expect(screen.getByText('↻ weekly')).toBeInTheDocument()
   })
+
+  it('renders onetime badge when recurrence is none', () => {
+    renderCard({ recurrence: 'none' })
+    expect(screen.getByText('onetime')).toBeInTheDocument()
+  })
 })
 
 // ── Mark-done flow ────────────────────────────────────────────────────────────

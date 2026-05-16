@@ -833,9 +833,13 @@ export default function TaskCard({
             </span>
           )}
 
-          {task.recurrence && task.recurrence !== 'none' && (
+          {task.recurrence && task.recurrence !== 'none' ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20">
               ↻ {task.recurrence}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-50 text-slate-500 border border-slate-200 dark:bg-slate-500/10 dark:text-slate-400 dark:border-slate-500/20">
+              onetime
             </span>
           )}
         </div>

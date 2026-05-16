@@ -12,8 +12,9 @@ Entry points:
 """
 import calendar as cal_mod
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from ..models import Event, Occurrence, OccurrenceStatus, Subtask, Task, TaskRecurrence, TaskStatus
@@ -181,23 +182,35 @@ def generate_pending_tasks(db: Session) -> int:
 
 
 def archive_old_tasks(db: Session, days: int = 7) -> int:
-    """Archive done/cancelled tasks whose due_date is older than `days` days.
+    """Archive done/cancelled tasks older than `days` days.
+
+    A task qualifies when either its due_date or (if no due_date) its
+    completed_at timestamp is past the cutoff.  Tasks that have neither
+    field are left alone.
 
     Returns the count of tasks archived.
     """
-    cutoff = date.today() - timedelta(days=days)
+    cutoff_date = date.today() - timedelta(days=days)
+    cutoff_dt = datetime(cutoff_date.year, cutoff_date.month, cutoff_date.day)
     count = (
         db.query(Task)
         .filter(
             Task.is_archived.is_(False),
             Task.status.in_([TaskStatus.done, TaskStatus.cancelled]),
-            Task.due_date <= cutoff,
+            or_(
+                Task.due_date <= cutoff_date,
+                and_(
+                    Task.due_date.is_(None),
+                    Task.completed_at.isnot(None),
+                    Task.completed_at <= cutoff_dt,
+                ),
+            ),
         )
         .update({"is_archived": True}, synchronize_session=False)
     )
     if count:
         db.commit()
-    log.info("Archived %d completed/cancelled tasks (due <= %s)", count, cutoff)
+    log.info("Archived %d completed/cancelled tasks (cutoff %s)", count, cutoff_date)
     return count
 
 

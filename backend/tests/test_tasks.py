@@ -406,6 +406,73 @@ def test_update_task_priority(client: TestClient, task: dict) -> None:
     assert resp.json()["priority"] == "low"
 
 
+# ── include_terminal flag ─────────────────────────────────────────────────────
+
+def test_list_tasks_excludes_done_by_default(client: TestClient, category: Category) -> None:
+    client.post("/api/tasks", json={"title": "Active task", "category_id": category.id})
+    done_id = client.post(
+        "/api/tasks", json={"title": "Done task", "category_id": category.id}
+    ).json()["id"]
+    client.patch(f"/api/tasks/{done_id}", json={"status": "done"})
+
+    resp = client.get("/api/tasks")
+    assert resp.status_code == 200
+    titles = [t["title"] for t in resp.json()]
+    assert "Active task" in titles
+    assert "Done task" not in titles
+
+
+def test_list_tasks_excludes_cancelled_by_default(client: TestClient, category: Category) -> None:
+    client.post("/api/tasks", json={"title": "Active task", "category_id": category.id})
+    cancelled_id = client.post(
+        "/api/tasks", json={"title": "Cancelled task", "category_id": category.id}
+    ).json()["id"]
+    client.patch(f"/api/tasks/{cancelled_id}", json={"status": "cancelled"})
+
+    resp = client.get("/api/tasks")
+    assert resp.status_code == 200
+    titles = [t["title"] for t in resp.json()]
+    assert "Active task" in titles
+    assert "Cancelled task" not in titles
+
+
+def test_list_tasks_include_terminal_returns_done_and_cancelled(
+    client: TestClient, category: Category
+) -> None:
+    client.post("/api/tasks", json={"title": "Active task", "category_id": category.id})
+    done_id = client.post(
+        "/api/tasks", json={"title": "Done task", "category_id": category.id}
+    ).json()["id"]
+    cancelled_id = client.post(
+        "/api/tasks", json={"title": "Cancelled task", "category_id": category.id}
+    ).json()["id"]
+    client.patch(f"/api/tasks/{done_id}", json={"status": "done"})
+    client.patch(f"/api/tasks/{cancelled_id}", json={"status": "cancelled"})
+
+    resp = client.get("/api/tasks?include_terminal=true")
+    assert resp.status_code == 200
+    titles = [t["title"] for t in resp.json()]
+    assert "Active task" in titles
+    assert "Done task" in titles
+    assert "Cancelled task" in titles
+
+
+def test_list_tasks_explicit_status_overrides_terminal_filter(
+    client: TestClient, category: Category
+) -> None:
+    client.post("/api/tasks", json={"title": "Active task", "category_id": category.id})
+    done_id = client.post(
+        "/api/tasks", json={"title": "Done task", "category_id": category.id}
+    ).json()["id"]
+    client.patch(f"/api/tasks/{done_id}", json={"status": "done"})
+
+    resp = client.get("/api/tasks?status=done")
+    assert resp.status_code == 200
+    titles = [t["title"] for t in resp.json()]
+    assert "Done task" in titles
+    assert "Active task" not in titles
+
+
 def test_filter_tasks_by_occurrence_id(client: TestClient, db: Session, category: Category) -> None:
     from app.models import Event, Occurrence, OccurrenceStatus, Priority
     from datetime import date

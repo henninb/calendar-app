@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from sqlalchemy.orm import Session
 
 from app.models import Category, Event, Occurrence, OccurrenceStatus, Person, Priority, Subtask, Task, TaskRecurrence, TaskStatus
 from app.services.task_generation import (
+    archive_old_tasks,
     cancel_tasks_for_occurrence,
     generate_pending_tasks,
     next_task_due_date,
@@ -401,3 +402,112 @@ def test_generate_pending_tasks_skips_past_occurrences(db: Session, category: Ca
     db.commit()
 
     assert generate_pending_tasks(db) == 0
+
+
+# ── archive_old_tasks ─────────────────────────────────────────────────────────
+
+def test_archive_old_tasks_archives_done_with_old_due_date(db: Session, category: Category) -> None:
+    old_task = Task(
+        title="Old done",
+        category_id=category.id,
+        due_date=date.today() - timedelta(days=10),
+        status=TaskStatus.done,
+    )
+    db.add(old_task)
+    db.commit()
+
+    count = archive_old_tasks(db, days=7)
+    assert count == 1
+    db.refresh(old_task)
+    assert old_task.is_archived is True
+
+
+def test_archive_old_tasks_skips_done_with_recent_due_date(db: Session, category: Category) -> None:
+    recent_task = Task(
+        title="Recent done",
+        category_id=category.id,
+        due_date=date.today() - timedelta(days=3),
+        status=TaskStatus.done,
+    )
+    db.add(recent_task)
+    db.commit()
+
+    count = archive_old_tasks(db, days=7)
+    assert count == 0
+    db.refresh(recent_task)
+    assert recent_task.is_archived is False
+
+
+def test_archive_old_tasks_archives_done_with_no_due_date_via_completed_at(
+    db: Session, category: Category
+) -> None:
+    from datetime import timezone
+    old_completed = Task(
+        title="Done no due_date old",
+        category_id=category.id,
+        due_date=None,
+        status=TaskStatus.done,
+        completed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    db.add(old_completed)
+    db.commit()
+
+    count = archive_old_tasks(db, days=7)
+    assert count == 1
+    db.refresh(old_completed)
+    assert old_completed.is_archived is True
+
+
+def test_archive_old_tasks_skips_done_with_no_due_date_and_no_completed_at(
+    db: Session, category: Category
+) -> None:
+    no_dates = Task(
+        title="Done no dates",
+        category_id=category.id,
+        due_date=None,
+        status=TaskStatus.done,
+        completed_at=None,
+    )
+    db.add(no_dates)
+    db.commit()
+
+    count = archive_old_tasks(db, days=7)
+    assert count == 0
+    db.refresh(no_dates)
+    assert no_dates.is_archived is False
+
+
+def test_archive_old_tasks_archives_cancelled_with_no_due_date_via_completed_at(
+    db: Session, category: Category
+) -> None:
+    from datetime import timezone
+    old_cancelled = Task(
+        title="Cancelled no due_date",
+        category_id=category.id,
+        due_date=None,
+        status=TaskStatus.cancelled,
+        completed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    db.add(old_cancelled)
+    db.commit()
+
+    count = archive_old_tasks(db, days=7)
+    assert count == 1
+    db.refresh(old_cancelled)
+    assert old_cancelled.is_archived is True
+
+
+def test_archive_old_tasks_skips_active_tasks(db: Session, category: Category) -> None:
+    active = Task(
+        title="Active task",
+        category_id=category.id,
+        due_date=date.today() - timedelta(days=10),
+        status=TaskStatus.todo,
+    )
+    db.add(active)
+    db.commit()
+
+    count = archive_old_tasks(db, days=7)
+    assert count == 0
+    db.refresh(active)
+    assert active.is_archived is False

@@ -43,6 +43,7 @@ def list_tasks(
     category_id: int | None = Query(None),
     occurrence_id: int | None = Query(None),
     include_archived: bool = Query(False),
+    include_terminal: bool = Query(False),
     limit: int = Query(1000, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -56,6 +57,8 @@ def list_tasks(
         q = q.filter(Task.is_archived.is_(False))
     if status:
         q = q.filter(Task.status == status)
+    elif not include_terminal:
+        q = q.filter(Task.status.notin_([TaskStatus.done, TaskStatus.cancelled]))
     if assignee_id:
         q = q.filter(Task.assignee_id == assignee_id)
     if category_id:
