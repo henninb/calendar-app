@@ -3,13 +3,22 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import React from 'react'
 import TaskList from '../TaskList'
 
+type DragEndEvent = { active: { id: number | string }; over: { id: number | string } | null }
+let triggerDragEnd: ((event: DragEndEvent) => void) | undefined
+
 vi.mock('@dnd-kit/core', () => ({
-  DndContext: ({ children }: { children: React.ReactNode }) => children,
+  DndContext: ({ children, onDragEnd }: { children: React.ReactNode; onDragEnd?: (e: DragEndEvent) => void }) => {
+    triggerDragEnd = onDragEnd
+    return children
+  },
+  DragOverlay: ({ children }: { children: React.ReactNode }) => children,
   closestCenter: {},
   MouseSensor: class {},
   TouchSensor: class {},
   useSensor: () => ({}),
   useSensors: () => [],
+  useDraggable: () => ({ attributes: {}, listeners: {}, setNodeRef: () => {}, transform: null, isDragging: false }),
+  useDroppable: () => ({ setNodeRef: () => {}, isOver: false }),
 }))
 vi.mock('@dnd-kit/sortable', () => ({
   SortableContext: ({ children }: { children: React.ReactNode }) => children,
@@ -633,5 +642,417 @@ describe('TaskList — FAB visibility', () => {
     await waitFor(() => screen.getByText('New Task'))
 
     expect(screen.getByTitle('New task')).toHaveClass('hidden')
+  })
+})
+
+// ── Sort field ────────────────────────────────────────────────────────────────
+
+describe('TaskList — sort field via toolbar', () => {
+  it('switching to priority sort updates the toolbar button label', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('Sort tasks'))
+    // Multiple "Priority" elements exist (sort option + filter label) — click the button
+    const priorityBtn = screen.getAllByText('Priority').find(el => el.tagName === 'BUTTON')!
+    fireEvent.click(priorityBtn)
+
+    expect(screen.getByTitle('Sort tasks')).toHaveTextContent('Priority')
+  })
+
+  it('switching to created_at sort updates the toolbar button label', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('Sort tasks'))
+    fireEvent.click(screen.getByText('Created'))
+
+    expect(screen.getByTitle('Sort tasks')).toHaveTextContent('Created')
+  })
+})
+
+// ── Command palette via Ctrl+K ────────────────────────────────────────────────
+
+describe('TaskList — command palette via Ctrl+K', () => {
+  it('pressing Ctrl+K opens the command palette', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('Search tasks or type a command…')).toBeInTheDocument()
+    )
+  })
+
+  it('pressing Escape on the open palette closes it', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    await waitFor(() => screen.getByPlaceholderText('Search tasks or type a command…'))
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    await waitFor(() =>
+      expect(screen.queryByPlaceholderText('Search tasks or type a command…')).not.toBeInTheDocument()
+    )
+  })
+
+  it('selecting "New task" from the palette opens the create panel', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    await waitFor(() => screen.getByPlaceholderText('Search tasks or type a command…'))
+
+    fireEvent.click(screen.getByText('New task'))
+
+    await waitFor(() => expect(screen.getByText('New Task')).toBeInTheDocument())
+  })
+
+  it('clicking a task result in the palette opens the edit panel', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    await waitFor(() => screen.getByPlaceholderText('Search tasks or type a command…'))
+
+    fireEvent.change(screen.getByPlaceholderText('Search tasks or type a command…'), {
+      target: { value: 'Weekly' },
+    })
+
+    // Find the task result item (has status label "To Do", unlike action items)
+    await waitFor(() => {
+      const taskItem = Array.from(document.querySelectorAll('[data-cmd-item]'))
+        .find(el => el.textContent?.includes('To Do'))
+      expect(taskItem).toBeTruthy()
+    })
+
+    const taskItem = Array.from(document.querySelectorAll('[data-cmd-item]'))
+      .find(el => el.textContent?.includes('To Do')) as HTMLElement
+    fireEvent.click(taskItem)
+
+    await waitFor(() => expect(screen.getByText('Edit Task')).toBeInTheDocument())
+  })
+
+  it('Ctrl+K again closes an already-open palette', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    await waitFor(() => screen.getByPlaceholderText('Search tasks or type a command…'))
+
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+
+    await waitFor(() =>
+      expect(screen.queryByPlaceholderText('Search tasks or type a command…')).not.toBeInTheDocument()
+    )
+  })
+})
+
+// ── Fetch limit warnings ──────────────────────────────────────────────────────
+
+describe('TaskList — fetch limit warnings', () => {
+  it('logs a warning when the initial load returns the fetch limit', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const manyTasks = Array.from({ length: 500 }, (_, i) => ({ ...baseTask, id: i + 1 }))
+    vi.mocked(api.fetchTasks).mockResolvedValue(manyTasks)
+
+    render(<TaskList />)
+
+    await waitFor(() =>
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('hit fetch limit'))
+    )
+    warnSpy.mockRestore()
+  })
+
+  it('logs a warning when silentLoad returns the fetch limit', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const manyTasks = Array.from({ length: 500 }, (_, i) => ({ ...baseTask, id: i + 1 }))
+    vi.mocked(api.fetchTasks)
+      .mockResolvedValueOnce([baseTask])
+      .mockResolvedValueOnce(manyTasks)
+    vi.mocked(api.updateTask).mockResolvedValue({ ...baseTask, status: 'cancelled' })
+
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Cancel' }))
+
+    await waitFor(() =>
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('hit fetch limit'))
+    )
+    warnSpy.mockRestore()
+  })
+})
+
+// ── Task keyboard navigation ──────────────────────────────────────────────────
+
+describe('TaskList — task keyboard navigation', () => {
+  it('ArrowDown sets a ring-2 focus indicator on the first task', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.keyDown(document, { key: 'ArrowDown' })
+
+    await waitFor(() => expect(document.querySelector('.ring-2')).toBeInTheDocument())
+  })
+
+  it('"j" key also navigates to the first task', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.keyDown(document, { key: 'j' })
+
+    await waitFor(() => expect(document.querySelector('.ring-2')).toBeInTheDocument())
+  })
+
+  it('ArrowUp with no focus selects the last task', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.keyDown(document, { key: 'ArrowUp' })
+
+    await waitFor(() => expect(document.querySelector('.ring-2')).toBeInTheDocument())
+  })
+
+  it('"k" key navigates up', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.keyDown(document, { key: 'j' })
+    await waitFor(() => expect(document.querySelector('.ring-2')).toBeInTheDocument())
+
+    fireEvent.keyDown(document, { key: 'k' })
+    await waitFor(() => expect(document.querySelector('.ring-2')).toBeInTheDocument())
+  })
+
+  it('Escape clears the focused task', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.keyDown(document, { key: 'ArrowDown' })
+    await waitFor(() => expect(document.querySelector('.ring-2')).toBeInTheDocument())
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    await waitFor(() => expect(document.querySelector('.ring-2')).not.toBeInTheDocument())
+  })
+
+  it('Space marks the focused task as done', async () => {
+    vi.mocked(api.updateTask).mockResolvedValue({ ...baseTask, status: 'done' })
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.keyDown(document, { key: 'ArrowDown' })
+    await waitFor(() => expect(document.querySelector('.ring-2')).toBeInTheDocument())
+
+    fireEvent.keyDown(document, { key: ' ' })
+
+    await waitFor(() => expect(api.updateTask).toHaveBeenCalledWith(1, { status: 'done' }), {
+      timeout: 2000,
+    })
+  })
+
+  it('Enter expands the focused task card', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.keyDown(document, { key: 'ArrowDown' })
+    await waitFor(() => expect(document.querySelector('.ring-2')).toBeInTheDocument())
+
+    fireEvent.keyDown(document, { key: 'Enter' })
+
+    expect(screen.getByText('Weekly chore')).toBeInTheDocument()
+  })
+
+  it('ignores navigation keys when an input is focused', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    const searchInput = screen.getByPlaceholderText('Search tasks…')
+    fireEvent.keyDown(searchInput, { key: 'ArrowDown' })
+
+    expect(document.querySelector('.ring-2')).not.toBeInTheDocument()
+  })
+})
+
+// ── Open planner ──────────────────────────────────────────────────────────────
+
+describe('TaskList — open planner', () => {
+  it('clicking the planner button opens the TaskRebalancerModal', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('Task planner — 10,000-foot view'))
+
+    await waitFor(() => expect(screen.getByText('Task Planner')).toBeInTheDocument())
+  })
+})
+
+// ── patchSubtask updates open panel ──────────────────────────────────────────
+
+describe('TaskList — patchSubtask updates the open edit panel', () => {
+  const taskWithSub = {
+    ...baseTask,
+    subtasks: [{ id: 20, title: 'Sub A', status: 'todo', order: 0, due_date: null }],
+  }
+
+  beforeEach(() => {
+    vi.mocked(api.fetchTasks).mockResolvedValue([taskWithSub])
+  })
+
+  it('patching a subtask while the panel is open updates the panel task', async () => {
+    vi.mocked(api.updateSubtask).mockResolvedValue({ id: 20, title: 'Sub A', status: 'done', order: 0 })
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByTitle('More actions'))
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Edit' }))
+    await waitFor(() => screen.getByText('Edit Task'))
+
+    const checkboxes = screen.getAllByRole('checkbox')
+    fireEvent.click(checkboxes[0])
+
+    await waitFor(() => expect(api.updateSubtask).toHaveBeenCalledWith(1, 20, { status: 'done' }))
+  })
+})
+
+// ── patchSubtask undo callback ────────────────────────────────────────────────
+
+describe('TaskList — patchSubtask undo callback', () => {
+  const taskWithSub = {
+    ...baseTask,
+    subtasks: [{ id: 20, title: 'Sub A', status: 'todo', order: 0, due_date: null }],
+  }
+
+  beforeEach(() => {
+    vi.mocked(api.fetchTasks).mockResolvedValue([taskWithSub])
+  })
+
+  it('undoing a subtask check calls updateSubtask to revert it', async () => {
+    vi.mocked(api.updateSubtask)
+      .mockResolvedValueOnce({ id: 20, title: 'Sub A', status: 'done', order: 0 })
+      .mockResolvedValueOnce({ id: 20, title: 'Sub A', status: 'todo', order: 0 })
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByText('▸ subtasks'))
+    await waitFor(() => screen.getByText('Sub A'))
+    fireEvent.click(screen.getAllByRole('checkbox')[0])
+    await waitFor(() => expect(api.updateSubtask).toHaveBeenCalledTimes(1))
+
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true })
+
+    await waitFor(() => expect(api.updateSubtask).toHaveBeenCalledTimes(2))
+    expect(api.updateSubtask).toHaveBeenLastCalledWith(1, 20, { status: 'todo' })
+  })
+})
+
+// ── deleteSubtask undo callback ───────────────────────────────────────────────
+
+describe('TaskList — deleteSubtask undo callback', () => {
+  const taskWithSub = {
+    ...baseTask,
+    subtasks: [{ id: 20, title: 'Sub A', status: 'todo', order: 0, due_date: null }],
+  }
+
+  beforeEach(() => {
+    vi.mocked(api.fetchTasks).mockResolvedValue([taskWithSub])
+  })
+
+  it('undoing a subtask delete calls createSubtask to restore it', async () => {
+    vi.mocked(api.deleteSubtask).mockResolvedValue(undefined)
+    vi.mocked(api.createSubtask).mockResolvedValue({
+      id: 20, title: 'Sub A', status: 'todo', order: 0,
+    })
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByText('▸ subtasks'))
+    await waitFor(() => screen.getByText('Sub A'))
+    fireEvent.click(screen.getByTitle('Delete subtask'))
+    await waitFor(() => expect(api.deleteSubtask).toHaveBeenCalledTimes(1))
+
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true })
+
+    await waitFor(() =>
+      expect(api.createSubtask).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ title: 'Sub A' })
+      )
+    )
+  })
+})
+
+// ── reorderTasks ──────────────────────────────────────────────────────────────
+
+describe('TaskList — reorderTasks', () => {
+  const task1 = { ...baseTask, id: 1, order: 0 }
+  const task2 = { ...baseTask, id: 2, title: 'Second chore', order: 1 }
+
+  beforeEach(() => {
+    vi.mocked(api.fetchTasks).mockResolvedValue([task1, task2])
+    vi.mocked(api.updateTask).mockResolvedValue({ ...task1, order: 0 })
+  })
+
+  it('calls updateTask for each task whose order changed after a drag', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Second chore'))
+
+    triggerDragEnd?.({ active: { id: 2 }, over: { id: 1 } })
+
+    await waitFor(() => expect(api.updateTask).toHaveBeenCalledWith(2, { order: 0 }))
+    await waitFor(() => expect(api.updateTask).toHaveBeenCalledWith(1, { order: 1 }))
+  })
+
+  it('shows an error banner when the reorder API call fails', async () => {
+    vi.mocked(api.updateTask).mockRejectedValue(new Error('Reorder failed'))
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Second chore'))
+
+    triggerDragEnd?.({ active: { id: 2 }, over: { id: 1 } })
+
+    await waitFor(() => expect(screen.getByText('Reorder failed')).toBeInTheDocument())
+  })
+})
+
+// ── reorderSubtasks ───────────────────────────────────────────────────────────
+
+describe('TaskList — reorderSubtasks', () => {
+  const sub1 = { id: 20, title: 'Sub A', status: 'todo', order: 0, due_date: null }
+  const sub2 = { id: 21, title: 'Sub B', status: 'todo', order: 1, due_date: null }
+  const taskWithSubs = { ...baseTask, subtasks: [sub1, sub2] }
+
+  beforeEach(() => {
+    vi.mocked(api.fetchTasks).mockResolvedValue([taskWithSubs])
+    vi.mocked(api.updateSubtask).mockResolvedValue({ ...sub1, order: 0 })
+  })
+
+  it('calls updateSubtask for each subtask whose order changed after a drag', async () => {
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByText('▸ subtasks'))
+    await waitFor(() => screen.getByText('Sub A'))
+
+    triggerDragEnd?.({ active: { id: 20 }, over: { id: 21 } })
+
+    await waitFor(() => expect(api.updateSubtask).toHaveBeenCalled())
+  })
+
+  it('shows an error banner when the subtask reorder API call fails', async () => {
+    vi.mocked(api.updateSubtask).mockRejectedValue(new Error('Subtask reorder failed'))
+    render(<TaskList />)
+    await waitFor(() => screen.getByText('Weekly chore'))
+
+    fireEvent.click(screen.getByText('▸ subtasks'))
+    await waitFor(() => screen.getByText('Sub A'))
+
+    triggerDragEnd?.({ active: { id: 20 }, over: { id: 21 } })
+
+    await waitFor(() => expect(screen.getByText('Subtask reorder failed')).toBeInTheDocument())
   })
 })

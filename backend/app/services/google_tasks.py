@@ -23,6 +23,7 @@ _STATUS_MAP = {
     TaskStatus.in_progress: "needsAction",
     TaskStatus.done: "completed",
     TaskStatus.cancelled: "needsAction",
+    TaskStatus.ontime: "needsAction",
 }
 
 
