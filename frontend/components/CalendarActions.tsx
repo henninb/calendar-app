@@ -25,7 +25,7 @@ function timestamp() {
 }
 
 export default function CalendarActions() {
-  const [config, setConfig]             = useState<Config>({ gcalSyncDays: 365, gcalSyncForce: false, apiKey: '' })
+  const [config, setConfig]             = useState<Config>({ gcalSyncDays: 365, gcalSyncForce: false, apiKey: '', plannerCapacityMonThu: 5, plannerCapacityFri: 8, plannerCapacityWeekend: 8 })
   const [syncing, setSyncing]           = useState(false)
   const [gcalSyncing, setGcalSyncing]   = useState(false)
   const [gcalDeleting, setGcalDeleting] = useState(false)

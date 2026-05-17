@@ -28,6 +28,7 @@ function renderToolbar(overrides: Record<string, unknown> = {}) {
     sortField: 'due_date' as SortField,
     sortDir: 'asc' as SortDir,
     onSort: vi.fn(),
+    onOpenPlanner: vi.fn(),
     ...overrides,
   }
   return render(<TaskToolbar {...props} />)

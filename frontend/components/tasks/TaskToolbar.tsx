@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { CloudUpload, SlidersHorizontal, RefreshCw, X, ArrowUpDown } from 'lucide-react'
+import { CloudUpload, SlidersHorizontal, RefreshCw, X, ArrowUpDown, LayoutGrid } from 'lucide-react'
 import { STATUS_OPTIONS, STATUS_LABELS } from './helpers'
 import type { TaskStatus, Person, Category } from './helpers'
 import { gcalAuthStatus, syncToGtasks } from '@/lib/api'
@@ -162,6 +162,7 @@ interface TaskToolbarProps {
   sortField: SortField
   sortDir: SortDir
   onSort: (field: SortField, dir: SortDir) => void
+  onOpenPlanner: () => void
 }
 
 export default function TaskToolbar({
@@ -180,6 +181,7 @@ export default function TaskToolbar({
   sortField,
   sortDir,
   onSort,
+  onOpenPlanner,
 }: TaskToolbarProps) {
   const [filterOpen, setFilterOpen] = useState(false)
   const [sortOpen, setSortOpen]     = useState(false)
@@ -278,6 +280,19 @@ export default function TaskToolbar({
         >
           <CloudUpload size={14} />
           {gtasksSyncing ? 'Syncing…' : 'Google Sync'}
+        </button>
+
+        <button
+          onClick={onOpenPlanner}
+          title="Task planner — 10,000-foot view"
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium transition-all
+            bg-white dark:bg-slate-800
+            border border-slate-200 dark:border-slate-700
+            text-slate-600 dark:text-slate-300
+            hover:border-slate-300 dark:hover:border-slate-600"
+        >
+          <LayoutGrid size={14} />
+          Plan
         </button>
 
         <div className="flex-1" />

@@ -15,9 +15,11 @@ import type { Task, Subtask, Person, Category, TaskStatus } from './helpers'
 import TaskToolbar, { type SortField, type SortDir } from './TaskToolbar'
 import TaskSection from './TaskSection'
 import TaskPanel from './TaskPanel'
+import TaskRebalancerModal from './TaskRebalancerModal'
 import UndoToast from './UndoToast'
 import CommandPalette from './CommandPalette'
 import { useUndoStack } from './useUndoStack'
+import { loadConfig } from '@/components/ConfigPage'
 
 interface PanelState {
   open: boolean
@@ -36,6 +38,7 @@ export default function TaskList() {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const [expandedCards, setExpandedCards]   = useState<Record<number, boolean>>({})
   const [panel, setPanel]                   = useState<PanelState>({ open: false, mode: 'create', task: null })
+  const [plannerOpen, setPlannerOpen]       = useState(false)
   const [loading, setLoading]               = useState(true)
   const [error, setError]                   = useState<string | null>(null)
   const [dismissingIds, setDismissingIds]   = useState<Set<number>>(new Set())
@@ -486,6 +489,7 @@ export default function TaskList() {
         sortField={sortField}
         sortDir={sortDir}
         onSort={handleSort}
+        onOpenPlanner={() => setPlannerOpen(true)}
       />
 
       {error && (
@@ -557,6 +561,19 @@ export default function TaskList() {
           })}
         </div>
       )}
+
+      <TaskRebalancerModal
+        open={plannerOpen}
+        onClose={() => setPlannerOpen(false)}
+        tasks={tasks}
+        onApply={async (moves) => {
+          await Promise.all(moves.map(m => updateTask(m.id, { due_date: m.due_date })))
+          await silentLoad()
+        }}
+        capacityMonThu={loadConfig().plannerCapacityMonThu}
+        capacityFri={loadConfig().plannerCapacityFri}
+        capacityWeekend={loadConfig().plannerCapacityWeekend}
+      />
 
       <TaskPanel
         open={panel.open}

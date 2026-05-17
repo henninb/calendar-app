@@ -7,12 +7,18 @@ export interface Config {
   gcalSyncDays: number
   gcalSyncForce: boolean
   apiKey: string
+  plannerCapacityMonThu: number
+  plannerCapacityFri: number
+  plannerCapacityWeekend: number
 }
 
 export const CONFIG_DEFAULTS: Config = {
   gcalSyncDays: 365,
   gcalSyncForce: false,
   apiKey: '',
+  plannerCapacityMonThu: 5,
+  plannerCapacityFri: 8,
+  plannerCapacityWeekend: 8,
 }
 
 export function loadConfig(): Config {
@@ -156,6 +162,63 @@ export default function ConfigPage() {
             className="form-input w-full"
           />
         </label>
+      </div>
+
+      <div style={{ marginBottom: '1.5rem' }}>
+        <div style={{
+          fontSize: '.7rem', textTransform: 'uppercase', letterSpacing: '.08em',
+          color: 'var(--color-text-dim)', fontWeight: 700, marginBottom: '1rem',
+          borderBottom: '1px solid var(--color-border)', paddingBottom: '.4rem',
+        }}>
+          Task Planner
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '.4rem' }}>
+            {fieldLabel('Mon – Thu Capacity', 'Max tasks per day Monday through Thursday (1–20)')}
+            <input
+              type="number"
+              min="1"
+              max="20"
+              value={form.plannerCapacityMonThu}
+              onChange={e => setForm(f => ({
+                ...f,
+                plannerCapacityMonThu: Math.max(1, Math.min(20, parseInt(e.target.value) || 1)),
+              }))}
+              className="form-input"
+              style={{ width: 80 }}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '.4rem' }}>
+            {fieldLabel('Friday Capacity', 'Max tasks on Fridays (1–20)')}
+            <input
+              type="number"
+              min="1"
+              max="20"
+              value={form.plannerCapacityFri}
+              onChange={e => setForm(f => ({
+                ...f,
+                plannerCapacityFri: Math.max(1, Math.min(20, parseInt(e.target.value) || 1)),
+              }))}
+              className="form-input"
+              style={{ width: 80 }}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '.4rem' }}>
+            {fieldLabel('Weekend Capacity', 'Max tasks per day on Saturday and Sunday (1–20)')}
+            <input
+              type="number"
+              min="1"
+              max="20"
+              value={form.plannerCapacityWeekend}
+              onChange={e => setForm(f => ({
+                ...f,
+                plannerCapacityWeekend: Math.max(1, Math.min(20, parseInt(e.target.value) || 1)),
+              }))}
+              className="form-input"
+              style={{ width: 80 }}
+            />
+          </label>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '.5rem', marginBottom: '2rem' }}>

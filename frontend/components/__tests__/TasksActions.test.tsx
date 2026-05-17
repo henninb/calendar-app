@@ -30,6 +30,7 @@ function renderWithToolbar() {
       sortField="due_date"
       sortDir="asc"
       onSort={vi.fn()}
+      onOpenPlanner={vi.fn()}
     />
   )
 }
