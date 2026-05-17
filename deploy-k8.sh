@@ -178,6 +178,8 @@ spec:
               value: "/token/token.json"
             - name: TZ
               value: "America/Chicago"
+            - name: ALLOWED_ORIGINS
+              value: "https://calendar.bhenning.com"
           ports:
             - containerPort: 8000
               name: http
