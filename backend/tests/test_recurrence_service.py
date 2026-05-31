@@ -229,7 +229,11 @@ class TestGenerateOccurrences:
         assert count == 5  # today + 4 weekly occurrences within 28 days
 
     def test_monthly_rrule(self, db):
-        event = _make_event(db, rrule="FREQ=MONTHLY")
+        # Use the 1st of the current month so the day exists in every subsequent
+        # month — avoids the edge case where day 31 causes June (30 days) to be
+        # skipped by dateutil, producing only 2 occurrences instead of 3–4.
+        dtstart = date.today().replace(day=1)
+        event = _make_event(db, rrule="FREQ=MONTHLY", dtstart=dtstart)
         count = generate_occurrences(db, event, lookahead_days=90)
         assert 3 <= count <= 4
 
