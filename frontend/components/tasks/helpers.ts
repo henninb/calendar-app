@@ -1,6 +1,6 @@
 export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'cancelled' | 'ontime'
 export type TaskPriority = 'high' | 'medium' | 'low'
-export type RecurrenceOption = 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'semiannual' | 'yearly'
+export type RecurrenceOption = 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' | 'yearly'
 
 export interface Category {
   id: number
@@ -35,6 +35,8 @@ export interface Task {
   category_id?: number | null
   category?: Category | null
   recurrence?: RecurrenceOption | null
+  recurrence_anchor_day?: number | null
+  recurrence_anchor_month?: number | null
   subtasks?: Subtask[]
   order?: number
   created_at?: string

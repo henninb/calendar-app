@@ -289,6 +289,8 @@ class TaskBase(BaseModel):
     due_date: date | None = None
     estimated_minutes: int | None = None
     recurrence: TaskRecurrence = TaskRecurrence.none
+    recurrence_anchor_day: int | None = Field(None, ge=1, le=31)
+    recurrence_anchor_month: int | None = Field(None, ge=1, le=12)
     occurrence_id: int | None = None
 
 
@@ -306,6 +308,8 @@ class TaskUpdate(BaseModel):
     due_date: date | None = None
     estimated_minutes: int | None = None
     recurrence: TaskRecurrence | None = None
+    recurrence_anchor_day: int | None = Field(None, ge=1, le=31)
+    recurrence_anchor_month: int | None = Field(None, ge=1, le=12)
     order: int | None = None
 
 

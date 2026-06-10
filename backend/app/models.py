@@ -35,6 +35,7 @@ class TaskRecurrence(str, enum.Enum):
     weekly = "weekly"
     biweekly = "biweekly"
     monthly = "monthly"
+    bimonthly = "bimonthly"
     quarterly = "quarterly"
     semiannual = "semiannual"
     yearly = "yearly"
@@ -214,6 +215,8 @@ class Task(Base):
     due_date = Column(Date)
     estimated_minutes = Column(Integer)
     recurrence = Column(Enum(TaskRecurrence), default=TaskRecurrence.none)
+    recurrence_anchor_day = Column(Integer, nullable=True)    # 1–31; None = roll-forward
+    recurrence_anchor_month = Column(Integer, nullable=True)  # 1–12; only used for yearly
 
     order = Column(Integer, default=0)
     gtask_id = Column(String(200))

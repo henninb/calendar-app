@@ -33,17 +33,25 @@ _RECURRENCE_DELTA: dict[TaskRecurrence, timedelta | None] = {
 
 _MONTH_INCREMENTS: dict[TaskRecurrence, int] = {
     TaskRecurrence.monthly: 1,
+    TaskRecurrence.bimonthly: 2,
     TaskRecurrence.quarterly: 3,
     TaskRecurrence.semiannual: 6,
 }
 
 
 def next_task_due_date(task: Task) -> date | None:
-    """Return the next due date for a recurring task, or None if one-time."""
+    """Return the next due date for a recurring task, or None if one-time.
+
+    When recurrence_anchor_day is set, the spawned task lands on that fixed
+    day of the next period rather than rolling forward from the (possibly
+    moved) due_date.  For yearly recurrence, recurrence_anchor_month is also
+    used when set.
+    """
     if task.recurrence == TaskRecurrence.none or not task.due_date:
         return None
     delta = _RECURRENCE_DELTA.get(task.recurrence)
     if delta is not None:
+        # daily / weekly / biweekly — no anchor support (day-of-month doesn't apply)
         return task.due_date + delta
     today = task.due_date
     if task.recurrence in _MONTH_INCREMENTS:
@@ -51,12 +59,20 @@ def next_task_due_date(task: Task) -> date | None:
         month = today.month + months
         year = today.year + (month - 1) // 12
         month = ((month - 1) % 12) + 1
-        day = min(today.day, cal_mod.monthrange(year, month)[1])
+        anchor_day = task.recurrence_anchor_day
+        day = min(anchor_day if anchor_day else today.day, cal_mod.monthrange(year, month)[1])
         return date(year, month, day)
     if task.recurrence == TaskRecurrence.yearly:
-        year = today.year + 1
-        day = min(today.day, cal_mod.monthrange(year, today.month)[1])
-        return date(year, today.month, day)
+        anchor_month = task.recurrence_anchor_month or today.month
+        anchor_day = task.recurrence_anchor_day or today.day
+        # Advance year; if the anchor month/day is still in the future this
+        # year, stay in the current year — otherwise go to next year.
+        target_year = today.year
+        candidate = date(target_year, anchor_month, min(anchor_day, cal_mod.monthrange(target_year, anchor_month)[1]))
+        if candidate <= today:
+            target_year += 1
+        day = min(anchor_day, cal_mod.monthrange(target_year, anchor_month)[1])
+        return date(target_year, anchor_month, day)
     return None
 
 
@@ -88,6 +104,8 @@ def spawn_recurring_task(db: Session, task: Task) -> None:
         due_date=next_date,
         estimated_minutes=task.estimated_minutes,
         recurrence=task.recurrence,
+        recurrence_anchor_day=task.recurrence_anchor_day,
+        recurrence_anchor_month=task.recurrence_anchor_month,
     )
     db.add(new_task)
     db.flush()

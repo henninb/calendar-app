@@ -60,6 +60,20 @@ else
     podman save "$IMAGE" | ssh "$WORKER_NODE"    "sudo ctr -n k8s.io images import -"
 fi
 
+# Remove old calendar-app images from both nodes, keeping only the current tag.
+info "Purging old ${APP_NAME} images from cluster nodes (keeping ${IMAGE_TAG})"
+_purge_old_images() {
+    local host="$1"
+    ssh "$host" "
+        sudo ctr -n k8s.io images ls -q 2>/dev/null \
+          | grep 'calendar-app:' \
+          | grep -v ':${IMAGE_TAG}$' \
+          | xargs -r sudo ctr -n k8s.io images rm
+    " && info "  $host: purge complete" || info "  $host: nothing to purge"
+}
+_purge_old_images debian-k8s-cp-01
+_purge_old_images "$WORKER_NODE"
+
 # --- read secrets ------------------------------------------------------------
 
 info "Reading credentials from gopass"
@@ -240,7 +254,7 @@ kubectl rollout restart deployment/"$APP_NAME" -n "$NAMESPACE"
 # --- wait for rollout --------------------------------------------------------
 
 info "Waiting for rollout to complete..."
-kubectl rollout status deployment/"$APP_NAME" -n "$NAMESPACE" --timeout=120s
+kubectl rollout status deployment/"$APP_NAME" -n "$NAMESPACE" --timeout=300s
 
 info "Deployment complete. Pod status:"
 kubectl get pods -n "$NAMESPACE" -o wide

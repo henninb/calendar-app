@@ -9,6 +9,7 @@ const RECURRENCE_OPTIONS: { value: RecurrenceOption; label: string }[] = [
   { value: 'weekly',     label: 'Weekly' },
   { value: 'biweekly',   label: 'Biweekly' },
   { value: 'monthly',    label: 'Monthly' },
+  { value: 'bimonthly',  label: 'Every 2 Months' },
   { value: 'quarterly',  label: 'Every 3 Months' },
   { value: 'semiannual', label: 'Every 6 Months' },
   { value: 'yearly',     label: 'Yearly' },
@@ -32,6 +33,8 @@ const fieldCls = `w-full px-3 py-2 text-sm rounded-lg
 
 const labelCls = 'block text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5'
 
+const ANCHOR_RECURRENCES: RecurrenceOption[] = ['monthly', 'bimonthly', 'quarterly', 'semiannual', 'yearly']
+
 interface TaskForm {
   title: string
   description: string
@@ -42,6 +45,8 @@ interface TaskForm {
   assignee_id: number | string
   category_id: number | string
   recurrence: RecurrenceOption
+  recurrence_anchor_day: string
+  recurrence_anchor_month: string
 }
 
 interface SubtaskEditForm {
@@ -138,7 +143,7 @@ export default function TaskPanel({
   onPatchSubtask, onAddSubtask, onDeleteSubtask,
 }: TaskPanelProps) {
   const isCreate = mode === 'create'
-  const [form, setForm]                 = useState<TaskForm>({ title: '', description: '', priority: 'medium', status: 'todo', due_date: '', estimated_minutes_text: '', assignee_id: '', category_id: '', recurrence: 'none' })
+  const [form, setForm]                 = useState<TaskForm>({ title: '', description: '', priority: 'medium', status: 'todo', due_date: '', estimated_minutes_text: '', assignee_id: '', category_id: '', recurrence: 'none', recurrence_anchor_day: '', recurrence_anchor_month: '' })
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
   const [editingSubtask, setEditingSubtask]   = useState<number | null>(null)
   const [editSubForm, setEditSubForm]         = useState<SubtaskEditForm>({ title: '', due_date: '' })
@@ -148,7 +153,7 @@ export default function TaskPanel({
   useEffect(() => {
     if (!open) return
     if (isCreate) {
-      setForm({ title: '', description: '', priority: 'medium', status: 'todo', due_date: localDate(), estimated_minutes_text: '', assignee_id: '', category_id: '', recurrence: 'none' })
+      setForm({ title: '', description: '', priority: 'medium', status: 'todo', due_date: localDate(), estimated_minutes_text: '', assignee_id: '', category_id: '', recurrence: 'none', recurrence_anchor_day: '', recurrence_anchor_month: '' })
     } else if (task) {
       setForm({
         title:                  task.title ?? '',
@@ -160,6 +165,8 @@ export default function TaskPanel({
         assignee_id:            task.assignee_id ?? '',
         category_id:            task.category_id ?? '',
         recurrence:             (task.recurrence as RecurrenceOption) ?? 'none',
+        recurrence_anchor_day:  task.recurrence_anchor_day != null ? String(task.recurrence_anchor_day) : '',
+        recurrence_anchor_month: task.recurrence_anchor_month != null ? String(task.recurrence_anchor_month) : '',
       })
     }
     setNewSubtaskTitle('')
@@ -184,16 +191,20 @@ export default function TaskPanel({
   async function handleSave() {
     if (!form.title.trim()) { titleRef.current?.focus(); return }
     setSaving(true)
+    const anchorDay = form.recurrence_anchor_day ? parseInt(form.recurrence_anchor_day, 10) : null
+    const anchorMonth = form.recurrence_anchor_month ? parseInt(form.recurrence_anchor_month, 10) : null
     const payload: Partial<Task> = {
-      title:              form.title.trim(),
-      description:        form.description || null,
-      priority:           form.priority,
-      status:             form.status,
-      due_date:           form.due_date || null,
-      estimated_minutes:  parseHumanMinutes(String(form.estimated_minutes_text)),
-      assignee_id:        form.assignee_id ? parseInt(String(form.assignee_id), 10) : null,
-      category_id:        form.category_id ? parseInt(String(form.category_id), 10) : null,
-      recurrence:         form.recurrence,
+      title:                   form.title.trim(),
+      description:             form.description || null,
+      priority:                form.priority,
+      status:                  form.status,
+      due_date:                form.due_date || null,
+      estimated_minutes:       parseHumanMinutes(String(form.estimated_minutes_text)),
+      assignee_id:             form.assignee_id ? parseInt(String(form.assignee_id), 10) : null,
+      category_id:             form.category_id ? parseInt(String(form.category_id), 10) : null,
+      recurrence:              form.recurrence,
+      recurrence_anchor_day:   anchorDay,
+      recurrence_anchor_month: anchorMonth,
     }
     try {
       if (isCreate) {
@@ -345,11 +356,61 @@ export default function TaskPanel({
             </div>
             <div>
               <label className={labelCls}>Recurrence</label>
-              <select value={form.recurrence} onChange={e => set('recurrence', e.target.value as RecurrenceOption)} className={fieldCls}>
+              <select
+                value={form.recurrence}
+                onChange={e => {
+                  const r = e.target.value as RecurrenceOption
+                  const updates: Partial<TaskForm> = { recurrence: r }
+                  if (ANCHOR_RECURRENCES.includes(r) && !form.recurrence_anchor_day && form.due_date) {
+                    updates.recurrence_anchor_day = String(parseInt(form.due_date.split('-')[2], 10))
+                    if (r === 'yearly' && !form.recurrence_anchor_month)
+                      updates.recurrence_anchor_month = String(parseInt(form.due_date.split('-')[1], 10))
+                  }
+                  if (!ANCHOR_RECURRENCES.includes(r)) {
+                    updates.recurrence_anchor_day = ''
+                    updates.recurrence_anchor_month = ''
+                  }
+                  setForm(p => ({ ...p, ...updates }))
+                }}
+                className={fieldCls}
+              >
                 {RECURRENCE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
           </div>
+
+          {ANCHOR_RECURRENCES.includes(form.recurrence) && (
+            <div>
+              <label className={labelCls}>
+                Fixed recurrence day
+                <span className="ml-1 font-normal normal-case tracking-normal text-slate-400 dark:text-slate-500">
+                  — clear to use roll-forward
+                </span>
+              </label>
+              <div className={`flex gap-2 ${form.recurrence === 'yearly' ? '' : ''}`}>
+                {form.recurrence === 'yearly' && (
+                  <input
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={form.recurrence_anchor_month}
+                    onChange={e => set('recurrence_anchor_month', e.target.value)}
+                    placeholder="Month (1–12)"
+                    className={`${fieldCls} w-36`}
+                  />
+                )}
+                <input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={form.recurrence_anchor_day}
+                  onChange={e => set('recurrence_anchor_day', e.target.value)}
+                  placeholder="Day (1–31)"
+                  className={`${fieldCls} w-32`}
+                />
+              </div>
+            </div>
+          )}
 
           <div>
             <label className={labelCls}>Category</label>

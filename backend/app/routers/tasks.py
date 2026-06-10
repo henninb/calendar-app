@@ -72,7 +72,17 @@ def list_tasks(
 def create_task(body: TaskCreate, db: Session = Depends(get_db)) -> Task:
     if body.category_id is not None:
         assert_exists(db, Category, body.category_id, "Category not found")
-    task = Task(**body.model_dump())
+    data = body.model_dump()
+    # Auto-populate anchor from due_date when recurrence is set and anchor not given
+    if (
+        data.get("recurrence") and data["recurrence"] != "none"
+        and data.get("due_date")
+        and data.get("recurrence_anchor_day") is None
+    ):
+        data["recurrence_anchor_day"] = data["due_date"].day
+        if data["recurrence"] == "yearly" and data.get("recurrence_anchor_month") is None:
+            data["recurrence_anchor_month"] = data["due_date"].month
+    task = Task(**data)
     db.add(task)
     db.flush()
     task_id, task_title = task.id, task.title
