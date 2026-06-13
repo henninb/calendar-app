@@ -16,6 +16,7 @@ import TaskToolbar, { type SortField, type SortDir } from './TaskToolbar'
 import TaskSection from './TaskSection'
 import TaskPanel from './TaskPanel'
 import TaskRebalancerModal from './TaskRebalancerModal'
+import SpellCheckModal from './SpellCheckModal'
 import UndoToast from './UndoToast'
 import CommandPalette from './CommandPalette'
 import { useUndoStack } from './useUndoStack'
@@ -39,6 +40,7 @@ export default function TaskList() {
   const [expandedCards, setExpandedCards]   = useState<Record<number, boolean>>({})
   const [panel, setPanel]                   = useState<PanelState>({ open: false, mode: 'create', task: null })
   const [plannerOpen, setPlannerOpen]       = useState(false)
+  const [spellCheckOpen, setSpellCheckOpen] = useState(false)
   const [loading, setLoading]               = useState(true)
   const [error, setError]                   = useState<string | null>(null)
   const [dismissingIds, setDismissingIds]   = useState<Set<number>>(new Set())
@@ -490,6 +492,7 @@ export default function TaskList() {
         sortDir={sortDir}
         onSort={handleSort}
         onOpenPlanner={() => setPlannerOpen(true)}
+        onSpellCheck={() => setSpellCheckOpen(true)}
       />
 
       {error && (
@@ -573,6 +576,13 @@ export default function TaskList() {
         capacityMonThu={loadConfig().plannerCapacityMonThu}
         capacityFri={loadConfig().plannerCapacityFri}
         capacityWeekend={loadConfig().plannerCapacityWeekend}
+      />
+
+      <SpellCheckModal
+        open={spellCheckOpen}
+        tasks={visible}
+        onClose={() => setSpellCheckOpen(false)}
+        onUpdateTask={handleUpdateTask}
       />
 
       <TaskPanel

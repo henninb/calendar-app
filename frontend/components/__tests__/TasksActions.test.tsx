@@ -31,6 +31,7 @@ function renderWithToolbar() {
       sortDir="asc"
       onSort={vi.fn()}
       onOpenPlanner={vi.fn()}
+      onSpellCheck={vi.fn()}
     />
   )
 }

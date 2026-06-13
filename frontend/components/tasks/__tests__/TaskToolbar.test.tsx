@@ -29,6 +29,7 @@ function renderToolbar(overrides: Record<string, unknown> = {}) {
     sortDir: 'asc' as SortDir,
     onSort: vi.fn(),
     onOpenPlanner: vi.fn(),
+    onSpellCheck: vi.fn(),
     ...overrides,
   }
   return render(<TaskToolbar {...props} />)
