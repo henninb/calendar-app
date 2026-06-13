@@ -225,8 +225,32 @@ export default function SpellCheckModal({
 
   function skip() {
     const issue = issues[index]
-    if (issue) skippedRef.current.add(skipKey(issue.patchKey, issue.type, issue.word))
-    advance()
+    if (!issue) return
+
+    skippedRef.current.add(skipKey(issue.patchKey, issue.type, issue.word))
+
+    if (issue.subtaskId == null) {
+      // When skipping a task, also skip and remove all its subtask issues
+      for (const i of issues) {
+        if (i.taskId === issue.taskId && i.subtaskId != null) {
+          skippedRef.current.add(skipKey(i.patchKey, i.type, i.word))
+        }
+      }
+      const newIssues = issues.filter((i, idx) =>
+        idx !== index && !(i.taskId === issue.taskId && i.subtaskId != null)
+      )
+      setIssues(newIssues)
+      if (newIssues.length === 0 || index >= newIssues.length) {
+        onClose()
+      } else {
+        const next = newIssues[index]
+        const currentTitle = patchedTitles.get(next.patchKey) ?? next.title
+        setEditValue(next.type === 'capitalization' ? toTitleCase(currentTitle) : currentTitle)
+        setTimeout(() => inputRef.current?.focus(), 50)
+      }
+    } else {
+      advance()
+    }
   }
 
   if (!open) return null
