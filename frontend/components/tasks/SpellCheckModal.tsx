@@ -1,10 +1,8 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { SpellCheck } from 'lucide-react'
-import type { Task } from './helpers'
+import type { Task, Subtask } from './helpers'
 
-// Words that are not required to be capitalized in Title Case
-// (except at the start of a title)
 const SMALL_WORDS = new Set([
   'a', 'an', 'the',
   'and', 'but', 'or', 'nor', 'for', 'so', 'yet',
@@ -32,12 +30,19 @@ function needsTitleCase(title: string): boolean {
   return toTitleCase(title) !== title
 }
 
+function skipKey(patchKey: string, type: string, word?: string): string {
+  return `${patchKey}:${type}:${word ?? ''}`
+}
+
 interface Issue {
   taskId: number
-  taskTitle: string
+  subtaskId?: number        // undefined = task issue
+  title: string             // the title being checked
+  parentTitle?: string      // parent task title, shown for context on subtask issues
   type: 'capitalization' | 'spelling'
   word?: string
   suggestion: string
+  patchKey: string          // "t:<taskId>" or "s:<subtaskId>"
 }
 
 interface SpellCheckModalProps {
@@ -45,17 +50,21 @@ interface SpellCheckModalProps {
   tasks: Task[]
   onClose: () => void
   onUpdateTask: (taskId: number, payload: Partial<Task>) => Promise<void>
+  onUpdateSubtask: (taskId: number, subtaskId: number, payload: Partial<Subtask>) => Promise<void> | void
 }
 
-export default function SpellCheckModal({ open, tasks, onClose, onUpdateTask }: SpellCheckModalProps) {
-  const [issues, setIssues]         = useState<Issue[]>([])
-  const [index, setIndex]           = useState(0)
-  const [editValue, setEditValue]   = useState('')
-  const [scanning, setScanning]     = useState(false)
-  const [saving, setSaving]         = useState(false)
-  const [error, setError]           = useState<string | null>(null)
-  const [patchedTitles, setPatchedTitles] = useState<Map<number, string>>(new Map())
-  const inputRef = useRef<HTMLInputElement>(null)
+export default function SpellCheckModal({
+  open, tasks, onClose, onUpdateTask, onUpdateSubtask,
+}: SpellCheckModalProps) {
+  const [issues, setIssues]               = useState<Issue[]>([])
+  const [index, setIndex]                 = useState(0)
+  const [editValue, setEditValue]         = useState('')
+  const [scanning, setScanning]           = useState(false)
+  const [saving, setSaving]               = useState(false)
+  const [error, setError]                 = useState<string | null>(null)
+  const [patchedTitles, setPatchedTitles] = useState<Map<string, string>>(new Map())
+  const inputRef    = useRef<HTMLInputElement>(null)
+  const skippedRef  = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     if (!open) return
@@ -80,26 +89,43 @@ export default function SpellCheckModal({ open, tasks, onClose, onUpdateTask }: 
     const capIssues: Issue[] = []
     const spellingIssues: Issue[] = []
 
-    // Capitalization check
+    // Capitalization check — tasks
     for (const task of tasks) {
       if (needsTitleCase(task.title)) {
         capIssues.push({
-          taskId:    task.id,
-          taskTitle: task.title,
-          type:      'capitalization',
+          taskId:     task.id,
+          title:      task.title,
+          type:       'capitalization',
           suggestion: toTitleCase(task.title),
+          patchKey:   `t:${task.id}`,
         })
+      }
+      // Capitalization check — subtasks
+      for (const sub of task.subtasks ?? []) {
+        if (needsTitleCase(sub.title)) {
+          capIssues.push({
+            taskId:      task.id,
+            subtaskId:   sub.id,
+            title:       sub.title,
+            parentTitle: task.title,
+            type:        'capitalization',
+            suggestion:  toTitleCase(sub.title),
+            patchKey:    `s:${sub.id}`,
+          })
+        }
       }
     }
 
-    // Spelling check
+    // Spelling check — collect all words from tasks + subtasks
     try {
       const wordSet = new Set<string>()
       for (const task of tasks) {
-        task.title.split(/\s+/).forEach(raw => {
-          const w = raw.replace(/[^a-zA-Z']/g, '')
-          if (w.length >= 3) wordSet.add(w)
-        })
+        for (const text of [task.title, ...(task.subtasks ?? []).map(s => s.title)]) {
+          text.split(/\s+/).forEach(raw => {
+            const w = raw.replace(/[^a-zA-Z']/g, '')
+            if (w.length >= 3) wordSet.add(w)
+          })
+        }
       }
 
       const res = await fetch('/internal/spellcheck', {
@@ -112,27 +138,48 @@ export default function SpellCheckModal({ open, tasks, onClose, onUpdateTask }: 
         const badWords = new Set(misspelled)
 
         for (const task of tasks) {
-          const words = task.title.split(/\s+/)
-          for (const raw of words) {
+          // Task title
+          for (const raw of task.title.split(/\s+/)) {
             const w = raw.replace(/[^a-zA-Z']/g, '')
             if (badWords.has(w)) {
               spellingIssues.push({
-                taskId:    task.id,
-                taskTitle: task.title,
-                type:      'spelling',
-                word:      w,
+                taskId:   task.id,
+                title:    task.title,
+                type:     'spelling',
+                word:     w,
                 suggestion: task.title,
+                patchKey: `t:${task.id}`,
               })
               break
+            }
+          }
+          // Subtask titles
+          for (const sub of task.subtasks ?? []) {
+            for (const raw of sub.title.split(/\s+/)) {
+              const w = raw.replace(/[^a-zA-Z']/g, '')
+              if (badWords.has(w)) {
+                spellingIssues.push({
+                  taskId:      task.id,
+                  subtaskId:   sub.id,
+                  title:       sub.title,
+                  parentTitle: task.title,
+                  type:        'spelling',
+                  word:        w,
+                  suggestion:  sub.title,
+                  patchKey:    `s:${sub.id}`,
+                })
+                break
+              }
             }
           }
         }
       }
     } catch {
-      // spell check unavailable — still show capitalization issues
+      // spell check unavailable — capitalization issues still shown
     }
 
     const all = [...capIssues, ...spellingIssues]
+      .filter(i => !skippedRef.current.has(skipKey(i.patchKey, i.type, i.word)))
     setIssues(all)
     if (all.length > 0) setEditValue(all[0].suggestion)
     setScanning(false)
@@ -142,14 +189,18 @@ export default function SpellCheckModal({ open, tasks, onClose, onUpdateTask }: 
     const issue = issues[index]
     if (!issue) return
     const newTitle = editValue.trim()
-    if (!newTitle || newTitle === issue.taskTitle) {
+    if (!newTitle || newTitle === issue.title) {
       advance()
       return
     }
     setSaving(true)
     try {
-      await onUpdateTask(issue.taskId, { title: newTitle })
-      setPatchedTitles(prev => new Map(prev).set(issue.taskId, newTitle))
+      if (issue.subtaskId != null) {
+        await onUpdateSubtask(issue.taskId, issue.subtaskId, { title: newTitle })
+      } else {
+        await onUpdateTask(issue.taskId, { title: newTitle })
+      }
+      setPatchedTitles(prev => new Map(prev).set(issue.patchKey, newTitle))
       advance()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -164,17 +215,19 @@ export default function SpellCheckModal({ open, tasks, onClose, onUpdateTask }: 
     } else {
       const next = index + 1
       setIndex(next)
-      // Use patched title for subsequent issues on the same task
       const nextIssue = issues[next]
-      const currentTitle = patchedTitles.get(nextIssue.taskId) ?? nextIssue.taskTitle
-      const suggestion = nextIssue.type === 'capitalization'
-        ? toTitleCase(currentTitle)
-        : currentTitle
-      setEditValue(suggestion)
+      const currentTitle = patchedTitles.get(nextIssue.patchKey) ?? nextIssue.title
+      setEditValue(
+        nextIssue.type === 'capitalization' ? toTitleCase(currentTitle) : currentTitle
+      )
     }
   }
 
-  function skip() { advance() }
+  function skip() {
+    const issue = issues[index]
+    if (issue) skippedRef.current.add(skipKey(issue.patchKey, issue.type, issue.word))
+    advance()
+  }
 
   if (!open) return null
 
@@ -219,14 +272,14 @@ export default function SpellCheckModal({ open, tasks, onClose, onUpdateTask }: 
                 No issues found!
               </p>
               <p className="text-slate-400 dark:text-slate-500 text-xs">
-                All visible task titles look good.
+                All visible task and subtask titles look good.
               </p>
             </div>
           )}
 
           {!scanning && issue && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold
                   ${issue.type === 'capitalization'
                     ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
@@ -235,6 +288,9 @@ export default function SpellCheckModal({ open, tasks, onClose, onUpdateTask }: 
                 >
                   {issue.type === 'capitalization' ? 'Title Case' : 'Spelling'}
                 </span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                  {issue.subtaskId != null ? 'Subtask' : 'Task'}
+                </span>
                 {issue.type === 'spelling' && issue.word && (
                   <span className="text-sm text-slate-500 dark:text-slate-400">
                     Possible misspelling: <span className="font-mono font-semibold text-red-600 dark:text-red-400">"{issue.word}"</span>
@@ -242,12 +298,23 @@ export default function SpellCheckModal({ open, tasks, onClose, onUpdateTask }: 
                 )}
               </div>
 
+              {issue.parentTitle && (
+                <div>
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">
+                    Parent task
+                  </p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono truncate">
+                    {issue.parentTitle}
+                  </p>
+                </div>
+              )}
+
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">
-                  Current title
+                  Current {issue.subtaskId != null ? 'subtask' : 'task'} title
                 </p>
                 <p className="text-sm text-slate-700 dark:text-slate-300 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono">
-                  {patchedTitles.get(issue.taskId) ?? issue.taskTitle}
+                  {patchedTitles.get(issue.patchKey) ?? issue.title}
                 </p>
               </div>
 

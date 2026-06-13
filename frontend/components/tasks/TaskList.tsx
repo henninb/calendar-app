@@ -583,6 +583,7 @@ export default function TaskList() {
         tasks={visible}
         onClose={() => setSpellCheckOpen(false)}
         onUpdateTask={handleUpdateTask}
+        onUpdateSubtask={patchSubtask}
       />
 
       <TaskPanel

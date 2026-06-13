@@ -273,12 +273,12 @@ export default function TaskToolbar({
           onClick={handleGtasksSync}
           disabled={gtasksSyncing}
           title={gcalAuth ? 'Sync tasks to Google Tasks' : 'Connect your Google account to enable Google Tasks sync'}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium transition-all
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium transition-all
             disabled:opacity-50 disabled:cursor-not-allowed
-            ${gcalAuth
-              ? 'bg-violet-600 hover:bg-violet-500 text-white shadow-sm shadow-violet-500/25'
-              : 'bg-blue-600 hover:bg-blue-500 text-white shadow-sm shadow-blue-500/25'
-            }`}
+            bg-white dark:bg-slate-800
+            border border-slate-200 dark:border-slate-700
+            text-slate-600 dark:text-slate-300
+            hover:border-slate-300 dark:hover:border-slate-600"
         >
           <CloudUpload size={14} />
           {gtasksSyncing ? 'Syncing…' : 'Google Sync'}
