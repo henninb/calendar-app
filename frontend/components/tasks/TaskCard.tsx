@@ -450,6 +450,136 @@ function SortableSubtaskRow({
   )
 }
 
+const MONTH_NAMES = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
+]
+const DAY_NAMES = ['Su','Mo','Tu','We','Th','Fr','Sa']
+
+function toDateStr(year: number, month: number, day: number): string {
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+interface MonthGridProps {
+  year: number
+  month: number
+  selected: string | null
+  todayStr: string
+  onSelect: (date: string) => void
+}
+
+function MonthGrid({ year, month, selected, todayStr, onSelect }: MonthGridProps) {
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const firstDay = new Date(year, month, 1).getDay()
+  const cells: (number | null)[] = Array(firstDay).fill(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  return (
+    <div className="min-w-[196px]">
+      <div className="text-center font-semibold text-sm text-slate-700 dark:text-slate-200 mb-2">
+        {MONTH_NAMES[month]} {year}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {DAY_NAMES.map(d => (
+          <div key={d} className="h-7 flex items-center justify-center text-[11px] text-slate-400 dark:text-slate-500 font-medium">
+            {d}
+          </div>
+        ))}
+        {cells.map((day, i) => {
+          if (day === null) return <div key={`e-${i}`} />
+          const dateStr = toDateStr(year, month, day)
+          const isSelected = dateStr === selected
+          const isToday = dateStr === todayStr
+          return (
+            <button
+              key={day}
+              onClick={() => onSelect(dateStr)}
+              className={`h-7 w-7 mx-auto text-xs rounded-full flex items-center justify-center transition-colors
+                ${isSelected
+                  ? 'bg-blue-500 text-white font-semibold'
+                  : isToday
+                    ? 'bg-blue-50 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-semibold ring-1 ring-blue-300 dark:ring-blue-500/40'
+                    : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                }`}
+            >
+              {day}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+interface TwoMonthPickerProps {
+  value: string | null
+  anchorEl: HTMLElement | null
+  onSelect: (date: string) => void
+  onClear: () => void
+  onClose: () => void
+}
+
+function TwoMonthPicker({ value, anchorEl, onSelect, onClear, onClose }: TwoMonthPickerProps) {
+  const ref = useRef<HTMLDivElement>(null)
+  const today = useMemo(() => new Date(), [])
+  const todayStr = useMemo(() => toDateStr(today.getFullYear(), today.getMonth(), today.getDate()), [today])
+
+  const m1 = { year: today.getFullYear(), month: today.getMonth() }
+  const m2 = today.getMonth() === 11
+    ? { year: today.getFullYear() + 1, month: 0 }
+    : { year: today.getFullYear(), month: today.getMonth() + 1 }
+
+  const pos = useMemo(() => {
+    if (!anchorEl) return { top: 0, left: 0 }
+    const rect = anchorEl.getBoundingClientRect()
+    const left = Math.min(rect.left + window.scrollX, window.innerWidth - 470)
+    return { top: rect.bottom + window.scrollY + 6, left: Math.max(left, 8) }
+  }, [anchorEl])
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (
+        ref.current && !ref.current.contains(e.target as Node) &&
+        (!anchorEl || !anchorEl.contains(e.target as Node))
+      ) onClose()
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [onClose, anchorEl])
+
+  useEffect(() => {
+    function handle(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handle)
+    return () => document.removeEventListener('keydown', handle)
+  }, [onClose])
+
+  return createPortal(
+    <div
+      ref={ref}
+      style={{ position: 'absolute', top: pos.top, left: pos.left, zIndex: 9999 }}
+      className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-4"
+    >
+      <div className="flex gap-6">
+        <MonthGrid {...m1} selected={value} todayStr={todayStr} onSelect={onSelect} />
+        <div className="w-px bg-slate-100 dark:bg-slate-700" />
+        <MonthGrid {...m2} selected={value} todayStr={todayStr} onSelect={onSelect} />
+      </div>
+      {value && (
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-end">
+          <button
+            onClick={onClear}
+            className="text-xs text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+          >
+            Clear date
+          </button>
+        </div>
+      )}
+    </div>,
+    document.body
+  )
+}
+
 interface TaskCardProps {
   task: Task
   expanded: boolean
@@ -491,6 +621,7 @@ export default function TaskCard({
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
   const newSubtaskRef   = useRef<HTMLInputElement>(null)
   const pendingFocusAdd = useRef(false)
+  const dueDateAnchorRef = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
     if (expanded && pendingFocusAdd.current) {
@@ -696,41 +827,34 @@ export default function TaskCard({
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5 text-sm text-slate-500 dark:text-slate-400">
-          <InlineMetaField
-            icon="📅"
-            label={task.due_date ? fmt(task.due_date) : '—'}
-            title="Click to set due date"
-            editing={editingField === FIELDS.DUE_DATE}
-            onStartEdit={!isDimmed ? () => setEditingField(FIELDS.DUE_DATE) : undefined}
-            ghost={!task.due_date}
-            extra={daysBadge && (
-              <span className={daysBadge.cls}>· {daysBadge.text}</span>
-            )}
-          >
-            <input
-              type="date"
-              autoFocus
-              defaultValue={task.due_date ?? undefined}
-              onChange={e => {
-                if (e.target.value) {
-                  onPatchTask(task.id, { due_date: e.target.value })
-                  setEditingField(null)
-                }
-              }}
-              onBlur={e => {
-                onPatchTask(task.id, { due_date: e.target.value || null })
+          <span ref={dueDateAnchorRef} className="inline-flex">
+            <InlineMetaField
+              icon="📅"
+              label={task.due_date ? fmt(task.due_date) : '—'}
+              title="Click to set due date"
+              editing={false}
+              onStartEdit={!isDimmed ? () => setEditingField(FIELDS.DUE_DATE) : undefined}
+              ghost={!task.due_date}
+              extra={daysBadge && (
+                <span className={daysBadge.cls}>· {daysBadge.text}</span>
+              )}
+            />
+          </span>
+          {editingField === FIELDS.DUE_DATE && (
+            <TwoMonthPicker
+              value={task.due_date ?? null}
+              anchorEl={dueDateAnchorRef.current}
+              onSelect={date => {
+                onPatchTask(task.id, { due_date: date })
                 setEditingField(null)
               }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  onPatchTask(task.id, { due_date: (e.target as HTMLInputElement).value || null })
-                  setEditingField(null)
-                }
-                if (e.key === 'Escape') setEditingField(null)
+              onClear={() => {
+                onPatchTask(task.id, { due_date: null })
+                setEditingField(null)
               }}
-              className={inlineCls}
+              onClose={() => setEditingField(null)}
             />
-          </InlineMetaField>
+          )}
 
           <InlineMetaField
             icon="👤"
