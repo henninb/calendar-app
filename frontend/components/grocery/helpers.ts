@@ -27,6 +27,7 @@ export interface CatalogItem {
   default_unit: GroceryUnit
   default_store_id?: number | null
   default_store?: { name: string } | null
+  price?: string | number | null
 }
 
 export interface OnHandRecord {

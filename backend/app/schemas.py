@@ -359,6 +359,7 @@ class GroceryItemBase(BaseModel):
     name: str = Field(..., max_length=200)
     default_unit: GroceryUnit = GroceryUnit.each
     default_store_id: int | None = None
+    price: Decimal | None = None
 
 
 class GroceryItemCreate(GroceryItemBase):
@@ -369,6 +370,7 @@ class GroceryItemUpdate(BaseModel):
     name: str | None = Field(None, max_length=200)
     default_unit: GroceryUnit | None = None
     default_store_id: int | None = None
+    price: Decimal | None = None
 
 
 class GroceryItemOut(GroceryItemBase):

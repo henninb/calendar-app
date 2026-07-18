@@ -34,7 +34,7 @@ const EMPTY_ADD: AddForm = { item_id: '', quantity: '1', unit: 'each', price: ''
 
 interface ItemComboboxProps {
   value: string
-  onChange: (itemId: string, defaultUnit: GroceryUnit) => void
+  onChange: (itemId: string, defaultUnit: GroceryUnit, price: string | number | null | undefined) => void
   catalogItems: CatalogItem[]
 }
 
@@ -51,8 +51,8 @@ const ItemCombobox = React.forwardRef<HTMLInputElement, ItemComboboxProps>(
       const t = e.target.value
       setText(t)
       const match = catalogItems.find(c => c.name === t)
-      if (match) onChange(String(match.id), match.default_unit)
-      else if (!t) onChange('', 'each')
+      if (match) onChange(String(match.id), match.default_unit, match.price)
+      else if (!t) onChange('', 'each', null)
     }
 
     return (
@@ -167,9 +167,10 @@ export default function GroceryListDetail({ list: initialList, catalogItems, onB
     setAddForm(p => ({ ...p, [field]: value }))
   }
 
-  function handleItemSelected(id: string, defaultUnit: GroceryUnit) {
+  function handleItemSelected(id: string, defaultUnit: GroceryUnit, price: string | number | null | undefined) {
     setAdd('item_id', id)
     if (defaultUnit) setAdd('unit', defaultUnit)
+    setAdd('price', price != null ? String(parseFloat(String(price))) : '')
   }
 
   const { total, done } = listSummary(list.items)
@@ -314,7 +315,7 @@ interface AddItemPanelProps {
   onClose: () => void
   addForm: AddForm
   setAdd: <K extends keyof AddForm>(field: K, value: AddForm[K]) => void
-  handleItemSelected: (id: string, defaultUnit: GroceryUnit) => void
+  handleItemSelected: (id: string, defaultUnit: GroceryUnit, price: string | number | null | undefined) => void
   handleAdd: () => void
   adding: boolean
   catalogItems: CatalogItem[]

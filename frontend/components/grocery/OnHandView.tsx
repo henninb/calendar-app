@@ -4,7 +4,7 @@ import {
   fetchOnHand, upsertOnHand, deleteOnHand,
   createGroceryItem, updateGroceryItem, deleteGroceryItem,
 } from '@/lib/api'
-import { GROCERY_UNITS } from './helpers'
+import { GROCERY_UNITS, fmtPrice } from './helpers'
 import type { GroceryUnit, Store, CatalogItem, OnHandRecord } from './helpers'
 
 const fieldCls = `px-2.5 py-1.5 text-sm rounded-lg
@@ -21,15 +21,17 @@ interface EditForm {
   default_store_id: string
   quantity: string
   unit: string
+  price: string
 }
 
 interface NewCatalogItemForm {
   name: string
   default_unit: GroceryUnit
   default_store_id: string
+  price: string
 }
 
-const EMPTY_NEW_ITEM: NewCatalogItemForm = { name: '', default_unit: 'each', default_store_id: '' }
+const EMPTY_NEW_ITEM: NewCatalogItemForm = { name: '', default_unit: 'each', default_store_id: '', price: '' }
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
@@ -70,7 +72,7 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }: On
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState<string | null>(null)
   const [editingId, setEditingId]   = useState<number | null>(null)
-  const [editForm, setEditForm]     = useState<EditForm>({ name: '', default_store_id: '', quantity: '', unit: '' })
+  const [editForm, setEditForm]     = useState<EditForm>({ name: '', default_store_id: '', quantity: '', unit: '', price: '' })
   const [panelOpen, setPanelOpen]   = useState(false)
   const [newItem, setNewItem]       = useState<NewCatalogItemForm>(EMPTY_NEW_ITEM)
   const [savingNew, setSavingNew]   = useState(false)
@@ -102,6 +104,7 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }: On
       default_store_id: item.default_store_id != null ? String(item.default_store_id) : '',
       quantity:         record ? String(parseFloat(String(record.quantity))) : '0',
       unit:             record ? record.unit : item.default_unit,
+      price:            item.price != null ? String(parseFloat(String(item.price))) : '',
     })
   }
 
@@ -111,6 +114,7 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }: On
         updateGroceryItem(itemId, {
           name:             editForm.name.trim(),
           default_store_id: editForm.default_store_id ? parseInt(editForm.default_store_id, 10) : null,
+          price:            editForm.price !== '' ? editForm.price : null,
         }),
         upsertOnHand(itemId, {
           quantity: editForm.quantity || '0',
@@ -144,6 +148,7 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }: On
         name:             newItem.name.trim(),
         default_unit:     newItem.default_unit,
         default_store_id: newItem.default_store_id ? parseInt(newItem.default_store_id, 10) : null,
+        price:            newItem.price !== '' ? newItem.price : null,
       })
       setNewItem(EMPTY_NEW_ITEM)
       setPanelOpen(false)
@@ -206,6 +211,7 @@ export default function OnHandView({ catalogItems, stores, onCatalogChange }: On
                   <th>Default Store</th>
                   <th>On Hand</th>
                   <th>Unit</th>
+                  <th>Price</th>
                   <th></th>
                 </tr>
               </thead>
@@ -321,6 +327,18 @@ function AddItemPanel({ open, onClose, newItem, setNewItem, onSave, saving, stor
               {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
+          <div>
+            <label className={labelCls}>Price</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={newItem.price}
+              onChange={e => setNewItem(p => ({ ...p, price: e.target.value }))}
+              placeholder="0.00"
+              className={`${fieldCls} w-full`}
+            />
+          </div>
         </div>
 
         <div className="flex items-center gap-3 px-5 py-4 border-t border-slate-200 dark:border-slate-700/60 flex-shrink-0">
@@ -399,6 +417,18 @@ function OnHandRow({ item, record, stores, isEditing, editForm, onEditFormChange
           </select>
         </td>
         <td>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={editForm.price}
+            onChange={e => onEditFormChange('price', e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') onSaveEdit(); if (e.key === 'Escape') onCancelEdit() }}
+            placeholder="0.00"
+            className="px-2 py-1 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none w-20"
+          />
+        </td>
+        <td>
           <div className="flex items-center gap-1">
             <button onClick={onSaveEdit} className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-white transition-colors">Save</button>
             <button onClick={onCancelEdit} className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Cancel</button>
@@ -432,6 +462,11 @@ function OnHandRow({ item, record, stores, isEditing, editForm, onEditFormChange
         title="Click to edit"
         className="editable-cell text-slate-400 dark:text-slate-500 text-sm cursor-pointer"
       >{unit}</td>
+      <td
+        onClick={onStartEdit}
+        title="Click to edit"
+        className="editable-cell text-sm font-mono text-slate-700 dark:text-slate-300 cursor-pointer"
+      >{fmtPrice(item.price != null ? parseFloat(String(item.price)) : null)}</td>
       <td>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button

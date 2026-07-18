@@ -276,6 +276,7 @@ class GroceryItem(Base):
     name = Column(String(200), unique=True, nullable=False)
     default_unit = Column(Enum(GroceryUnit), default=GroceryUnit.each)
     default_store_id = Column(Integer, ForeignKey("stores.id", ondelete="SET NULL"), nullable=True)
+    price = Column(Numeric(10, 2), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     default_store = relationship("Store", back_populates="grocery_items")
