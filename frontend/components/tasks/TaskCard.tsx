@@ -772,13 +772,23 @@ export default function TaskCard({
               <span
                 onDoubleClick={() => { if (!isDimmed) setTitleDraft(task.title) }}
                 title={isDimmed ? undefined : 'Double-click to edit title'}
-                className={`flex-1 min-w-0 text-base font-medium leading-snug select-none
+                className={`flex-1 min-w-0 flex items-baseline gap-1.5 overflow-hidden select-none
                   ${task.status === 'done'
                     ? 'line-through text-slate-400 dark:text-slate-500'
                     : 'text-slate-800 dark:text-slate-100'
                   }`}
               >
-                {task.title}
+                <span className="text-base font-medium leading-snug shrink-0 max-w-[60%] truncate">
+                  {task.title}
+                </span>
+                {task.description && (
+                  <>
+                    <span className="text-slate-300 dark:text-slate-600 text-sm shrink-0">·</span>
+                    <span className="text-sm text-slate-400 dark:text-slate-500 font-normal leading-snug truncate min-w-0">
+                      {task.description}
+                    </span>
+                  </>
+                )}
               </span>
               {!isDimmed && (
                 <button
@@ -1032,10 +1042,6 @@ export default function TaskCard({
 
       {expanded && (
         <div className="border-t border-slate-100 dark:border-slate-700 px-4 pb-3 pt-2.5 ml-4">
-          {task.description && (
-            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">{task.description}</p>
-          )}
-
           {sortedSubtasks.length > 0 && (
             <DndContext
               sensors={sensors}
