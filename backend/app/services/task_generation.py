@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
+from ..crud import find_duplicate_task
 from ..models import Event, Occurrence, OccurrenceStatus, Subtask, Task, TaskRecurrence, TaskStatus
 
 log = logging.getLogger(__name__)
@@ -92,6 +93,13 @@ def spawn_recurring_task(db: Session, task: Task) -> None:
             "Skipping spawn for task %d — next instance already exists as task %d",
             task.id,
             already_exists.id,
+        )
+        return
+    clash = find_duplicate_task(db, task.title, next_date, TaskStatus.todo)
+    if clash:
+        log.warning(
+            "Skipping spawn for task %d — task %d already covers %r on %s",
+            task.id, clash.id, task.title, next_date,
         )
         return
     new_task = Task(
@@ -179,12 +187,18 @@ def generate_pending_tasks(db: Session) -> int:
     }
 
     new_tasks = []
+    seen: set[tuple[str, date]] = set()
     for occ in qualifying_occs:
         if occ.occurrence_date > event_thresholds[occ.event_id]:
             continue
         if occ.id in existing_occ_ids:
             continue
         event = event_map[occ.event_id]
+        key = (event.title.strip().lower(), occ.occurrence_date)
+        if key in seen or find_duplicate_task(db, event.title, occ.occurrence_date, TaskStatus.todo):
+            log.info("Skipping task for occurrence %d — %r already on %s", occ.id, event.title, occ.occurrence_date)
+            continue
+        seen.add(key)
         new_tasks.append(Task(
             occurrence_id=occ.id,
             title=event.title,

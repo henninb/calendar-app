@@ -2,7 +2,7 @@ import enum
 from datetime import datetime, timezone
 from sqlalchemy import (
     Column, Integer, String, Text, Date, DateTime,
-    Boolean, ForeignKey, Enum, Numeric, JSON, UniqueConstraint,
+    Boolean, ForeignKey, Enum, Numeric, JSON, UniqueConstraint, Index, func, text,
 )
 from sqlalchemy.orm import relationship
 from .database import Base
@@ -201,8 +201,23 @@ class Person(Base):
     tasks = relationship("Task", back_populates="assignee")
 
 
+# Open (non-archived, todo/in_progress) tasks may not share a title, due date and status.
+# Terminal and archived rows are excluded so completion history is never constrained.
+# Mirrored by a CREATE UNIQUE INDEX in main.py for databases created before this index.
+OPEN_TASK_UNIQUE_WHERE = "is_archived = false AND status IN ('todo', 'in_progress')"
+
+
 class Task(Base):
     __tablename__ = "tasks"
+    __table_args__ = (
+        Index(
+            "uq_task_open_title_due_status",
+            func.lower(func.trim(text("title"))), "due_date", "status",
+            unique=True,
+            postgresql_where=text(OPEN_TASK_UNIQUE_WHERE),
+            sqlite_where=text(OPEN_TASK_UNIQUE_WHERE),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     occurrence_id = Column(Integer, ForeignKey("occurrences.id", ondelete="SET NULL"), nullable=True)

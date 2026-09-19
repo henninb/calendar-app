@@ -48,6 +48,9 @@ async def lifespan(app: FastAPI):
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_anchor_day INTEGER",
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_anchor_month INTEGER",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_task_open_title_due_status "
+        "ON tasks (lower(trim(title)), due_date, status) "
+        "WHERE is_archived = false AND status IN ('todo', 'in_progress')",
     ]
     with engine.connect() as conn:
         for stmt in _migrations:

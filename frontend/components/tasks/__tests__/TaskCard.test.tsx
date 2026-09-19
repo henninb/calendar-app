@@ -659,10 +659,11 @@ describe('TaskCard — metadata fields always visible', () => {
     expect(screen.getByTitle('Click to edit duration')).toBeInTheDocument()
   })
 
-  it('clicking the due date field opens the date input for active tasks', () => {
+  it('clicking the due date field opens the date picker for active tasks', () => {
     renderCard(emptyTask)
     fireEvent.click(screen.getByTitle('Click to set due date'))
-    expect(document.querySelector('input[type="date"]')).toBeInTheDocument()
+    expect(screen.getByLabelText('Previous month')).toBeInTheDocument()
+    expect(screen.getByLabelText('Next month')).toBeInTheDocument()
   })
 
   it('does NOT show a clickable due date button for done tasks (field is read-only)', () => {
@@ -700,36 +701,57 @@ describe('TaskCard — complete all subtasks and mark done', () => {
 // ── Inline due date editing ───────────────────────────────────────────────────
 
 describe('TaskCard — inline due date editing', () => {
-  it('changing the due date input calls onPatchTask', () => {
+  const openPicker = () => fireEvent.click(screen.getByTitle('Click to set due date'))
+  const pickerOpen = () => screen.queryByLabelText('Previous month') !== null
+
+  it('selecting a day in the picker calls onPatchTask with that date and closes it', () => {
     const { cbs } = renderCard({ due_date: '2099-01-15' })
-    fireEvent.click(screen.getByTitle('Click to set due date'))
-    const input = document.querySelector('input[type="date"]') as HTMLInputElement
-    fireEvent.change(input, { target: { value: '2099-06-01' } })
-    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { due_date: '2099-06-01' })
+    openPicker()
+    // The picker opens on the current month, so the first "15" belongs to it.
+    const now = new Date()
+    const expected = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-15`
+    fireEvent.click(screen.getAllByRole('button', { name: '15' })[0])
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { due_date: expected })
+    expect(pickerOpen()).toBe(false)
   })
 
-  it('pressing Escape on the due date input closes the editor', () => {
+  it('pressing Escape closes the picker without patching', () => {
+    const { cbs } = renderCard({ due_date: '2099-01-15' })
+    openPicker()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(pickerOpen()).toBe(false)
+    expect(cbs.onPatchTask).not.toHaveBeenCalled()
+  })
+
+  it('"Clear date" clears the due date and closes the picker', () => {
+    const { cbs } = renderCard({ due_date: '2099-01-15' })
+    openPicker()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear date' }))
+    expect(cbs.onPatchTask).toHaveBeenCalledWith(1, { due_date: null })
+    expect(pickerOpen()).toBe(false)
+  })
+
+  it('offers no "Clear date" when the task has no due date', () => {
+    renderCard({ due_date: null })
+    openPicker()
+    expect(screen.queryByRole('button', { name: 'Clear date' })).not.toBeInTheDocument()
+  })
+
+  it('clicking outside the picker closes it without patching', () => {
+    const { cbs } = renderCard({ due_date: '2099-01-15' })
+    openPicker()
+    fireEvent.mouseDown(document.body)
+    expect(pickerOpen()).toBe(false)
+    expect(cbs.onPatchTask).not.toHaveBeenCalled()
+  })
+
+  it('month arrows navigate the picker', () => {
     renderCard({ due_date: '2099-01-15' })
-    fireEvent.click(screen.getByTitle('Click to set due date'))
-    const input = document.querySelector('input[type="date"]') as HTMLInputElement
-    fireEvent.keyDown(input, { key: 'Escape' })
-    expect(document.querySelector('input[type="date"]')).not.toBeInTheDocument()
-  })
-
-  it('pressing Enter on the due date input calls onPatchTask', () => {
-    const { cbs } = renderCard({ due_date: '2099-01-15' })
-    fireEvent.click(screen.getByTitle('Click to set due date'))
-    const input = document.querySelector('input[type="date"]') as HTMLInputElement
-    fireEvent.keyDown(input, { key: 'Enter' })
-    expect(cbs.onPatchTask).toHaveBeenCalled()
-  })
-
-  it('blurring the due date input calls onPatchTask', () => {
-    const { cbs } = renderCard({ due_date: '2099-01-15' })
-    fireEvent.click(screen.getByTitle('Click to set due date'))
-    const input = document.querySelector('input[type="date"]') as HTMLInputElement
-    fireEvent.blur(input)
-    expect(cbs.onPatchTask).toHaveBeenCalled()
+    openPicker()
+    expect(screen.queryByRole('button', { name: 'Today' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Next month'))
+    fireEvent.click(screen.getByRole('button', { name: 'Today' }))
+    expect(screen.queryByRole('button', { name: 'Today' })).not.toBeInTheDocument()
   })
 })
 

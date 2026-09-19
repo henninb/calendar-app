@@ -4,9 +4,13 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..crud import apply_patch, assert_exists, get_or_404, load_task, TASK_LOAD_OPTIONS
+from ..crud import (
+    apply_patch, assert_exists, duplicate_task_error, find_duplicate_task,
+    get_or_404, load_task, TASK_LOAD_OPTIONS,
+)
 from ..database import get_db
 from ..models import Category, Subtask, Task, TaskStatus
 from ..schemas import SubtaskCreate, SubtaskOut, SubtaskUpdate, TaskCreate, TaskOut, TaskUpdate
@@ -82,11 +86,22 @@ def create_task(body: TaskCreate, db: Session = Depends(get_db)) -> Task:
         data["recurrence_anchor_day"] = data["due_date"].day
         if data["recurrence"] == "yearly" and data.get("recurrence_anchor_month") is None:
             data["recurrence_anchor_month"] = data["due_date"].month
+    existing = find_duplicate_task(db, body.title, body.due_date, body.status)
+    if existing:
+        raise duplicate_task_error(existing)
     task = Task(**data)
     db.add(task)
-    db.flush()
-    task_id, task_title = task.id, task.title
-    db.commit()
+    try:
+        db.flush()
+        task_id, task_title = task.id, task.title
+        db.commit()
+    except IntegrityError:
+        # Lost a race with a concurrent identical request — the index is the source of truth.
+        db.rollback()
+        existing = find_duplicate_task(db, body.title, body.due_date, body.status)
+        if existing is None:
+            raise
+        raise duplicate_task_error(existing)
     log.info("Created task %d (%s)", task_id, task_title)
     return load_task(db, task_id)
 
@@ -101,6 +116,16 @@ def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)) -
     task = load_task(db, task_id)
     changes = body.model_dump(exclude_unset=True)
     new_status = changes.get("status")
+    if changes.keys() & {"title", "due_date", "status"}:
+        existing = find_duplicate_task(
+            db,
+            changes.get("title", task.title),
+            changes.get("due_date", task.due_date),
+            changes.get("status", task.status),
+            exclude_id=task.id,
+        )
+        if existing:
+            raise duplicate_task_error(existing)
     apply_patch(task, changes)
     _update_completed_at(task, new_status)
     task_title, task_status = task.title, task.status
@@ -108,7 +133,17 @@ def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)) -
     # Cancelling a recurring task should also advance the chain, not terminate it.
     if new_status in (TaskStatus.done, TaskStatus.cancelled):
         spawn_recurring_task(db, task)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = find_duplicate_task(
+            db, changes.get("title", task.title), changes.get("due_date", task.due_date),
+            changes.get("status", task.status), exclude_id=task_id,
+        )
+        if existing is None:
+            raise
+        raise duplicate_task_error(existing)
     log.info("Updated task %d (%s) → status=%s", task_id, task_title, task_status)
     return load_task(db, task_id)
 

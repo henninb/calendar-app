@@ -4,13 +4,17 @@ import logging
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query, Request, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..crud import apply_patch, get_or_404, load_occurrence, load_task, OCCURRENCE_LOAD_OPTIONS
+from ..crud import (
+    apply_patch, duplicate_task_error, find_duplicate_task, get_or_404,
+    load_occurrence, load_task, OCCURRENCE_LOAD_OPTIONS,
+)
 from ..database import get_db
 from ..limiter import limiter
-from ..models import Event, Occurrence, OccurrenceStatus, Task
+from ..models import Event, Occurrence, OccurrenceStatus, Task, TaskStatus
 from ..schemas import GenerateResult, OccurrenceOut, OccurrenceUpdate, TaskOut
 from ..services.recurrence import generate_all_occurrences, mark_overdue
 from ..services.task_generation import cancel_tasks_for_occurrence
@@ -85,6 +89,9 @@ def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db
             occurrence_id,
         )
         return load_task(db, existing.id)
+    clash = find_duplicate_task(db, occ.event.title, occ.occurrence_date, TaskStatus.todo)
+    if clash:
+        raise duplicate_task_error(clash)
     task = Task(
         occurrence_id=occ.id,
         title=occ.event.title,
@@ -94,9 +101,20 @@ def create_task_from_occurrence(occurrence_id: int, db: Session = Depends(get_db
         category_id=occ.event.category_id,
     )
     db.add(task)
-    db.flush()
-    task_id = task.id
-    db.commit()
+    try:
+        db.flush()
+        task_id = task.id
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        # Concurrent request (e.g. the scheduler) created it first — hand back that one.
+        existing = db.query(Task).filter(Task.occurrence_id == occurrence_id).first()
+        if existing is None:
+            clash = find_duplicate_task(db, occ.event.title, occ.occurrence_date, TaskStatus.todo)
+            if clash is None:
+                raise
+            raise duplicate_task_error(clash)
+        return load_task(db, existing.id)
     task = load_task(db, task_id)
     log.info(
         "Created task %d (%s) from occurrence %d (event %d, date %s)",

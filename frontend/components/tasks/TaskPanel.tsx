@@ -148,6 +148,9 @@ export default function TaskPanel({
   const [editingSubtask, setEditingSubtask]   = useState<number | null>(null)
   const [editSubForm, setEditSubForm]         = useState<SubtaskEditForm>({ title: '', due_date: '' })
   const [saving, setSaving]             = useState(false)
+  // Synchronous guard: `saving` state updates too late to stop a fast double-click
+  // from firing two create requests (which spawned twin recurring chains).
+  const savingRef                       = useRef(false)
   const titleRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -190,6 +193,8 @@ export default function TaskPanel({
 
   async function handleSave() {
     if (!form.title.trim()) { titleRef.current?.focus(); return }
+    if (savingRef.current) return
+    savingRef.current = true
     setSaving(true)
     const anchorDay = form.recurrence_anchor_day ? parseInt(form.recurrence_anchor_day, 10) : null
     const anchorMonth = form.recurrence_anchor_month ? parseInt(form.recurrence_anchor_month, 10) : null
@@ -213,6 +218,7 @@ export default function TaskPanel({
         await onUpdateTask(task!.id, payload)
       }
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
