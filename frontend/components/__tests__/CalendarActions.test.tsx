@@ -20,7 +20,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(api.gcalAuthStatus).mockResolvedValue({ authenticated: true, email: 'user@example.com' })
   vi.mocked(api.generateAll).mockResolvedValue({ occurrences_created: 4, events_processed: 2 })
-  vi.mocked(api.syncToGcal).mockResolvedValue({ synced: 8, failed: 0, errors: [] })
+  vi.mocked(api.syncToGcal).mockResolvedValue({ type: 'done' as const, synced: 8, failed: 0, errors: [] })
   vi.mocked(api.deleteAllGcalEvents).mockResolvedValue({ message: 'Delete started.' })
 })
 
@@ -127,7 +127,7 @@ describe('CalendarActions — Google Calendar sync', () => {
   })
 
   it('logs warning when some events fail', async () => {
-    vi.mocked(api.syncToGcal).mockResolvedValue({ synced: 5, failed: 2, errors: ['err1', 'err2'] })
+    vi.mocked(api.syncToGcal).mockResolvedValue({ type: 'done' as const, synced: 5, failed: 2, errors: ['err1', 'err2'] })
     render(<CalendarActions />)
     await waitFor(() =>
       expect(screen.getByText(/Sync to Google Calendar/)).toBeInTheDocument()
@@ -140,6 +140,7 @@ describe('CalendarActions — Google Calendar sync', () => {
 
   it('logs quota error when quota exceeded', async () => {
     vi.mocked(api.syncToGcal).mockResolvedValue({
+      type: 'done',
       synced: 0,
       failed: 1,
       errors: ['quotaExceeded: limit reached'],
@@ -170,7 +171,7 @@ describe('CalendarActions — Google Calendar sync', () => {
     vi.mocked(api.syncToGcal).mockImplementation(async (_days, _force, onProgress) => {
       onProgress?.({ type: 'start', total: 3 })
       onProgress?.({ type: 'progress', msg: '1/3 done' })
-      return { synced: 3, failed: 0, errors: [] }
+      return { type: 'done' as const, synced: 3, failed: 0, errors: [] }
     })
     render(<CalendarActions />)
     await waitFor(() =>

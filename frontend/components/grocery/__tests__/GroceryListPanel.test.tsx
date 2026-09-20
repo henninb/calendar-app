@@ -10,7 +10,7 @@ const STORES = [
 
 function renderPanel(props: Record<string, unknown> = {}) {
   const defaults = {
-    open: true, mode: 'create', list: null,
+    open: true, mode: 'create' as const, list: null,
     stores: STORES, onClose: vi.fn(), onSave: vi.fn(),
   }
   return render(<GroceryListPanel {...defaults} {...props} />)

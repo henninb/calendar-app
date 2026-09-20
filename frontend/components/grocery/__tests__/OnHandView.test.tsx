@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import React from 'react'
 import OnHandView from '../OnHandView'
+import type { CatalogItem, OnHandRecord, Store } from '../helpers'
 
 vi.mock('@/lib/api', () => ({
   fetchOnHand:       vi.fn(),
@@ -14,14 +15,14 @@ vi.mock('@/lib/api', () => ({
 
 import * as api from '@/lib/api'
 
-const STORES = [{ id: 1, name: 'ALDI' }]
+const STORES: Store[] = [{ id: 1, name: 'ALDI' }]
 
-const CATALOG_ITEMS = [
+const CATALOG_ITEMS: CatalogItem[] = [
   { id: 1, name: 'Apples',  default_unit: 'each', default_store_id: 1,    default_store: { name: 'ALDI' } },
   { id: 2, name: 'Bananas', default_unit: 'lb',   default_store_id: null, default_store: null },
 ]
 
-const ON_HAND = [
+const ON_HAND: OnHandRecord[] = [
   { item_id: 1, quantity: '3', unit: 'each' },
   { item_id: 2, quantity: '0', unit: 'lb' },
 ]

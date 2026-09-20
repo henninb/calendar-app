@@ -77,7 +77,7 @@ beforeEach(() => {
   vi.mocked(api.fetchCategories).mockResolvedValue([])
   vi.mocked(api.updateTask).mockResolvedValue({ ...baseTask, status: 'cancelled' })
   vi.mocked(api.gcalAuthStatus).mockResolvedValue({ authenticated: false })
-  vi.mocked(api.syncToGtasks).mockResolvedValue({ synced: 0, failed: 0, errors: [] })
+  vi.mocked(api.syncToGtasks).mockResolvedValue({ type: 'done' as const, synced: 0, failed: 0, errors: [] })
 })
 
 describe('TaskList — cancel recurring task triggers reload', () => {

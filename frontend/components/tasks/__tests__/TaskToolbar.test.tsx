@@ -206,7 +206,7 @@ describe('TaskToolbar', () => {
   })
 
   it('shows "Syncing…" while in progress', async () => {
-    let resolve!: (v: unknown) => void
+    let resolve!: (v: Awaited<ReturnType<typeof api.syncToGtasks>>) => void
     vi.mocked(api.syncToGtasks).mockReturnValue(new Promise(r => { resolve = r }))
     renderToolbar()
     await waitFor(() => expect(api.gcalAuthStatus).toHaveBeenCalled())
@@ -216,7 +216,7 @@ describe('TaskToolbar', () => {
   })
 
   it('disables Google Sync button while syncing', async () => {
-    let resolve!: (v: unknown) => void
+    let resolve!: (v: Awaited<ReturnType<typeof api.syncToGtasks>>) => void
     vi.mocked(api.syncToGtasks).mockReturnValue(new Promise(r => { resolve = r }))
     renderToolbar()
     await waitFor(() => expect(api.gcalAuthStatus).toHaveBeenCalled())

@@ -14,7 +14,7 @@ const baseTask = {
 function renderPanel(overrides: Record<string, unknown> = {}) {
   const props = {
     open: true,
-    mode: 'create',
+    mode: 'create' as const,
     task: null,
     onClose: vi.fn(),
     onCreateTask: vi.fn().mockResolvedValue(undefined),

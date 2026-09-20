@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { STATUS_OPTIONS, STATUS_LABELS, localDate, parseHumanMinutes, formatMinutes } from './helpers'
+import { STATUS_OPTIONS, STATUS_LABELS, fmt, localDate, parseHumanMinutes, formatMinutes } from './helpers'
 import type { Task, Person, Category, Subtask, TaskStatus, TaskPriority, RecurrenceOption } from './helpers'
+import TwoMonthPicker from './TwoMonthPicker'
 
 const RECURRENCE_OPTIONS: { value: RecurrenceOption; label: string }[] = [
   { value: 'none',       label: 'One-time' },
@@ -143,6 +144,8 @@ export default function TaskPanel({
   onPatchSubtask, onAddSubtask, onDeleteSubtask,
 }: TaskPanelProps) {
   const isCreate = mode === 'create'
+  const [pickerOpen, setPickerOpen]     = useState(false)
+  const dueDateBtnRef                 = useRef<HTMLButtonElement>(null)
   const [form, setForm]                 = useState<TaskForm>({ title: '', description: '', priority: 'medium', status: 'todo', due_date: '', estimated_minutes_text: '', assignee_id: '', category_id: '', recurrence: 'none', recurrence_anchor_day: '', recurrence_anchor_month: '' })
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
   const [editingSubtask, setEditingSubtask]   = useState<number | null>(null)
@@ -333,12 +336,23 @@ export default function TaskPanel({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Due Date</label>
-              <input
-                type="date"
-                value={form.due_date}
-                onChange={e => set('due_date', e.target.value)}
-                className={fieldCls}
-              />
+              <button
+                type="button"
+                ref={dueDateBtnRef}
+                onClick={() => setPickerOpen(o => !o)}
+                className={`${fieldCls} text-left`}
+              >
+                {form.due_date ? fmt(form.due_date) : <span className="text-slate-400">Select date…</span>}
+              </button>
+              {pickerOpen && (
+                <TwoMonthPicker
+                  value={form.due_date || null}
+                  anchorEl={dueDateBtnRef.current}
+                  onSelect={date => { set('due_date', date); setPickerOpen(false) }}
+                  onClear={() => { set('due_date', ''); setPickerOpen(false) }}
+                  onClose={() => setPickerOpen(false)}
+                />
+              )}
             </div>
             <div>
               <label className={labelCls}>Duration</label>

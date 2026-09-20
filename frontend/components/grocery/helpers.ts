@@ -86,7 +86,7 @@ export function fmtQty(qty: number | string, unit: GroceryUnit): string {
   return unit === 'each' ? `× ${n % 1 === 0 ? n : n}` : `${n} ${unit}`
 }
 
-export function fmtPrice(price: number | null | undefined): string {
+export function fmtPrice(price: number | string | null | undefined): string {
   if (price == null) return ''
   return `$${parseFloat(String(price)).toFixed(2)}`
 }

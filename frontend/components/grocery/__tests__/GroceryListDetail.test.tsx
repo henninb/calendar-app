@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import React from 'react'
 import GroceryListDetail from '../GroceryListDetail'
+import type { CatalogItem, GroceryList } from '../helpers'
 
 vi.mock('@/lib/api', () => ({
   fetchGroceryList:      vi.fn(),
@@ -13,11 +14,11 @@ vi.mock('@/lib/api', () => ({
 
 import * as api from '@/lib/api'
 
-const LIST = {
+const LIST: GroceryList = {
   id: 1,
   name: 'Weekly Run',
   status: 'active',
-  store: { name: 'ALDI' },
+  store: { id: 1, name: 'ALDI' },
   shopping_date: '2026-05-10',
   items: [
     { id: 10, item_id: 101, status: 'needed',    quantity: '2', unit: 'each', price: '3.99', item: { name: 'Apples' } },
@@ -25,7 +26,7 @@ const LIST = {
   ],
 }
 
-const CATALOG = [
+const CATALOG: CatalogItem[] = [
   { id: 101, name: 'Apples',  default_unit: 'each' },
   { id: 102, name: 'Bananas', default_unit: 'lb' },
   { id: 103, name: 'Carrots', default_unit: 'each' },
@@ -125,13 +126,13 @@ describe('GroceryListDetail — advance status', () => {
   })
 
   it('shows "Start Shopping" button for a draft list', () => {
-    const draftList = { ...LIST, status: 'draft' }
+    const draftList: GroceryList = { ...LIST, status: 'draft' }
     render(<GroceryListDetail list={draftList} catalogItems={CATALOG} onBack={vi.fn()} />)
     expect(screen.getByText('Start Shopping')).toBeInTheDocument()
   })
 
   it('does not show an advance button for a completed list', () => {
-    const completedList = { ...LIST, status: 'completed' }
+    const completedList: GroceryList = { ...LIST, status: 'completed' }
     render(<GroceryListDetail list={completedList} catalogItems={CATALOG} onBack={vi.fn()} />)
     expect(screen.queryByText('Mark Completed')).not.toBeInTheDocument()
     expect(screen.queryByText('Start Shopping')).not.toBeInTheDocument()
@@ -156,7 +157,7 @@ describe('GroceryListDetail — add item panel', () => {
   })
 
   it('does not show FAB or add panel for a completed list', () => {
-    const completedList = { ...LIST, status: 'completed' }
+    const completedList: GroceryList = { ...LIST, status: 'completed' }
     render(<GroceryListDetail list={completedList} catalogItems={CATALOG} onBack={vi.fn()} />)
     expect(screen.queryByTitle('Add item')).not.toBeInTheDocument()
   })

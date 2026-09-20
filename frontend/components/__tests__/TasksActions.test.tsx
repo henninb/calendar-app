@@ -93,7 +93,7 @@ describe('TasksActions — successful sync', () => {
   })
 
   it('shows "Syncing…" while in progress', async () => {
-    let resolve!: (v: unknown) => void
+    let resolve!: (v: Awaited<ReturnType<typeof api.syncToGtasks>>) => void
     vi.mocked(api.syncToGtasks).mockReturnValue(new Promise(r => { resolve = r }))
     renderWithToolbar()
     await waitFor(() => expect(api.gcalAuthStatus).toHaveBeenCalled())
@@ -103,7 +103,7 @@ describe('TasksActions — successful sync', () => {
   })
 
   it('disables button while syncing', async () => {
-    let resolve!: (v: unknown) => void
+    let resolve!: (v: Awaited<ReturnType<typeof api.syncToGtasks>>) => void
     vi.mocked(api.syncToGtasks).mockReturnValue(new Promise(r => { resolve = r }))
     renderWithToolbar()
     await waitFor(() => expect(api.gcalAuthStatus).toHaveBeenCalled())

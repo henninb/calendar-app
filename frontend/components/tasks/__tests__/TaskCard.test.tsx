@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import React from 'react'
 import TaskCard from '../TaskCard'
-import { STATUS_LABELS } from '../helpers'
+import { STATUS_LABELS, type Task } from '../helpers'
 
 vi.mock('@dnd-kit/core', () => ({
   DndContext: ({ children }: { children: React.ReactNode }) => children,
@@ -29,7 +29,7 @@ vi.mock('@dnd-kit/utilities', () => ({
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const BASE_TASK = {
+const BASE_TASK: Task = {
   id: 1, title: 'Buy groceries', description: null,
   priority: 'medium', status: 'todo',
   due_date: '2099-12-31', estimated_minutes: null,

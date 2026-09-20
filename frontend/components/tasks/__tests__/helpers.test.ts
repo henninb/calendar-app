@@ -9,6 +9,10 @@ import {
   reversePayload,
   getDaysBadge,
 } from '../helpers'
+import type { Task } from '../helpers'
+
+// Tests only exercise the fields the helper under test reads.
+const task = (fields: Partial<Task>) => fields as Task
 
 // ── parseMinutes ──────────────────────────────────────────────────────────────
 
@@ -35,8 +39,8 @@ describe('parseMinutes', () => {
   it('returns null for non-numeric strings', () => {
     expect(parseMinutes('')).toBeNull()
     expect(parseMinutes('abc')).toBeNull()
-    expect(parseMinutes(null)).toBeNull()
-    expect(parseMinutes(undefined)).toBeNull()
+    expect(parseMinutes(null as never)).toBeNull()
+    expect(parseMinutes(undefined as never)).toBeNull()
   })
 })
 
@@ -70,35 +74,35 @@ describe('isOverdue', () => {
   const futureDate = '2099-12-31'
 
   it('returns true for a past due_date on a todo task', () => {
-    expect(isOverdue({ due_date: pastDate, status: 'todo' })).toBe(true)
+    expect(isOverdue(task({ due_date: pastDate, status: 'todo' }))).toBe(true)
   })
 
   it('returns true for a past due_date on an in_progress task', () => {
-    expect(isOverdue({ due_date: pastDate, status: 'in_progress' })).toBe(true)
+    expect(isOverdue(task({ due_date: pastDate, status: 'in_progress' }))).toBe(true)
   })
 
   it('returns false for a future due_date', () => {
-    expect(isOverdue({ due_date: futureDate, status: 'todo' })).toBe(false)
+    expect(isOverdue(task({ due_date: futureDate, status: 'todo' }))).toBe(false)
   })
 
   it('returns false when status is done', () => {
-    expect(isOverdue({ due_date: pastDate, status: 'done' })).toBe(false)
+    expect(isOverdue(task({ due_date: pastDate, status: 'done' }))).toBe(false)
   })
 
   it('returns false when status is cancelled', () => {
-    expect(isOverdue({ due_date: pastDate, status: 'cancelled' })).toBe(false)
+    expect(isOverdue(task({ due_date: pastDate, status: 'cancelled' }))).toBe(false)
   })
 
   it('returns falsy when due_date is absent', () => {
-    expect(isOverdue({ due_date: null, status: 'todo' })).toBeFalsy()
-    expect(isOverdue({ status: 'todo' })).toBeFalsy()
+    expect(isOverdue(task({ due_date: null, status: 'todo' }))).toBeFalsy()
+    expect(isOverdue(task({ status: 'todo' }))).toBeFalsy()
   })
 
   it('accepts a custom now for deterministic testing', () => {
     const now = new Date('2024-06-01T00:00:00')
-    expect(isOverdue({ due_date: '2024-05-31', status: 'todo' }, now)).toBe(true)
-    expect(isOverdue({ due_date: '2024-06-01', status: 'todo' }, now)).toBe(false)
-    expect(isOverdue({ due_date: '2024-06-02', status: 'todo' }, now)).toBe(false)
+    expect(isOverdue(task({ due_date: '2024-05-31', status: 'todo' }), now)).toBe(true)
+    expect(isOverdue(task({ due_date: '2024-06-01', status: 'todo' }), now)).toBe(false)
+    expect(isOverdue(task({ due_date: '2024-06-02', status: 'todo' }), now)).toBe(false)
   })
 })
 
@@ -196,26 +200,26 @@ describe('undoDescription', () => {
 
 describe('reversePayload', () => {
   it('maps each changed key back to the prior value', () => {
-    const prior = { status: 'todo', title: 'Old Title', due_date: '2024-01-01' }
-    const data  = { status: 'done', title: 'New Title' }
+    const prior: Partial<Task> = { status: 'todo', title: 'Old Title', due_date: '2024-01-01' }
+    const data:  Partial<Task> = { status: 'done', title: 'New Title' }
     expect(reversePayload(prior, data)).toEqual({ status: 'todo', title: 'Old Title' })
   })
 
   it('uses null when the prior value was absent (undefined)', () => {
-    const prior = { status: 'todo' }
-    const data  = { due_date: '2024-06-01' }
+    const prior: Partial<Task> = { status: 'todo' }
+    const data:  Partial<Task> = { due_date: '2024-06-01' }
     expect(reversePayload(prior, data)).toEqual({ due_date: null })
   })
 
   it('uses null when the prior value was explicitly null', () => {
-    const prior = { assignee_id: null }
-    const data  = { assignee_id: 5 }
+    const prior: Partial<Task> = { assignee_id: null }
+    const data:  Partial<Task> = { assignee_id: 5 }
     expect(reversePayload(prior, data)).toEqual({ assignee_id: null })
   })
 
   it('handles a payload with a single key', () => {
-    const prior = { status: 'in_progress' }
-    const data  = { status: 'done' }
+    const prior: Partial<Task> = { status: 'in_progress' }
+    const data:  Partial<Task> = { status: 'done' }
     expect(reversePayload(prior, data)).toEqual({ status: 'in_progress' })
   })
 
@@ -230,34 +234,34 @@ describe('getDaysBadge', () => {
   const NOW = new Date('2024-01-15T00:00:00')
 
   it('returns null when due_date is absent', () => {
-    expect(getDaysBadge({ status: 'todo' }, NOW)).toBeNull()
-    expect(getDaysBadge({ due_date: null, status: 'todo' }, NOW)).toBeNull()
+    expect(getDaysBadge(task({ status: 'todo' }), NOW)).toBeNull()
+    expect(getDaysBadge(task({ due_date: null, status: 'todo' }), NOW)).toBeNull()
   })
 
   it('returns null for done tasks', () => {
-    expect(getDaysBadge({ due_date: '2024-01-10', status: 'done' }, NOW)).toBeNull()
+    expect(getDaysBadge(task({ due_date: '2024-01-10', status: 'done' }), NOW)).toBeNull()
   })
 
   it('returns null for cancelled tasks', () => {
-    expect(getDaysBadge({ due_date: '2024-01-10', status: 'cancelled' }, NOW)).toBeNull()
+    expect(getDaysBadge(task({ due_date: '2024-01-10', status: 'cancelled' }), NOW)).toBeNull()
   })
 
   it('returns overdue badge for a past due_date', () => {
-    const badge = getDaysBadge({ due_date: '2024-01-10', status: 'todo' }, NOW)
+    const badge = getDaysBadge(task({ due_date: '2024-01-10', status: 'todo' }), NOW)
     expect(badge).not.toBeNull()
     expect(badge!.text).toBe('5d overdue')
     expect(badge!.cls).toContain('text-red-500')
   })
 
   it('returns "today" badge when due_date is today', () => {
-    const badge = getDaysBadge({ due_date: '2024-01-15', status: 'todo' }, NOW)
+    const badge = getDaysBadge(task({ due_date: '2024-01-15', status: 'todo' }), NOW)
     expect(badge).not.toBeNull()
     expect(badge!.text).toBe('today')
     expect(badge!.cls).toContain('text-amber-500')
   })
 
   it('returns amber badge for due within 3 days', () => {
-    const badge = getDaysBadge({ due_date: '2024-01-17', status: 'todo' }, NOW)
+    const badge = getDaysBadge(task({ due_date: '2024-01-17', status: 'todo' }), NOW)
     expect(badge).not.toBeNull()
     expect(badge!.text).toBe('2d')
     expect(badge!.cls).toContain('text-amber-500')
@@ -265,14 +269,14 @@ describe('getDaysBadge', () => {
   })
 
   it('returns slate badge for due in more than 3 days', () => {
-    const badge = getDaysBadge({ due_date: '2024-01-20', status: 'todo' }, NOW)
+    const badge = getDaysBadge(task({ due_date: '2024-01-20', status: 'todo' }), NOW)
     expect(badge).not.toBeNull()
     expect(badge!.text).toBe('5d')
     expect(badge!.cls).toContain('text-slate-400')
   })
 
   it('returns amber badge exactly at the 3-day boundary', () => {
-    const badge = getDaysBadge({ due_date: '2024-01-18', status: 'todo' }, NOW)
+    const badge = getDaysBadge(task({ due_date: '2024-01-18', status: 'todo' }), NOW)
     expect(badge!.text).toBe('3d')
     expect(badge!.cls).toContain('text-amber-500')
   })

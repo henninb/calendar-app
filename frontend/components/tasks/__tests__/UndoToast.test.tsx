@@ -7,7 +7,7 @@ const TOAST_MS = 8000
 const FADE_MS  = 300
 
 function makeAction(overrides: Record<string, unknown> = {}) {
-  return { id: Date.now(), description: 'Task updated', ...overrides }
+  return { id: Date.now(), description: 'Task updated', undo: vi.fn(), ...overrides }
 }
 
 describe('UndoToast', () => {
