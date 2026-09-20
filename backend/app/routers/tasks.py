@@ -29,6 +29,24 @@ def _update_completed_at(obj: Task | Subtask, new_status: TaskStatus | None) -> 
         obj.completed_at = None
 
 
+_TERMINAL = (TaskStatus.done, TaskStatus.cancelled)
+
+
+def _discard_untouched_successors(db: Session, task: Task) -> None:
+    """Delete the recurring successor spawned when `task` was completed/cancelled.
+
+    Called when the task is reopened (e.g. undo). Only successors nobody has
+    started working on are removed; anything touched stays put.
+    """
+    for child in db.query(Task).filter(Task.parent_task_id == task.id).all():
+        untouched = child.status == TaskStatus.todo and all(
+            s.status == TaskStatus.todo for s in child.subtasks
+        )
+        if untouched:
+            log.info("Removing untouched successor task %d of reopened task %d", child.id, task.id)
+            db.delete(child)
+
+
 def _get_subtask_or_404(db: Session, task_id: int, subtask_id: int) -> Subtask:
     subtask = db.query(Subtask).filter(
         Subtask.id == subtask_id, Subtask.task_id == task_id
@@ -126,8 +144,11 @@ def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db)) -
         )
         if existing:
             raise duplicate_task_error(existing)
+    was_terminal = task.status in _TERMINAL
     apply_patch(task, changes)
     _update_completed_at(task, new_status)
+    if was_terminal and new_status is not None and new_status not in _TERMINAL:
+        _discard_untouched_successors(db, task)
     task_title, task_status = task.title, task.status
     # Spawn before commit so the status change and the new task are atomic.
     # Cancelling a recurring task should also advance the chain, not terminate it.

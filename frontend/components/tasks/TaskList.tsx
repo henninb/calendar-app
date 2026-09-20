@@ -283,6 +283,9 @@ export default function TaskList() {
             const revert = reversePayload(prevTask, data)
             const reverted = await updateTask(taskId, revert)
             setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...reverted } : t))
+            // Done/cancelled tasks were dropped from the list by the reload, so the map
+            // above can't bring them back — refetch to make the restored task reappear.
+            if (data.status === 'done' || data.status === 'cancelled') silentLoad()
           },
         })
       }

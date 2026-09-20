@@ -254,7 +254,7 @@ kubectl rollout restart deployment/"$APP_NAME" -n "$NAMESPACE"
 # --- wait for rollout --------------------------------------------------------
 
 info "Waiting for rollout to complete..."
-kubectl rollout status deployment/"$APP_NAME" -n "$NAMESPACE" --timeout=300s
+kubectl rollout status deployment/"$APP_NAME" -n "$NAMESPACE" --timeout=600s
 
 info "Deployment complete. Pod status:"
 kubectl get pods -n "$NAMESPACE" -o wide

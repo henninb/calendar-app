@@ -127,3 +127,31 @@ def test_generate_pending_tasks_skips_occurrence_already_covered_by_a_task(db: S
 
     assert generate_pending_tasks(db) == 0
     assert db.query(Task).count() == 1
+
+
+# ── reopening a completed recurring task ──────────────────────────────────────
+
+def _recurring(client: TestClient) -> int:
+    return _post(client, recurrence="daily").json()["id"]
+
+
+def _titles_open(client: TestClient) -> list[dict]:
+    return client.get("/api/tasks").json()
+
+
+def test_reopening_done_recurring_task_removes_untouched_successor(client: TestClient):
+    tid = _recurring(client)
+    assert client.patch(f"/api/tasks/{tid}", json={"status": "done"}).status_code == 200
+    assert len(_titles_open(client)) == 1  # the spawned successor
+    assert client.patch(f"/api/tasks/{tid}", json={"status": "todo"}).status_code == 200
+    open_tasks = _titles_open(client)
+    assert [t["id"] for t in open_tasks] == [tid]
+
+
+def test_reopening_keeps_successor_that_was_started(client: TestClient):
+    tid = _recurring(client)
+    client.patch(f"/api/tasks/{tid}", json={"status": "done"})
+    succ = _titles_open(client)[0]["id"]
+    client.patch(f"/api/tasks/{succ}", json={"status": "in_progress"})
+    client.patch(f"/api/tasks/{tid}", json={"status": "todo"})
+    assert {t["id"] for t in _titles_open(client)} == {tid, succ}
